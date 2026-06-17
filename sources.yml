@@ -1,0 +1,10 @@
+sources:
+  - id: starlink_official_updates
+    name: Starlink Official Updates
+    source_type: official
+    reliability_tier: S
+    language: en
+    category: official_updates
+    url: https://www.starlink.com/updates
+    enabled: true
+    description: Starlink 官方更新页面，用于跟踪 Starlink 官方发布的网络、服务、技术和产品更新信息。

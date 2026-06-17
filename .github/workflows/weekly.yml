@@ -49,15 +49,15 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python scripts/run_weekly.py
+        run: python scripts/run_weekly.py --max-source-items 10 --max-history-records 20
 
       - name: Commit generated weekly files
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add docs weekly outputs/logs/.gitkeep
+          git add docs weekly data/items.jsonl outputs/logs/.gitkeep sources.yml
           if git diff --cached --quiet; then
-            echo "docs/、weekly/ 和 outputs/logs/.gitkeep 没有变化，跳过提交。"
+            echo "docs/、weekly/、data/items.jsonl、outputs/logs/.gitkeep 和 sources.yml 没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main
@@ -94,5 +94,13 @@ jobs:
             echo "- Python 版本：$(python --version 2>&1)"
             echo "- 本次运行是否成功：${{ job.status }}"
             echo "- 更新文件路径：docs/starlink_knowledge_base.md、weekly/"
+            echo "- 是否执行真实来源采集：是"
+            echo "- 数据文件路径：data/items.jsonl"
+            echo "- sources.yml 路径：sources.yml"
+            if [ -f "data/items.jsonl" ]; then
+              echo "- items.jsonl 是否存在：是"
+            else
+              echo "- items.jsonl 是否存在：否"
+            fi
             echo "- Gitee 同步是否配置：$GITEE_STATUS"
           } >> "$GITHUB_STEP_SUMMARY"

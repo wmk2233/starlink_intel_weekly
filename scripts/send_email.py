@@ -45,9 +45,15 @@ def _get_config() -> tuple[dict[str, str], list[str]]:
     return config, missing
 
 
-def build_message(markdown_path: Path, week_id: str, config: dict[str, str]) -> EmailMessage:
+def build_message(
+    markdown_path: Path,
+    week_id: str,
+    config: dict[str, str],
+    collection_context: dict[str, str] | None = None,
+) -> EmailMessage:
     markdown_text = markdown_path.read_text(encoding="utf-8")
     recipients = _split_recipients(config["MAIL_TO"])
+    collection_context = collection_context or {}
 
     message = EmailMessage()
     message["Subject"] = f"Starlink 情报周报自动化测试 - {week_id}"
@@ -56,7 +62,10 @@ def build_message(markdown_path: Path, week_id: str, config: dict[str, str]) -> 
 
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "本阶段为自动化链路测试，不代表真实情报内容。\n\n"
+        "当前阶段为阶段 2A：第一个真实来源接入测试。内容来自规则化网页采集，不包含大模型事实推理。\n\n"
+        f"本次是否执行真实来源采集：{collection_context.get('collected', '未知')}\n"
+        f"本次采集来源名称：{collection_context.get('source_names', '未知')}\n"
+        f"本次采集条目数量：{collection_context.get('item_count', '未知')}\n\n"
         "以下为本次生成的 Markdown 正文：\n\n"
         f"{markdown_text}\n"
     )
@@ -70,7 +79,11 @@ def build_message(markdown_path: Path, week_id: str, config: dict[str, str]) -> 
     return message
 
 
-def send_weekly_email(markdown_path: str | Path, week_id: str) -> bool:
+def send_weekly_email(
+    markdown_path: str | Path,
+    week_id: str,
+    collection_context: dict[str, str] | None = None,
+) -> bool:
     """Send the weekly Markdown as email body and attachment."""
     path = Path(markdown_path)
     config, missing = _get_config()
@@ -97,7 +110,7 @@ def send_weekly_email(markdown_path: str | Path, week_id: str) -> bool:
         print("邮件发送失败：SMTP_PORT 必须是数字。请先运行 python scripts/validate_env.py 检查配置。")
         return False
 
-    message = build_message(path, week_id, config)
+    message = build_message(path, week_id, config, collection_context=collection_context)
 
     try:
         context = ssl.create_default_context()
