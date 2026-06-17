@@ -18,9 +18,9 @@
 
 | 字段 | 内容 |
 |---|---|
-| LLM 是否启用 | true |
-| LLM 状态 | skipped_no_api_key |
-| 模型 | gpt-4o-mini |
+| LLM 是否启用 | false |
+| LLM 状态 | skipped |
+| 模型 | 未配置 |
 | 输入记录数 | 0 |
 | 校验状态 | skipped |
 | 严格来源约束 | true |
@@ -28,15 +28,15 @@
 | 审计文件 | data/llm_audit.json |
 | 摘要文件 | data/llm_summaries.json |
 
-- 原因：OPENAI_API_KEY is not configured.
+- 原因：LLM is disabled.
 
 
 ## 3. 来源状态诊断
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | unchanged | 200 | 2026-06-17T21:02:38+08:00 | 34d4db5ebd0e1223 |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-06-17T21:02:40+08:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | unchanged | 200 | 2026-06-17T13:13:11+00:00 | 34d4db5ebd0e1223 |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-06-17T13:13:11+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
@@ -70,7 +70,7 @@
 | content_hash | cfd6a771f245409c |
 | previous_content_hash | cfd6a771f245409c |
 | first_seen_at | 2026-06-17T09:31:46+00:00 |
-| last_seen_at | 2026-06-17T21:02:38+08:00 |
+| last_seen_at | 2026-06-17T13:13:11+00:00 |
 | last_changed_at | 2026-06-17T17:43:22+08:00 |
 | matched_keywords | ["starlink", "update", "updates"] |
 | candidate_links | [] |
@@ -92,7 +92,7 @@
 | content_hash | 48928194391143dc |
 | previous_content_hash | 48928194391143dc |
 | first_seen_at | 2026-06-17T18:23:48+08:00 |
-| last_seen_at | 2026-06-17T21:02:40+08:00 |
+| last_seen_at | 2026-06-17T13:13:11+00:00 |
 | last_changed_at | 2026-06-17T18:23:48+08:00 |
 | matched_keywords | ["launch", "launches"] |
 | candidate_links | [] |
@@ -125,16 +125,6 @@
 
 ## 9. 自动化测试记录
 
-- 运行时间：2026-06-17 17:29:06 中国标准时间+0800
-  - ISO 周编号：2026-W25
-  - 执行环境：Windows 10
-  - Python 版本：3.11.9
-  - 输出模式：未知
-  - 是否发送邮件：否
-  - 是否执行真实来源采集：是
-  - 是否生成解析质量诊断：未知
-  - 页面变化状态：未知
-  - 已接入来源数量：未知
 - 运行时间：2026-06-17 09:31:46 UTC+0000
   - ISO 周编号：2026-W25
   - 执行环境：Linux 6.17.0-1018-azure
@@ -321,6 +311,16 @@
   - Python 版本：3.11.9
   - 输出模式：dual
   - 是否发送邮件：否
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=unchanged；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-06-17 13:13:11 UTC+0000
+  - ISO 周编号：2026-W25
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=unchanged；SpaceX Official Launches=unchanged
