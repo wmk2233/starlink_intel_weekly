@@ -11,6 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ITEMS_FILE = PROJECT_ROOT / "data" / "items.jsonl"
 SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
+WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
+RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 
 
 def _yes_no(value: bool) -> str:
@@ -76,12 +78,13 @@ def main() -> int:
     quality_exists, quality_sources = _extraction_quality()
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
+    output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：2E",
+        "- 阶段：2F",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -96,6 +99,8 @@ def main() -> int:
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
         f"- source_status.json 是否存在：{_yes_no(status_exists)}",
         f"- extraction_quality.json 是否存在：{_yes_no(quality_exists)}",
+        f"- weekly_manifest.json 是否存在：{_yes_no(WEEKLY_MANIFEST_FILE.exists())}",
+        f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
         "",
@@ -106,6 +111,19 @@ def main() -> int:
         f"| 总结版 | weekly/{week_id}-summary.md |",
         f"| 明细版 | weekly/{week_id}-details.md |",
         f"| 兼容索引 | weekly/{week_id}.md |",
+        "",
+        "### 周报归档",
+        "",
+        "| 类型 | 路径 |",
+        "|---|---|",
+        "| 周报总索引 | weekly/index.md |",
+        "| 周报 manifest | data/weekly_manifest.json |",
+        "| 运行历史 | data/run_history.jsonl |",
+        "",
+        "### 输出质量检查",
+        "",
+        f"- 检查状态：{output_check_status}",
+        "- 检查脚本：scripts/check_outputs.py",
         "",
         "### 来源状态",
         "",

@@ -52,13 +52,18 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20
 
+      - name: Check weekly outputs
+        run: |
+          python scripts/check_outputs.py --strict
+          echo "OUTPUT_CHECK_STATUS=passed" >> "$GITHUB_ENV"
+
       - name: Commit generated weekly files
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add README.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          git add README.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl outputs/logs/.gitkeep sources.yml requirements.txt .env.example
           if git diff --cached --quiet; then
-            echo "阶段 2E 自动化输出没有变化，跳过提交。"
+            echo "阶段 2F 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

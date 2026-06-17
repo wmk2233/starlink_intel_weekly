@@ -15,8 +15,8 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-06-17T11:38:20+00:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
-| SpaceX Official Launches | 2026-06-17T11:38:20+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-06-17T20:19:20+08:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
+| SpaceX Official Launches | 2026-06-17T20:19:21+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
@@ -33,19 +33,31 @@
 | `weekly/YYYY-WW-details.md` | 明细版，适合来源复查、结构化数据核验和知识库维护 |
 | `weekly/YYYY-WW.md` | 兼容索引，指向总结版和明细版 |
 
+## 周报归档与历史索引
+
+| 文件 | 用途 |
+|---|---|
+| `weekly/index.md` | 周报总索引 |
+| `data/weekly_manifest.json` | 机器可读的周报输出清单 |
+| `data/run_history.jsonl` | 自动化运行历史记录 |
+| `scripts/check_outputs.py` | 周报输出质量检查脚本 |
+
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-06-17 11:38:20 UTC+0000
+- 运行时间：2026-06-17 20:19:20 中国标准时间+0800
 - ISO 周编号：2026-W25
-- 执行环境：Linux 6.17.0-1018-azure
-- Python 版本：3.11.15
+- 执行环境：Windows 10
+- Python 版本：3.11.9
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W25-summary.md
 - 明细版文档：weekly/2026-W25-details.md
 - 兼容索引文档：weekly/2026-W25.md
+- 周报总索引：weekly/index.md
+- 周报 manifest：data/weekly_manifest.json
+- 运行历史：data/run_history.jsonl
 - 本次采集来源名称：Starlink Official Updates、SpaceX Official Launches
 - 本次采集条目数量：2
 - 已接入来源数量：2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import sys
@@ -23,6 +24,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEEKLY_DIR = PROJECT_ROOT / "weekly"
 DOCS_DIR = PROJECT_ROOT / "docs"
 KNOWLEDGE_BASE = DOCS_DIR / "starlink_knowledge_base.md"
+WEEKLY_ARCHIVE_INDEX = WEEKLY_DIR / "index.md"
+WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
+RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 DETAIL_HISTORY_HEADING = "## 9. 自动化测试记录"
 LEGACY_HISTORY_HEADINGS = [
     "## 9. 自动化测试记录",
@@ -35,6 +39,7 @@ CONNECTED_SOURCES_HEADING = "## 已接入来源"
 SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
 QUALITY_HEADING = "## 来源解析质量诊断"
 OUTPUT_STRUCTURE_HEADING = "## 周报输出结构"
+ARCHIVE_HEADING = "## 周报归档与历史索引"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mode: str) -> dict[str, str]:
@@ -43,6 +48,7 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
     week_id = f"{iso.year}-W{iso.week:02d}"
     return {
         "run_time": now.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
+        "run_iso": now.isoformat(timespec="seconds"),
         "iso_week": week_id,
         "environment": f"{platform.system()} {platform.release()}",
         "python_version": platform.python_version(),
@@ -71,6 +77,10 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "summary_path": "",
         "details_path": "",
         "index_path": "",
+        "weekly_archive_index_path": "weekly/index.md",
+        "weekly_manifest_path": "data/weekly_manifest.json",
+        "run_history_path": "data/run_history.jsonl",
+        "quality_check_status": "skipped",
     }
 
 
@@ -80,6 +90,14 @@ def weekly_output_paths(week_id: str) -> dict[str, Path]:
         "details": WEEKLY_DIR / f"{week_id}-details.md",
         "index": WEEKLY_DIR / f"{week_id}.md",
     }
+
+
+def now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def relative_project_path(path: Path) -> str:
+    return path.relative_to(PROJECT_ROOT).as_posix()
 
 
 def escape_table_cell(value: object) -> str:
@@ -122,6 +140,22 @@ def overall_quality_label(source_statuses: dict[str, dict[str, object]], quality
         return "unknown"
     min_quality = min(qualities, key=lambda item: order.get(item, 0))
     return f"{min_quality}（以当前规则解析完整度为准）"
+
+
+def dominant_quality_value(source_statuses: dict[str, dict[str, object]], quality_sources: dict[str, dict[str, object]]) -> str:
+    label = overall_quality_label(source_statuses, quality_sources)
+    return label.split("（", 1)[0] if label else "unknown"
+
+
+def dominant_extracted_level_value(source_statuses: dict[str, dict[str, object]], quality_sources: dict[str, dict[str, object]]) -> str:
+    order = {"item_level": 3, "link_level": 2, "page_level": 1, "unknown": 0}
+    levels: list[str] = []
+    for source_id, status in source_statuses.items():
+        quality = quality_sources.get(source_id, {})
+        levels.append(str(quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"))
+    if not levels:
+        return "unknown"
+    return min(levels, key=lambda item: order.get(item, 0))
 
 
 def quality_sources_from_data(extraction_quality: dict[str, object] | None) -> dict[str, dict[str, object]]:
@@ -766,6 +800,206 @@ def write_weekly_outputs(
         write_text_file(paths["index"], legacy_content, dry_run)
 
 
+def load_weekly_manifest(path: Path = WEEKLY_MANIFEST_FILE) -> dict[str, object]:
+    if not path.exists():
+        return {"generated_at": None, "weeks": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        print(f"周报 manifest 无法解析，将重新生成：{path}")
+        return {"generated_at": None, "weeks": {}}
+    if not isinstance(data, dict):
+        return {"generated_at": None, "weeks": {}}
+    if not isinstance(data.get("weeks"), dict):
+        data["weeks"] = {}
+    return data
+
+
+def write_weekly_manifest(manifest: dict[str, object], path: Path = WEEKLY_MANIFEST_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    manifest["generated_at"] = now_iso()
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+
+
+def summarize_current_week_outputs(
+    meta: dict[str, str],
+    paths: dict[str, Path],
+    source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "week_id": meta["iso_week"],
+        "summary_path": meta["summary_path"],
+        "details_path": meta["details_path"],
+        "index_path": meta["index_path"],
+        "generated_at": meta.get("run_iso") or now_iso(),
+        "sources_total": int(meta.get("connected_source_count") or 0),
+        "reachable_sources": int(meta.get("reachable_source_count") or 0),
+        "new_items": int(meta.get("new_items") or 0),
+        "changed_items": int(meta.get("changed_items") or 0),
+        "unchanged_items": int(meta.get("unchanged_items") or 0),
+        "dominant_quality": dominant_quality_value(source_statuses, quality_sources),
+        "dominant_extracted_level": dominant_extracted_level_value(source_statuses, quality_sources),
+        "summary_exists": paths["summary"].exists(),
+        "details_exists": paths["details"].exists(),
+        "index_exists": paths["index"].exists(),
+    }
+
+
+def update_weekly_manifest(
+    meta: dict[str, str],
+    paths: dict[str, Path],
+    source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
+    dry_run: bool,
+) -> dict[str, object]:
+    manifest = load_weekly_manifest()
+    weeks = manifest.setdefault("weeks", {})
+    if isinstance(weeks, dict):
+        weeks[meta["iso_week"]] = summarize_current_week_outputs(meta, paths, source_statuses, quality_sources)
+    if dry_run:
+        print(f"[dry-run] 不会写入周报 manifest：{WEEKLY_MANIFEST_FILE}")
+        return manifest
+    write_weekly_manifest(manifest)
+    print(f"已更新周报 manifest：{WEEKLY_MANIFEST_FILE}")
+    return manifest
+
+
+def build_weekly_archive_index(manifest: dict[str, object]) -> str:
+    weeks = manifest.get("weeks", {}) if isinstance(manifest, dict) else {}
+    rows = [
+        "# Starlink 情报周报索引",
+        "",
+        "本索引由 `starlink_intel_weekly` 项目自动维护，用于汇总每周生成的 Starlink 情报周报文档。",
+        "",
+        "## 周报列表",
+        "",
+        "| ISO 周编号 | 总结版 | 明细版 | 兼容索引 | 最近运行时间 | 来源数 | 新增 | 变化 | 未变化 | 主导解析质量 |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    if isinstance(weeks, dict) and weeks:
+        for week_id in sorted(weeks.keys(), reverse=True):
+            record = weeks.get(week_id, {})
+            if not isinstance(record, dict):
+                continue
+            summary_name = Path(str(record.get("summary_path", f"weekly/{week_id}-summary.md"))).name
+            details_name = Path(str(record.get("details_path", f"weekly/{week_id}-details.md"))).name
+            index_name = Path(str(record.get("index_path", f"weekly/{week_id}.md"))).name
+            rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        escape_table_cell(week_id),
+                        f"[summary](./{summary_name})",
+                        f"[details](./{details_name})",
+                        f"[index](./{index_name})",
+                        escape_table_cell(record.get("generated_at", "")),
+                        escape_table_cell(record.get("sources_total", 0)),
+                        escape_table_cell(record.get("new_items", 0)),
+                        escape_table_cell(record.get("changed_items", 0)),
+                        escape_table_cell(record.get("unchanged_items", 0)),
+                        escape_table_cell(record.get("dominant_quality", "unknown")),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        rows.append("| 暂无 |  |  |  |  | 0 | 0 | 0 | 0 | unknown |")
+
+    rows.extend(
+        [
+            "",
+            "## 说明",
+            "",
+            "- 总结版适合快速阅读和组会分享；",
+            "- 明细版适合来源复查、结构化数据核验和知识库维护；",
+            "- 兼容索引用于保持旧版路径可访问；",
+            "- 页面变化状态基于 hash 检测，不等于事实变化；",
+            "- 解析质量仅表示规则化抽取完整度，不表示事实重要性或事实可信度。",
+            "",
+        ]
+    )
+    return "\n".join(rows)
+
+
+def update_weekly_archive_index(manifest: dict[str, object], dry_run: bool) -> None:
+    if dry_run:
+        print(f"[dry-run] 不会写入周报总索引：{WEEKLY_ARCHIVE_INDEX}")
+        return
+    WEEKLY_ARCHIVE_INDEX.parent.mkdir(parents=True, exist_ok=True)
+    WEEKLY_ARCHIVE_INDEX.write_text(build_weekly_archive_index(manifest), encoding="utf-8", newline="\n")
+    print(f"已更新周报总索引：{WEEKLY_ARCHIVE_INDEX}")
+
+
+def load_run_history(path: Path = RUN_HISTORY_FILE) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    records: list[dict[str, object]] = []
+    with path.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                value = json.loads(stripped)
+            except json.JSONDecodeError:
+                print(f"跳过无法解析的 run_history 行：{path}:{line_number}")
+                continue
+            if isinstance(value, dict):
+                records.append(value)
+    return records
+
+
+def write_run_history(records: list[dict[str, object]], path: Path = RUN_HISTORY_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as file:
+        for record in records:
+            file.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def make_run_id(meta: dict[str, str]) -> str:
+    return hashlib.sha256(f"{meta.get('iso_week')}|{meta.get('run_iso')}|{meta.get('output_mode')}".encode("utf-8")).hexdigest()[:16]
+
+
+def append_run_history(
+    meta: dict[str, str],
+    source_statuses: dict[str, dict[str, object]],
+    dry_run: bool,
+    max_run_history: int,
+) -> None:
+    if dry_run:
+        print(f"[dry-run] 不会追加运行历史：{RUN_HISTORY_FILE}")
+        return
+    failed_sources = sum(1 for status in source_statuses.values() if status.get("health_status") != "reachable")
+    record = {
+        "run_id": make_run_id(meta),
+        "week_id": meta["iso_week"],
+        "run_at": meta.get("run_iso") or now_iso(),
+        "mode": meta.get("output_mode", "dual"),
+        "dry_run": False,
+        "email_enabled": meta.get("send_email") == "是",
+        "collect_enabled": meta.get("collect_sources") == "是",
+        "sources_total": int(meta.get("connected_source_count") or 0),
+        "reachable_sources": int(meta.get("reachable_source_count") or 0),
+        "failed_sources": failed_sources,
+        "new_items": int(meta.get("new_items") or 0),
+        "changed_items": int(meta.get("changed_items") or 0),
+        "unchanged_items": int(meta.get("unchanged_items") or 0),
+        "summary_path": meta["summary_path"],
+        "details_path": meta["details_path"],
+        "index_path": meta["index_path"],
+        "weekly_archive_index_path": meta["weekly_archive_index_path"],
+        "weekly_manifest_path": meta["weekly_manifest_path"],
+        "quality_check_status": meta.get("quality_check_status", "skipped"),
+        "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
+    }
+    records = load_run_history()
+    records.append(record)
+    records = records[-max_run_history:]
+    write_run_history(records)
+    print(f"已追加运行历史：{RUN_HISTORY_FILE}")
+
+
 def latest_items_for_report(max_source_items: int, source_statuses: dict[str, dict[str, object]] | None = None) -> list[dict[str, object]]:
     items = load_items(ITEMS_FILE)
     items = sorted(items, key=lambda item: str(item.get("last_seen_at") or item.get("fetched_at") or ""), reverse=True)
@@ -918,6 +1152,19 @@ def update_output_structure_section_text(existing: str) -> str:
     return replace_or_insert_section(existing, OUTPUT_STRUCTURE_HEADING, section, before_heading="## 最近一次自动化运行记录")
 
 
+def update_archive_section_text(existing: str) -> str:
+    section = f"""{ARCHIVE_HEADING}
+
+| 文件 | 用途 |
+|---|---|
+| `weekly/index.md` | 周报总索引 |
+| `data/weekly_manifest.json` | 机器可读的周报输出清单 |
+| `data/run_history.jsonl` | 自动化运行历史记录 |
+| `scripts/check_outputs.py` | 周报输出质量检查脚本 |
+"""
+    return replace_or_insert_section(existing, ARCHIVE_HEADING, section, before_heading="## 最近一次自动化运行记录")
+
+
 def replace_or_insert_section(existing: str, heading: str, section: str, before_heading: str | None = None) -> str:
     if heading in existing:
         before, rest = existing.split(heading, 1)
@@ -964,6 +1211,7 @@ def update_knowledge_base_text(
     existing = update_source_change_section_text(existing, source_statuses)
     existing = update_quality_section_text(existing, quality_sources, source_statuses)
     existing = update_output_structure_section_text(existing)
+    existing = update_archive_section_text(existing)
     heading = "## 最近一次自动化运行记录"
     new_section = f"""{heading}
 
@@ -978,6 +1226,9 @@ def update_knowledge_base_text(
 - 总结版文档：{meta["summary_path"]}
 - 明细版文档：{meta["details_path"]}
 - 兼容索引文档：{meta["index_path"]}
+- 周报总索引：{meta["weekly_archive_index_path"]}
+- 周报 manifest：{meta["weekly_manifest_path"]}
+- 运行历史：{meta["run_history_path"]}
 - 本次采集来源名称：{meta["source_names"]}
 - 本次采集条目数量：{meta["source_item_count"]}
 - 已接入来源数量：{meta["connected_source_count"]}
@@ -1016,7 +1267,7 @@ def update_knowledge_base(
     existing = KNOWLEDGE_BASE.read_text(encoding="utf-8")
     updated = update_knowledge_base_text(existing, meta, source_statuses, quality_sources)
     KNOWLEDGE_BASE.write_text(updated, encoding="utf-8", newline="\n")
-    print("已更新长期知识库最近一次自动化运行记录、解析质量诊断和周报输出结构。")
+    print("已更新长期知识库最近一次自动化运行记录、解析质量诊断、周报输出结构和归档说明。")
 
 
 def main() -> int:
@@ -1042,6 +1293,12 @@ def main() -> int:
         default=10,
         help="周报中每个来源最多展示的真实来源记录数，默认 10。",
     )
+    parser.add_argument(
+        "--max-run-history",
+        type=int,
+        default=200,
+        help="data/run_history.jsonl 最多保留的运行记录条数，默认 200。",
+    )
     args = parser.parse_args()
 
     if args.max_history_records < 1:
@@ -1049,6 +1306,9 @@ def main() -> int:
         return 2
     if args.max_source_items < 1:
         print("--max-source-items 必须是大于等于 1 的整数。")
+        return 2
+    if args.max_run_history < 1:
+        print("--max-run-history 必须是大于等于 1 的整数。")
         return 2
 
     send_email_enabled = not args.no_email and not args.dry_run
@@ -1071,7 +1331,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：2E 周报双文档输出结构优化。")
+    print("当前阶段：2F 周报归档、历史索引与输出质量检查。")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
     meta["max_source_items"] = str(args.max_source_items)
@@ -1116,11 +1376,17 @@ def main() -> int:
         source_statuses=source_statuses,
         quality_sources=quality_sources,
     )
+    manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
+    update_weekly_archive_index(manifest, args.dry_run)
+    append_run_history(meta, source_statuses, args.dry_run, args.max_run_history)
     update_knowledge_base(meta, args.dry_run, source_statuses, quality_sources)
 
     print(f"总结版文档：{meta['summary_path']}")
     print(f"明细版文档：{meta['details_path']}")
     print(f"兼容索引文档：{meta['index_path']}")
+    print(f"周报总索引：{meta['weekly_archive_index_path']}")
+    print(f"周报 manifest：{meta['weekly_manifest_path']}")
+    print(f"运行历史：{meta['run_history_path']}")
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
@@ -1132,7 +1398,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "2E",
+        "stage": "2F",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -1147,6 +1413,8 @@ def main() -> int:
         "quality_generated": meta["quality_generated"],
         "summary_file": paths["summary"].name,
         "details_file": paths["details"].name,
+        "index_file": paths["index"].name,
+        "weekly_archive_index": "weekly/index.md",
     }
     if not send_weekly_email(
         paths["summary"],

@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并将每周周报拆分为总结版与明细版；仍不包含大模型总结，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引和输出质量检查；仍不包含大模型总结，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -9,7 +9,7 @@
 - 通过 SMTP 发送测试邮件；
 - 通过 GitHub Actions 每周自动运行并提交 `docs/` 和 `weekly/` 的变化；
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
-- 阶段 2E 已将每周输出优化为总结版、明细版和兼容索引三份 Markdown。
+- 阶段 2F 已增加周报总索引、机器可读 manifest、运行历史和输出质量检查。
 
 ## 阶段 1B 工程加固
 
@@ -116,6 +116,17 @@
 
 总结版不会展示完整 hash、过长 evidence 或完整 candidate_links。明细版会保留 record id、hash、解析层级、解析质量、候选链接和截断后的证据片段。兼容索引不再无限追加完整周报内容。
 
+## 阶段 2F 周报归档与质量检查
+
+阶段 2F 不新增来源、不接入大模型，只增强长期运行的归档和检查能力：
+
+- `weekly/index.md`：所有周报的总索引，适合快速查看历史周报；
+- `data/weekly_manifest.json`：机器可读的每周输出文件清单；
+- `data/run_history.jsonl`：每次自动化运行摘要，默认最多保留最近 200 条；
+- `scripts/check_outputs.py`：检查本周 summary、details、兼容索引、周报总索引和 JSON/JSONL 数据文件是否完整。
+
+GitHub Actions 会在主脚本运行后执行 `python scripts/check_outputs.py --strict`。该检查是主流程质量门禁，失败时 workflow 会失败。
+
 ## 项目结构
 
 ```text
@@ -136,6 +147,8 @@ E:\starlink_intel_weekly
 │   ├── items.jsonl
 │   ├── source_status.json
 │   ├── extraction_quality.json
+│   ├── weekly_manifest.json
+│   ├── run_history.jsonl
 │   ├── raw/
 │   └── cache/
 ├── docs/
@@ -144,6 +157,7 @@ E:\starlink_intel_weekly
 │   ├── YYYY-WW-summary.md
 │   ├── YYYY-WW-details.md
 │   ├── YYYY-WW.md
+│   ├── index.md
 │   └── .gitkeep
 ├── outputs/
 │   └── logs/
@@ -266,6 +280,25 @@ python scripts/run_weekly.py --no-email --output-mode both
 - `legacy`：仅更新旧版 `weekly/YYYY-WW.md`，不会删除已有总结版和明细版；
 - `both`：生成总结版、明细版和兼容索引，并在兼容索引中附带较完整摘要。
 
+阶段 2F 推荐完整本地运行和质量检查：
+
+```powershell
+python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20
+python scripts/check_outputs.py --strict
+```
+
+指定周编号检查：
+
+```powershell
+python scripts/check_outputs.py --week-id 2026-W25 --strict
+```
+
+JSON 输出检查：
+
+```powershell
+python scripts/check_outputs.py --json
+```
+
 ## 配置 `.env`
 
 本项目不会提交真实 `.env`。本地测试邮件发送前，可以参考 `.env.example` 手动创建 `.env`：
@@ -304,12 +337,18 @@ python scripts/run_weekly.py
 
 脚本会生成或追加本周周报，更新长期知识库，并把 Markdown 正文和附件通过 SMTP 发送到 `MAIL_TO`。
 
-邮件正文会包含阶段 2E 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。邮件会同时附带：
+邮件正文会包含阶段 2F 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。邮件会同时附带：
 
 - `YYYY-WW-summary.md`
 - `YYYY-WW-details.md`
 
 兼容索引 `YYYY-WW.md` 默认不作为邮件附件发送。
+
+阶段 2F 起，邮件正文还会说明：
+
+- 兼容索引：`YYYY-WW.md`
+- 周报总索引：`weekly/index.md`
+- 历史周报可通过 `weekly/index.md` 查看
 
 ## 来源配置
 
@@ -396,6 +435,8 @@ sources:
 }
 ```
 
+`data/weekly_manifest.json` 记录每周 summary、details、兼容索引和关键统计。`data/run_history.jsonl` 记录每次自动化运行摘要，不保存 Secrets，不记录完整 Gitee Remote。
+
 ## 配置 GitHub Secrets
 
 在 GitHub 仓库的 `Settings` → `Secrets and variables` → `Actions` 中添加：
@@ -421,9 +462,10 @@ GITEE_REMOTE
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
 - 运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
-- 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
+- 运行 `python scripts/check_outputs.py --strict` 检查本周输出质量；
+- 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json`、`data/weekly_manifest.json`、`data/run_history.jsonl` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2E、三个周报输出路径、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数和解析质量表；
+- Summary 中展示阶段 2F、三个周报输出路径、周报归档、输出质量检查状态、所有来源的健康状态、页面变化状态和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -453,6 +495,7 @@ GITEE_REMOTE=https://用户名:私人令牌@gitee.com/用户名/仓库名.git
 - 邮件已发送到 `MAIL_TO`；
 - `weekly/YYYY-WW-summary.md` 与 `weekly/YYYY-WW-details.md` 已生成；
 - `weekly/YYYY-WW.md` 已作为兼容索引或 legacy 输出保留；
+- `weekly/index.md`、`data/weekly_manifest.json`、`data/run_history.jsonl` 已更新；
 - `docs/starlink_knowledge_base.md` 已更新最近一次自动化运行记录；
 - GitHub 自动生成 `chore: update weekly Starlink automation output` 提交；
 - Gitee 仓库同步到最新 `main`；
@@ -554,6 +597,15 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 总结版不等于人工研判报告；
 - 明细版中的 hash 变化不等于事实变化；
 - 页面级记录不应直接当作具体情报事实；
+- 当前不使用大模型；
+- 当前不编造事实；
+- 当前不新增来源，不接入第三方发射日程网站。
+
+## 阶段 2F 局限性
+
+- 周报索引只反映自动化采集与结构化输出结果；
+- 输出质量检查只检查文件完整性和基本结构，不代表人工事实核验；
+- hash 变化不等于事实变化；
 - 当前不使用大模型；
 - 当前不编造事实；
 - 当前不新增来源，不接入第三方发射日程网站。
