@@ -62,12 +62,14 @@ def build_message(
 
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 2B：真实来源变化检测测试。\n"
+        "当前阶段为阶段 2C：第二个官方来源接入测试。\n"
         "内容来自规则化网页采集和 hash 变化检测，不包含大模型事实推理。\n\n"
         f"本次是否执行真实来源采集：{collection_context.get('collected', '未知')}\n"
-        f"本次采集来源：{collection_context.get('source_names', '未知')}\n"
-        f"来源可达性：{collection_context.get('health_status', '未知')}\n"
-        f"页面变化状态：{collection_context.get('page_change_status', '未知')}\n"
+        f"已接入来源数量：{collection_context.get('connected_source_count', '未知')}\n"
+        "来源状态概览：\n"
+        f"{collection_context.get('source_overview', '无')}\n\n"
+        f"来源可达性概览：{collection_context.get('health_status', '未知')}\n"
+        f"页面变化状态概览：{collection_context.get('page_change_status', '未知')}\n"
         f"本次采集条目数量：{collection_context.get('item_count', '未知')}\n"
         f"新增条目数量：{collection_context.get('new_items', '未知')}\n"
         f"内容变化条目数量：{collection_context.get('changed_items', '未知')}\n"

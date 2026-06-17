@@ -21,8 +21,9 @@ SOURCES_FILE = PROJECT_ROOT / "sources.yml"
 ITEMS_FILE = PROJECT_ROOT / "data" / "items.jsonl"
 SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
-USER_AGENT = "Mozilla/5.0 starlink-intel-weekly/0.2"
-COLLECTOR_NAME = "rule_based_html_v2"
+USER_AGENT = "Mozilla/5.0 starlink-intel-weekly/0.3"
+COLLECTOR_NAME = "rule_based_html_v3"
+SUPPORTED_SOURCE_IDS = {"starlink_official_updates", "spacex_official_launches"}
 
 
 @dataclass
@@ -54,13 +55,15 @@ class CollectResult:
     def page_change_status(self) -> str:
         if not self.source_statuses:
             return "unknown"
-        return next(iter(self.source_statuses.values())).get("change_status", "unknown")
+        statuses = sorted({str(status.get("change_status", "unknown")) for status in self.source_statuses.values()})
+        return ",".join(statuses)
 
     @property
     def health_status(self) -> str:
         if not self.source_statuses:
             return "unknown"
-        return next(iter(self.source_statuses.values())).get("health_status", "unknown")
+        statuses = sorted({str(status.get("health_status", "unknown")) for status in self.source_statuses.values()})
+        return ",".join(statuses)
 
 
 def now_iso() -> str:
@@ -123,8 +126,7 @@ def load_source_status(path: Path = SOURCE_STATUS_FILE) -> dict[str, Any]:
 
     if not isinstance(data, dict):
         return {"generated_at": None, "sources": {}}
-    sources = data.get("sources")
-    if not isinstance(sources, dict):
+    if not isinstance(data.get("sources"), dict):
         data["sources"] = {}
     return data
 
@@ -161,23 +163,31 @@ def normalize_url(href: str, base_url: str) -> str | None:
     parts = urlsplit(absolute)
     if parts.scheme not in {"http", "https"}:
         return None
-
     return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/") or "/", "", ""))
 
 
-def is_updates_url(url: str) -> bool:
+def is_starlink_updates_url(url: str) -> bool:
     parts = urlsplit(url)
     return parts.netloc.lower().endswith("starlink.com") and "/updates" in parts.path.lower()
 
 
-def title_from_slug(url: str) -> str:
+def is_spacex_official_url(url: str) -> bool:
+    return urlsplit(url).netloc.lower().endswith("spacex.com")
+
+
+def is_spacex_launch_related(url: str, text: str = "") -> bool:
+    searchable = f"{urlsplit(url).path} {text}".lower()
+    return any(keyword in searchable for keyword in ("launch", "launches", "mission", "missions", "starlink"))
+
+
+def title_from_slug(url: str, fallback: str) -> str:
     path = urlsplit(url).path.strip("/")
     if not path:
-        return "Starlink Official Updates"
-    slug = path.split("/")[-1] or "updates"
+        return fallback
+    slug = path.split("/")[-1] or path.split("/")[0]
     words = re.sub(r"[-_]+", " ", slug).strip()
-    if not words or words.lower() == "updates":
-        return "Starlink Official Updates"
+    if not words or words.lower() in {"updates", "launches", "launch"}:
+        return fallback
     return words.title()
 
 
@@ -202,13 +212,13 @@ def page_excerpt(page_text: str, max_length: int = 500) -> str:
     return normalize_text(page_text)[:max_length].strip()
 
 
-def page_title(soup: BeautifulSoup) -> str:
+def page_title(soup: BeautifulSoup, fallback: str) -> str:
     if soup.title and soup.title.string:
         return normalize_text(soup.title.string)
     h1 = soup.find("h1")
     if h1:
         return normalize_text(h1.get_text(" "))
-    return "Starlink Official Updates"
+    return fallback
 
 
 def fetch_source(source: dict[str, Any], timeout: int = 20) -> SourceFetch:
@@ -252,6 +262,7 @@ def build_item(
     http_status: int | None,
     summary: str,
     evidence: str,
+    tags: list[str],
 ) -> dict[str, Any]:
     item = {
         "id": make_item_id(url, title),
@@ -266,7 +277,7 @@ def build_item(
         "published_at": None,
         "fetched_at": fetched_at,
         "http_status": http_status,
-        "tags": ["starlink", "official", "updates"],
+        "tags": sorted(set(tags)),
         "summary": summary,
         "evidence": evidence,
         "collector": COLLECTOR_NAME,
@@ -278,17 +289,17 @@ def build_item(
 def extract_items_from_starlink_updates(fetch: SourceFetch, limit: int) -> list[dict[str, Any]]:
     source = fetch.source
     soup = BeautifulSoup(fetch.html, "html.parser")
-    title = page_title(soup)
+    title = page_title(soup, fallback="Starlink Official Updates")
     excerpt = page_excerpt(fetch.page_text)
 
     items_by_id: dict[str, dict[str, Any]] = {}
     for link in soup.find_all("a", href=True):
         normalized = normalize_url(link.get("href", ""), source["url"])
-        if not normalized or not is_updates_url(normalized):
+        if not normalized or not is_starlink_updates_url(normalized):
             continue
 
         link_text = normalize_text(link.get_text(" "))
-        title_candidate = link_text or nearby_heading(link) or title_from_slug(normalized)
+        title_candidate = link_text or nearby_heading(link) or title_from_slug(normalized, "Starlink Official Updates")
         evidence = normalize_text(link_text or nearby_heading(link) or excerpt)
         summary = f"规则化采集发现 Starlink 官方 Updates 相关链接：{title_candidate}"
         item = build_item(
@@ -299,6 +310,7 @@ def extract_items_from_starlink_updates(fetch: SourceFetch, limit: int) -> list[
             http_status=fetch.http_status,
             summary=summary,
             evidence=evidence[:500],
+            tags=["starlink", "official", "updates"],
         )
         items_by_id[item["id"]] = item
 
@@ -312,16 +324,78 @@ def extract_items_from_starlink_updates(fetch: SourceFetch, limit: int) -> list[
             http_status=fetch.http_status,
             summary=summary,
             evidence=excerpt[:500],
+            tags=["starlink", "official", "updates"],
         )
         items_by_id[item["id"]] = item
 
     return list(items_by_id.values())[:limit]
 
 
+def extract_items_from_spacex_launches(fetch: SourceFetch, limit: int) -> list[dict[str, Any]]:
+    source = fetch.source
+    soup = BeautifulSoup(fetch.html, "html.parser")
+    title = page_title(soup, fallback="SpaceX Official Launches")
+    excerpt = page_excerpt(fetch.page_text)
+
+    items_by_id: dict[str, dict[str, Any]] = {}
+    for link in soup.find_all("a", href=True):
+        normalized = normalize_url(link.get("href", ""), source["url"])
+        if not normalized or not is_spacex_official_url(normalized):
+            continue
+
+        link_text = normalize_text(link.get_text(" "))
+        heading = nearby_heading(link)
+        if not is_spacex_launch_related(normalized, f"{link_text} {heading}"):
+            continue
+
+        title_candidate = link_text or heading or title_from_slug(normalized, "SpaceX Official Launches")
+        evidence = normalize_text(link_text or heading or excerpt)
+        tags = ["spacex", "official", "launches"]
+        if "starlink" in f"{title_candidate} {normalized}".lower():
+            tags.append("starlink")
+        summary = f"规则化采集发现 SpaceX 官方 Launches 相关链接：{title_candidate}"
+        item = build_item(
+            source=source,
+            title=title_candidate,
+            url=normalized,
+            fetched_at=fetch.fetched_at,
+            http_status=fetch.http_status,
+            summary=summary,
+            evidence=evidence[:500],
+            tags=tags,
+        )
+        items_by_id[item["id"]] = item
+
+    if not items_by_id:
+        summary = "规则化采集生成 SpaceX Official Launches 页面级记录。未编造发射时间、任务状态或载荷数量。"
+        item = build_item(
+            source=source,
+            title=title or "SpaceX Official Launches 页面采集记录",
+            url=source["url"],
+            fetched_at=fetch.fetched_at,
+            http_status=fetch.http_status,
+            summary=summary,
+            evidence=excerpt[:500],
+            tags=["spacex", "official", "launches"],
+        )
+        items_by_id[item["id"]] = item
+
+    return list(items_by_id.values())[:limit]
+
+
+def extract_items(fetch: SourceFetch, limit: int) -> list[dict[str, Any]]:
+    source_id = fetch.source.get("id")
+    if source_id == "starlink_official_updates":
+        return extract_items_from_starlink_updates(fetch, limit)
+    if source_id == "spacex_official_launches":
+        return extract_items_from_spacex_launches(fetch, limit)
+    print(f"跳过当前阶段未支持的来源：{source_id}")
+    return []
+
+
 def apply_item_change_metadata(
     items: list[dict[str, Any]],
     existing_by_id: dict[str, dict[str, Any]],
-    fetched_at: str,
 ) -> tuple[int, int, int]:
     new_count = 0
     changed_count = 0
@@ -330,6 +404,7 @@ def apply_item_change_metadata(
     for item in items:
         item_id = item.get("id")
         existing = existing_by_id.get(item_id)
+        fetched_at = str(item.get("fetched_at") or now_iso())
         current_hash = item.get("content_hash") or item_content_hash(item)
         item["content_hash"] = current_hash
         item["last_seen_at"] = fetched_at
@@ -362,8 +437,9 @@ def write_items_upsert(new_items: list[dict[str, Any]], path: Path = ITEMS_FILE)
     existing_items = load_items(path)
     by_id = {item.get("id"): item for item in existing_items if item.get("id")}
 
-    fetched_at = new_items[0].get("last_seen_at") or new_items[0].get("fetched_at") if new_items else now_iso()
-    new_count, changed_count, unchanged_count = apply_item_change_metadata(new_items, by_id, str(fetched_at))
+    new_count = sum(1 for item in new_items if item.get("change_status") == "new")
+    changed_count = sum(1 for item in new_items if item.get("change_status") == "changed")
+    unchanged_count = sum(1 for item in new_items if item.get("change_status") == "unchanged")
 
     for item in new_items:
         item_id = item.get("id")
@@ -416,6 +492,7 @@ def update_source_status(
         "source_id": source_id,
         "source_name": source.get("name"),
         "url": source.get("url"),
+        "category": source.get("category"),
         "source_type": source.get("source_type"),
         "reliability_tier": source.get("reliability_tier"),
         "last_checked_at": fetch.fetched_at,
@@ -470,8 +547,8 @@ def collect_source(
     elif save_raw and dry_run:
         print("[dry-run] 已请求页面，但不会保存原始 HTML。")
 
-    items = extract_items_from_starlink_updates(fetch, limit)
-    new_count, changed_count, unchanged_count = apply_item_change_metadata(items, existing_items, fetch.fetched_at)
+    items = extract_items(fetch, limit)
+    new_count, changed_count, unchanged_count = apply_item_change_metadata(items, existing_items)
     status = update_source_status(source_status, fetch, items, new_count, changed_count, unchanged_count)
     print_source_summary(status)
     return items, status, None
@@ -521,10 +598,11 @@ def collect_all_sources(
     source_statuses: dict[str, dict[str, Any]] = {}
 
     for source in enabled_sources:
-        if source.get("id") != "starlink_official_updates":
-            print(f"跳过当前阶段未支持的来源：{source.get('id')}")
+        source_id_value = source.get("id")
+        if source_id_value not in SUPPORTED_SOURCE_IDS:
+            print(f"跳过当前阶段未支持的来源：{source_id_value}")
             continue
-        source_names.append(str(source.get("name", source.get("id"))))
+        source_names.append(str(source.get("name", source_id_value)))
         items, status, error = collect_source(
             source,
             existing_items=existing_items,
@@ -535,12 +613,13 @@ def collect_all_sources(
         )
         source_statuses[source["id"]] = status
         all_items.extend(items)
+        for item in items:
+            existing_items[item["id"]] = item
         if error:
             errors.append(error)
             if fail_on_error:
                 break
 
-    all_items = all_items[:limit]
     result = CollectResult(items=all_items, sources=source_names, errors=errors, source_statuses=source_statuses)
     result.new_count = sum(1 for item in all_items if item.get("change_status") == "new")
     result.changed_count = sum(1 for item in all_items if item.get("change_status") == "changed")
@@ -561,6 +640,7 @@ def collect_all_sources(
         result.wrote_items = True
         print(f"{ITEMS_FILE} 已更新：新增 {new_count} 条，变化 {changed_count} 条，未变化 {unchanged_count} 条，当前总计 {total_items} 条。")
     else:
+        result.total_items = len(load_items())
         print("本次未采集到有效条目，未更新 data/items.jsonl。")
 
     write_source_status(source_status)
@@ -570,12 +650,12 @@ def collect_all_sources(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="采集 Starlink 官方 Updates 页面并写入 JSONL。")
+    parser = argparse.ArgumentParser(description="采集官方来源页面并写入 JSONL。")
     parser.add_argument("--source-id", help="只采集指定来源。")
-    parser.add_argument("--limit", type=int, default=20, help="最多输出或写入本次采集记录数，默认 20。")
+    parser.add_argument("--limit", type=int, default=20, help="每个来源最多输出或写入的本次采集记录数，默认 20。")
     parser.add_argument("--dry-run", action="store_true", help="执行采集和解析，但不写入 data/items.jsonl。")
     parser.add_argument("--save-raw", action="store_true", help="保存原始 HTML 到 data/raw/，该目录不提交。")
-    parser.add_argument("--fail-on-error", action="store_true", help="采集失败时返回非 0。")
+    parser.add_argument("--fail-on-error", action="store_true", help="任一来源采集失败时返回非 0。")
     args = parser.parse_args()
 
     if args.limit < 1:

@@ -8,3 +8,12 @@ sources:
     url: https://www.starlink.com/updates
     enabled: true
     description: Starlink 官方更新页面，用于跟踪 Starlink 官方发布的网络、服务、技术和产品更新信息。
+  - id: spacex_official_launches
+    name: SpaceX Official Launches
+    source_type: official
+    reliability_tier: S
+    language: en
+    category: official_launches
+    url: https://www.spacex.com/launches
+    enabled: true
+    description: SpaceX 官方发射任务页面，用于跟踪 SpaceX 官方发布的发射任务、任务页面和 Starlink 相关发射信息。

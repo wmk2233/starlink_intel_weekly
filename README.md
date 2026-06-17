@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入第一个真实来源：Starlink 官方 Updates 页面；仍不包含大模型总结，也不做多来源扩展。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches；仍不包含大模型总结，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -9,7 +9,7 @@
 - 通过 SMTP 发送测试邮件；
 - 通过 GitHub Actions 每周自动运行并提交 `docs/` 和 `weekly/` 的变化；
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
-- 阶段 2A 已接入第一个真实来源：Starlink 官方 Updates 页面。
+- 阶段 2C 已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。
 
 ## 阶段 1B 工程加固
 
@@ -74,6 +74,23 @@
   }
 }
 ```
+
+## 阶段 2C SpaceX Launches 官方来源
+
+阶段 2C 新增第二个官方来源：`https://www.spacex.com/launches`。当前 enabled sources 只有两个官方来源：
+
+- Starlink Official Updates
+- SpaceX Official Launches
+
+采集器会默认采集 `sources.yml` 中所有 `enabled: true` 的来源，也可以通过 `--source-id` 只采集一个来源。SpaceX Launches 解析逻辑只做规则化网页抽取：
+
+- 提取页面标题；
+- 提取官方域名内与 `launch`、`mission`、`starlink` 相关的链接；
+- 标准化 URL 并去重；
+- 从链接文本、附近标题或 slug 生成标题；
+- 无法提取具体任务条目时，生成页面级记录；
+- 不编造发射时间、任务状态、载荷数量；
+- 不使用第三方发射日程 API，不使用大模型。
 
 ## 项目结构
 
@@ -182,6 +199,15 @@ python scripts/collect_sources.py --source-id starlink_official_updates --dry-ru
 python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
 ```
 
+阶段 2C 推荐命令：
+
+```powershell
+python scripts/collect_sources.py --limit 10
+python scripts/collect_sources.py --source-id spacex_official_launches --limit 10
+python scripts/collect_sources.py --source-id spacex_official_launches --dry-run --limit 10
+python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
+```
+
 ## 配置 `.env`
 
 本项目不会提交真实 `.env`。本地测试邮件发送前，可以参考 `.env.example` 手动创建 `.env`：
@@ -220,11 +246,11 @@ python scripts/run_weekly.py
 
 脚本会生成或追加本周周报，更新长期知识库，并把 Markdown 正文和附件通过 SMTP 发送到 `MAIL_TO`。
 
-邮件正文会包含阶段 2A 说明、本次是否执行真实来源采集、采集来源名称和采集条目数量。
+邮件正文会包含阶段 2C 说明、本次是否执行真实来源采集、已接入来源数量，以及两个来源的可达性、页面变化状态和条目统计。
 
 ## 来源配置
 
-`sources.yml` 是后续扩展来源的统一入口。当前仅启用一个来源：
+`sources.yml` 是后续扩展来源的统一入口。当前仅启用两个官方来源：
 
 ```yaml
 sources:
@@ -236,13 +262,21 @@ sources:
     category: official_updates
     url: https://www.starlink.com/updates
     enabled: true
+  - id: spacex_official_launches
+    name: SpaceX Official Launches
+    source_type: official
+    reliability_tier: S
+    language: en
+    category: official_launches
+    url: https://www.spacex.com/launches
+    enabled: true
 ```
 
-阶段 2A 不应在 `sources.yml` 中启用多个来源。
+阶段 2C 不应在 `sources.yml` 中启用第三方来源、中文来源、arXiv、FCC、CelesTrak 或其他来源。
 
 ## 数据结构
 
-`data/items.jsonl` 使用 JSON Lines 格式，每行一条来源记录。核心字段包括：
+`data/items.jsonl` 使用 JSON Lines 格式，每行一条来源记录，支持多个来源混合存储。核心字段包括：
 
 ```json
 {
@@ -267,11 +301,13 @@ sources:
   "last_changed_at": "...",
   "change_status": "new",
   "previous_content_hash": null,
-  "collector": "rule_based_html_v2"
+  "collector": "rule_based_html_v3"
 }
 ```
 
-`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。阶段 2B 起，`collector` 使用 `rule_based_html_v2`。
+`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。阶段 2C 起，`collector` 使用 `rule_based_html_v3`。
+
+`data/source_status.json` 中的 `sources` 会同时维护两个来源的状态，例如 `starlink_official_updates` 和 `spacex_official_launches`，每个来源独立记录页面 hash、健康状态、变化状态和条目统计。
 
 ## 配置 GitHub Secrets
 
@@ -300,7 +336,7 @@ GITEE_REMOTE
 - 运行 `python scripts/run_weekly.py --max-source-items 10 --max-history-records 20` 执行真实来源采集；
 - 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2B、来源健康状态、页面变化状态、新增/变化/未变化条目数；
+- Summary 中展示阶段 2C、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -387,8 +423,9 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - `prompts/` 不提交；
 - SMTP 授权码和 Gitee Token 只放在本地 `.env` 或 GitHub Secrets；
 - 不要在命令行、日志、README 或代码中写入真实密钥；
-- 当前阶段只包含 Starlink 官方 Updates 页面这一个真实来源；
-- 当前阶段不包含大模型总结，不编造 Starlink 技术事实。
+- 当前阶段只包含两个官方来源：Starlink Official Updates 与 SpaceX Official Launches；
+- 当前阶段不包含大模型总结，不编造 Starlink 或 SpaceX 发射事实；
+- 当前阶段不使用第三方发射日程 API。
 
 ## 阶段 2A 局限性
 
@@ -405,6 +442,15 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 当前不使用大模型；
 - 当前不做跨来源事实核验；
 - 当前仍只接入一个官方来源。
+
+## 阶段 2C 局限性
+
+- 不使用大模型；
+- 不编造发射时间、任务状态、载荷数量；
+- 不使用第三方发射日程 API；
+- 动态渲染页面可能只能生成页面级记录；
+- hash 变化不等于事实变化；
+- 当前只接入两个官方来源。
 
 ## 后续扩展计划
 

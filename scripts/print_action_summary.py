@@ -15,49 +15,37 @@ def _yes_no(value: bool) -> str:
     return "是" if value else "否"
 
 
-def _source_status() -> dict[str, object]:
+def _source_statuses() -> tuple[bool, dict[str, dict[str, object]]]:
     if not SOURCE_STATUS_FILE.exists():
-        return {
-            "exists": False,
-            "health_status": "unknown",
-            "change_status": "unknown",
-            "new_items": 0,
-            "changed_items": 0,
-            "unchanged_items": 0,
-        }
+        return False, {}
 
     try:
         data = json.loads(SOURCE_STATUS_FILE.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return {
-            "exists": True,
-            "health_status": "无法解析",
-            "change_status": "无法解析",
-            "new_items": 0,
-            "changed_items": 0,
-            "unchanged_items": 0,
+        return True, {
+            "source_status_parse_error": {
+                "source_name": "source_status.json",
+                "health_status": "无法解析",
+                "change_status": "无法解析",
+                "new_items": 0,
+                "changed_items": 0,
+                "unchanged_items": 0,
+            }
         }
 
-    source = data.get("sources", {}).get("starlink_official_updates", {})
-    return {
-        "exists": True,
-        "health_status": source.get("health_status", "unknown"),
-        "change_status": source.get("change_status", "unknown"),
-        "new_items": source.get("new_items", 0),
-        "changed_items": source.get("changed_items", 0),
-        "unchanged_items": source.get("unchanged_items", 0),
-    }
+    sources = data.get("sources", {})
+    return True, sources if isinstance(sources, dict) else {}
 
 
 def main() -> int:
-    status = _source_status()
+    status_exists, statuses = _source_statuses()
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：2B",
+        "- 阶段：2C",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -69,15 +57,38 @@ def main() -> int:
         "- source_status.json 路径：data/source_status.json",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
-        f"- source_status.json 是否存在：{_yes_no(bool(status['exists']))}",
-        f"- 来源健康状态：{status['health_status']}",
-        f"- 页面变化状态：{status['change_status']}",
-        f"- 新增条目数：{status['new_items']}",
-        f"- 变化条目数：{status['changed_items']}",
-        f"- 未变化条目数：{status['unchanged_items']}",
+        f"- source_status.json 是否存在：{_yes_no(status_exists)}",
+        "",
+        "### 来源状态",
+        "",
+        "| 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    if statuses:
+        for source_id, status in statuses.items():
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(status.get("source_name") or source_id),
+                        str(status.get("health_status", "unknown")),
+                        str(status.get("change_status", "unknown")),
+                        str(status.get("new_items", 0)),
+                        str(status.get("changed_items", 0)),
+                        str(status.get("unchanged_items", 0)),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.append("| unknown | unknown | unknown | 0 | 0 | 0 |")
+
+    lines.extend(
+        [
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
-    ]
+        ]
+    )
     print("\n".join(lines))
     return 0
 
