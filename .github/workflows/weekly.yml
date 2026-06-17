@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: "17 0 * * 1"
 
+concurrency:
+  group: weekly-starlink-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -26,6 +30,17 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: Validate environment
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          GITEE_REMOTE: ${{ secrets.GITEE_REMOTE }}
+        run: python scripts/validate_env.py
+
       - name: Run weekly automation
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -40,9 +55,9 @@ jobs:
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add docs weekly
+          git add docs weekly outputs/logs/.gitkeep
           if git diff --cached --quiet; then
-            echo "docs/ 和 weekly/ 没有变化，跳过提交。"
+            echo "docs/、weekly/ 和 outputs/logs/.gitkeep 没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main
@@ -59,3 +74,25 @@ jobs:
             git remote add gitee "$GITEE_REMOTE"
             git push gitee main
           fi
+
+      - name: Write run summary
+        if: always()
+        env:
+          GITEE_REMOTE: ${{ secrets.GITEE_REMOTE }}
+        run: |
+          if [ -z "$GITEE_REMOTE" ]; then
+            GITEE_STATUS="未配置"
+          else
+            GITEE_STATUS="已配置"
+          fi
+          {
+            echo "## Starlink Weekly Automation"
+            echo ""
+            echo "- 工作流名称：$GITHUB_WORKFLOW"
+            echo "- 分支：$GITHUB_REF_NAME"
+            echo "- 触发方式：$GITHUB_EVENT_NAME"
+            echo "- Python 版本：$(python --version 2>&1)"
+            echo "- 本次运行是否成功：${{ job.status }}"
+            echo "- 更新文件路径：docs/starlink_knowledge_base.md、weekly/"
+            echo "- Gitee 同步是否配置：$GITEE_STATUS"
+          } >> "$GITHUB_STEP_SUMMARY"

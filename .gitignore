@@ -8,6 +8,7 @@ __pycache__/
 *.log
 data/raw/
 data/cache/
+outputs/logs/*.log
 
 # Python packaging and test cache
 .pytest_cache/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import socket
 import smtplib
 import ssl
 import sys
@@ -75,13 +76,14 @@ def send_weekly_email(markdown_path: str | Path, week_id: str) -> bool:
     config, missing = _get_config()
 
     if missing:
-        print("邮件配置缺失，已取消发送。请配置以下环境变量或 .env 项：")
+        print("邮件配置缺失，已取消发送。请先运行 python scripts/validate_env.py 检查配置。")
+        print("缺失配置项：")
         for name in missing:
             print(f"- {name}")
         return False
 
     if not path.exists():
-        print(f"邮件发送失败：附件文件不存在：{path}")
+        print(f"邮件发送失败：附件路径不存在：{path}")
         return False
 
     recipients = _split_recipients(config["MAIL_TO"])
@@ -92,7 +94,7 @@ def send_weekly_email(markdown_path: str | Path, week_id: str) -> bool:
     try:
         port = int(config["SMTP_PORT"])
     except ValueError:
-        print("邮件发送失败：SMTP_PORT 必须是数字。")
+        print("邮件发送失败：SMTP_PORT 必须是数字。请先运行 python scripts/validate_env.py 检查配置。")
         return False
 
     message = build_message(path, week_id, config)
@@ -104,9 +106,27 @@ def send_weekly_email(markdown_path: str | Path, week_id: str) -> bool:
             server.send_message(message)
         print(f"邮件发送成功：{', '.join(recipients)}")
         return True
-    except (OSError, smtplib.SMTPException) as exc:
-        print(f"邮件发送失败：{exc}")
-        print("请检查 SMTP_HOST、SMTP_PORT、SMTP_USER、SMTP_PASSWORD、MAIL_TO 和发件邮箱 SMTP 授权状态。")
+    except smtplib.SMTPAuthenticationError:
+        print("邮件发送失败：SMTP 认证失败。")
+        print("请检查 SMTP 授权码是否正确、邮箱 SMTP 服务是否开启、SMTP_USER 是否为正确发件账号。")
+        return False
+    except (socket.gaierror, TimeoutError, ConnectionRefusedError, smtplib.SMTPConnectError):
+        print("邮件发送失败：无法连接 SMTP 服务器。")
+        print("请检查网络连接、SMTP_HOST、SMTP_PORT，以及当前网络是否允许访问 SMTP 服务。")
+        return False
+    except smtplib.SMTPRecipientsRefused:
+        print("邮件发送失败：收件人地址被 SMTP 服务器拒绝，请检查 MAIL_TO。")
+        return False
+    except smtplib.SMTPSenderRefused:
+        print("邮件发送失败：发件人地址被 SMTP 服务器拒绝，请检查 MAIL_FROM 和 SMTP_USER。")
+        return False
+    except smtplib.SMTPException as exc:
+        print(f"邮件发送失败：SMTP 服务返回错误：{exc.__class__.__name__}")
+        print("请检查 SMTP 配置和邮箱服务状态。敏感信息未输出。")
+        return False
+    except OSError:
+        print("邮件发送失败：网络或系统连接异常。")
+        print("请检查网络、SMTP_HOST、SMTP_PORT 和本机代理/防火墙设置。")
         return False
 
 
