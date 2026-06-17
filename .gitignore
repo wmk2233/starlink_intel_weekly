@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.vscode/
+.idea/
+*.log
+data/raw/
+data/cache/
+
+# Python packaging and test cache
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
+# Windows
+Thumbs.db
+Desktop.ini
+prompts/
