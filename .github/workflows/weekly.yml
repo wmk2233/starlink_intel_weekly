@@ -1,4 +1,5 @@
 name: Starlink Weekly Automation
+run-name: Starlink Weekly Automation
 
 on:
   workflow_dispatch:
