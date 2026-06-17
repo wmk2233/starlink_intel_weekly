@@ -62,12 +62,15 @@ def build_message(
 
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 2C：第二个官方来源接入测试。\n"
-        "内容来自规则化网页采集和 hash 变化检测，不包含大模型事实推理。\n\n"
+        "当前阶段为阶段 2D：官方来源解析质量增强。\n"
+        "内容来自规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。\n\n"
         f"本次是否执行真实来源采集：{collection_context.get('collected', '未知')}\n"
         f"已接入来源数量：{collection_context.get('connected_source_count', '未知')}\n"
         "来源状态概览：\n"
         f"{collection_context.get('source_overview', '无')}\n\n"
+        "解析质量概览：\n"
+        f"{collection_context.get('quality_overview', '无')}\n\n"
+        f"是否生成解析质量诊断：{collection_context.get('quality_generated', '未知')}\n"
         f"来源可达性概览：{collection_context.get('health_status', '未知')}\n"
         f"页面变化状态概览：{collection_context.get('page_change_status', '未知')}\n"
         f"本次采集条目数量：{collection_context.get('item_count', '未知')}\n"
@@ -75,7 +78,7 @@ def build_message(
         f"内容变化条目数量：{collection_context.get('changed_items', '未知')}\n"
         f"未变化条目数量：{collection_context.get('unchanged_items', '未知')}\n"
         f"本周 Markdown 附件：{markdown_path.name}\n\n"
-        "页面变化状态只反映 hash 变化检测结果，不代表事实判断。\n\n"
+        "页面变化状态只反映 hash 变化检测结果；解析质量只表示当前规则解析完整度，不代表事实判断。\n\n"
         "以下为本次生成的 Markdown 正文：\n\n"
         f"{markdown_text}\n"
     )

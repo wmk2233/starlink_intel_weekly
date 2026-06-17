@@ -6,7 +6,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from collect_sources import ITEMS_FILE, SOURCE_STATUS_FILE, collect_all_sources, load_items, load_source_status
+from collect_sources import (
+    EXTRACTION_QUALITY_FILE,
+    ITEMS_FILE,
+    SOURCE_STATUS_FILE,
+    collect_all_sources,
+    load_extraction_quality,
+    load_items,
+    load_source_status,
+)
 from send_email import send_weekly_email
 
 
@@ -14,10 +22,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEEKLY_DIR = PROJECT_ROOT / "weekly"
 DOCS_DIR = PROJECT_ROOT / "docs"
 KNOWLEDGE_BASE = DOCS_DIR / "starlink_knowledge_base.md"
-HISTORY_HEADING = "## 6. 自动化测试记录"
-LEGACY_HISTORY_HEADINGS = ["## 4. 自动化测试记录", "## 自动化测试记录"]
+HISTORY_HEADING = "## 7. 自动化测试记录"
+LEGACY_HISTORY_HEADINGS = ["## 6. 自动化测试记录", "## 4. 自动化测试记录", "## 自动化测试记录"]
 CONNECTED_SOURCES_HEADING = "## 已接入来源"
 SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
+QUALITY_HEADING = "## 来源解析质量诊断"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool) -> dict[str, str]:
@@ -31,6 +40,7 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool) -> dict[st
         "python_version": platform.python_version(),
         "send_email": "是" if send_email_enabled else "否",
         "collect_sources": "是" if collect_enabled else "否",
+        "quality_generated": "否",
         "source_names": "无",
         "source_item_count": "0",
         "new_items": "0",
@@ -42,8 +52,10 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool) -> dict[st
         "last_checked_at": "未知",
         "source_status_path": str(SOURCE_STATUS_FILE),
         "items_path": str(ITEMS_FILE),
+        "quality_path": str(EXTRACTION_QUALITY_FILE),
         "connected_source_count": "0",
         "source_overview": "",
+        "quality_overview": "",
     }
 
 
@@ -58,18 +70,23 @@ def render_source_items_table(source_items: list[dict[str, object]]) -> str:
         return "本次未采集到有效条目。"
 
     rows = [
-        "| 标题 | 类型 | 可信度 | 条目状态 | 采集时间 | 链接 |",
-        "|---|---|---|---|---|---|",
+        "| 标题 | 类型 | 可信度 | 条目状态 | 解析层级 | 解析质量 | 采集时间 | 链接 |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for item in source_items:
         title = escape_table_cell(item.get("title", ""))
         source_type = escape_table_cell(item.get("source_type", ""))
         reliability = escape_table_cell(item.get("reliability_tier", ""))
         change_status = escape_table_cell(item.get("change_status", "unknown"))
+        extracted_level = escape_table_cell(item.get("extracted_level", "unknown"))
+        source_quality = escape_table_cell(item.get("source_quality", "unknown"))
         fetched_at = escape_table_cell(item.get("last_seen_at") or item.get("fetched_at", ""))
         url = str(item.get("url") or "").strip()
         link = f"[链接]({url})" if url else ""
-        rows.append(f"| {title} | {source_type} | {reliability} | {change_status} | {fetched_at} | {link} |")
+        rows.append(
+            f"| {title} | {source_type} | {reliability} | {change_status} | "
+            f"{extracted_level} | {source_quality} | {fetched_at} | {link} |"
+        )
     return "\n".join(rows)
 
 
@@ -126,6 +143,45 @@ def render_change_detection_table(source_statuses: dict[str, dict[str, object]])
     return "\n".join(rows)
 
 
+def quality_sources_from_data(extraction_quality: dict[str, object] | None) -> dict[str, dict[str, object]]:
+    if not isinstance(extraction_quality, dict):
+        return {}
+    sources = extraction_quality.get("sources", {})
+    return sources if isinstance(sources, dict) else {}
+
+
+def render_quality_table(
+    quality_sources: dict[str, dict[str, object]],
+    source_statuses: dict[str, dict[str, object]],
+) -> str:
+    if not quality_sources and not source_statuses:
+        return "本次没有解析质量诊断记录。"
+
+    rows = [
+        "| 来源 | 主导解析层级 | 主导解析质量 | 平均置信度 | 候选链接数 | 解析器版本 |",
+        "|---|---|---|---:|---:|---|",
+    ]
+    ordered_ids = list(source_statuses.keys()) or list(quality_sources.keys())
+    for source_id in ordered_ids:
+        quality = quality_sources.get(source_id, {})
+        status = source_statuses.get(source_id, {})
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(quality.get("source_name") or status.get("source_name") or source_id),
+                    escape_table_cell(quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"),
+                    escape_table_cell(quality.get("dominant_source_quality") or status.get("dominant_source_quality") or "unknown"),
+                    escape_table_cell(quality.get("average_confidence") or status.get("average_confidence") or 0),
+                    escape_table_cell(quality.get("candidate_links_total") or status.get("candidate_links_total") or 0),
+                    escape_table_cell(quality.get("parser_version") or status.get("parser_version") or "unknown"),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(rows)
+
+
 def group_items_by_source(source_items: list[dict[str, object]], max_source_items: int) -> dict[str, list[dict[str, object]]]:
     grouped: dict[str, list[dict[str, object]]] = {}
     for item in source_items:
@@ -145,13 +201,13 @@ def render_grouped_source_items(
     sections: list[str] = []
     for index, (source_id, status) in enumerate(source_statuses.items(), start=1):
         source_name = escape_table_cell(status.get("source_name") or source_id)
-        sections.append(f"### 4.{index} {source_name}\n\n{render_source_items_table(grouped.get(source_id, []))}")
+        sections.append(f"### 5.{index} {source_name}\n\n{render_source_items_table(grouped.get(source_id, []))}")
 
     for source_id, items in grouped.items():
         if source_id in source_statuses:
             continue
         source_name = escape_table_cell(items[0].get("source_name") if items else source_id)
-        sections.append(f"### 4.{len(sections) + 1} {source_name}\n\n{render_source_items_table(items)}")
+        sections.append(f"### 5.{len(sections) + 1} {source_name}\n\n{render_source_items_table(items)}")
 
     return "\n\n".join(sections) if sections else "本次未采集到有效条目。"
 
@@ -161,6 +217,7 @@ def build_weekly_base(
     source_items: list[dict[str, object]],
     collection_errors: list[str],
     source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
 ) -> str:
     week_id = meta["iso_week"]
     error_note = ""
@@ -170,7 +227,7 @@ def build_weekly_base(
 
 ## 1. 本周摘要
 
-本周自动化流程已运行。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并继续进行来源状态诊断与页面变化检测。
+本周自动化流程已运行。当前阶段为 2D：在两个官方来源基础上增强解析质量诊断，继续只做规则化网页抽取、来源状态诊断与页面变化检测。
 
 ## 2. 来源状态诊断
 
@@ -182,7 +239,13 @@ def build_weekly_base(
 
 说明：当前阶段仅基于规则化页面抽取和 hash 变化检测，不代表事实判断。{error_note}
 
-## 4. 真实来源采集结果
+## 4. 解析质量诊断
+
+{render_quality_table(quality_sources, source_statuses)}
+
+解析质量只表示当前规则解析的完整度和稳定性，不等同于来源可信度或事实重要性。
+
+## 5. 真实来源采集结果
 
 本次是否执行真实来源采集：{meta["collect_sources"]}
 
@@ -192,13 +255,14 @@ def build_weekly_base(
 
 {render_grouped_source_items(source_items, source_statuses, int(meta.get("max_source_items", "10")))}
 
-## 5. 来源说明与局限性
+## 6. 来源说明与局限性
 
 - 当前阶段仅接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。
 - 当前阶段仅进行规则化网页抽取，不使用大模型生成事实判断。
 - 如果页面由 JavaScript 动态渲染，可能只能提取页面级记录或部分链接。
+- 解析层级分为 page_level、link_level、item_level；置信度用于描述解析完整度，不代表事实真伪。
 - 页面变化状态基于 hash 检测，只代表采集到的页面内容发生变化或未变化。
-- 不对未提取到发布时间、发射时间、任务状态、载荷数量的信息进行编造。
+- 不对未提取到的发布时间、发射时间、任务状态、载荷数量或技术细节进行编造。
 - SpaceX Launches 页面用于官方发射任务信息入口，但当前阶段不使用第三方发射日程 API。
 """
 
@@ -208,8 +272,9 @@ def build_weekly_document(
     source_items: list[dict[str, object]],
     collection_errors: list[str],
     source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
 ) -> str:
-    return f"{build_weekly_base(meta, source_items, collection_errors, source_statuses)}\n{HISTORY_HEADING}\n\n{render_history_records([meta])}\n"
+    return f"{build_weekly_base(meta, source_items, collection_errors, source_statuses, quality_sources)}\n{HISTORY_HEADING}\n\n{render_history_records([meta])}\n"
 
 
 def render_history_records(records: list[dict[str, str]]) -> str:
@@ -224,6 +289,7 @@ def render_history_records(records: list[dict[str, str]]) -> str:
                     f"  - Python 版本：{record.get('python_version', '未知')}",
                     f"  - 是否发送邮件：{record.get('send_email', '未知')}",
                     f"  - 是否执行真实来源采集：{record.get('collect_sources', '未知')}",
+                    f"  - 是否生成解析质量诊断：{record.get('quality_generated', '未知')}",
                     f"  - 页面变化状态：{record.get('page_change_status', '未知')}",
                     f"  - 已接入来源数量：{record.get('connected_source_count', '未知')}",
                 ]
@@ -257,6 +323,7 @@ def _parse_history_records(history_text: str) -> list[dict[str, str]]:
         "Python 版本": "python_version",
         "是否发送邮件": "send_email",
         "是否执行真实来源采集": "collect_sources",
+        "是否生成解析质量诊断": "quality_generated",
         "页面变化状态": "page_change_status",
         "已接入来源数量": "connected_source_count",
     }
@@ -293,17 +360,27 @@ def merge_weekly_history(existing: str, meta: dict[str, str], max_records: int) 
     return f"{base}\n\n{HISTORY_HEADING}\n\n{render_history_records(records)}\n"
 
 
-def update_knowledge_base_text(existing: str, meta: dict[str, str], source_statuses: dict[str, dict[str, object]]) -> str:
+def update_knowledge_base_text(
+    existing: str,
+    meta: dict[str, str],
+    source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
+) -> str:
     existing = existing.replace(
         "当前阶段仅用于验证自动化链路，尚未接入真实 Starlink 信息采集、大模型总结和知识库更新功能。",
-        "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，不包含大模型事实推理。",
+        "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，并新增解析质量诊断；不包含大模型事实推理。",
     )
     existing = existing.replace(
         "当前阶段已接入第一个真实来源：Starlink 官方 Updates 页面。采集方式为规则化网页抽取，不包含大模型事实推理。",
+        "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，并新增解析质量诊断；不包含大模型事实推理。",
+    )
+    existing = existing.replace(
         "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，不包含大模型事实推理。",
+        "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，并新增解析质量诊断；不包含大模型事实推理。",
     )
     existing = ensure_connected_sources_section_text(existing)
     existing = update_source_change_section_text(existing, meta, source_statuses)
+    existing = update_quality_section_text(existing, quality_sources, source_statuses)
     heading = "## 最近一次自动化运行记录"
     new_section = f"""{heading}
 
@@ -313,6 +390,7 @@ def update_knowledge_base_text(existing: str, meta: dict[str, str], source_statu
 - Python 版本：{meta["python_version"]}
 - 是否发送邮件：{meta["send_email"]}
 - 是否执行真实来源采集：{meta["collect_sources"]}
+- 是否生成解析质量诊断：{meta["quality_generated"]}
 - 本次采集来源名称：{meta["source_names"]}
 - 本次采集条目数量：{meta["source_item_count"]}
 - 已接入来源数量：{meta["connected_source_count"]}
@@ -371,7 +449,16 @@ def update_source_change_section_text(existing: str, _meta: dict[str, str], sour
         )
 
     section = f"{SOURCE_CHANGE_HEADING}\n\n" + "\n".join(rows) + "\n"
-    return replace_or_insert_section(existing, SOURCE_CHANGE_HEADING, section, before_heading="## 最近一次自动化运行记录")
+    return replace_or_insert_section(existing, SOURCE_CHANGE_HEADING, section, before_heading=QUALITY_HEADING)
+
+
+def update_quality_section_text(
+    existing: str,
+    quality_sources: dict[str, dict[str, object]],
+    source_statuses: dict[str, dict[str, object]],
+) -> str:
+    section = f"{QUALITY_HEADING}\n\n{render_quality_table(quality_sources, source_statuses)}\n"
+    return replace_or_insert_section(existing, QUALITY_HEADING, section, before_heading="## 最近一次自动化运行记录")
 
 
 def replace_or_insert_section(existing: str, heading: str, section: str, before_heading: str | None = None) -> str:
@@ -397,7 +484,7 @@ def ensure_knowledge_base_exists() -> None:
         KNOWLEDGE_BASE.write_text(
             "# Starlink 技术情报长期知识库\n\n"
             "本文件用于记录 Starlink 技术情报的长期更新内容。\n\n"
-            "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，不包含大模型事实推理。\n\n"
+            "当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。采集方式为规则化网页抽取，并新增解析质量诊断；不包含大模型事实推理。\n\n"
             "## 已接入来源\n\n"
             "| 来源 | 类型 | 可信度 | 地址 | 状态 |\n"
             "|---|---|---|---|---|\n"
@@ -408,6 +495,11 @@ def ensure_knowledge_base_exists() -> None:
             "|---|---|---|---|---|---|\n"
             "| Starlink Official Updates | 暂无 | unknown | unknown | 暂无 | 未检查 |\n"
             "| SpaceX Official Launches | 暂无 | unknown | unknown | 暂无 | 未检查 |\n\n"
+            "## 来源解析质量诊断\n\n"
+            "| 来源 | 主导解析层级 | 主导解析质量 | 平均置信度 | 候选链接数 | 解析器版本 |\n"
+            "|---|---|---|---:|---:|---|\n"
+            "| Starlink Official Updates | unknown | unknown | 0 | 0 | unknown |\n"
+            "| SpaceX Official Launches | unknown | unknown | 0 | 0 | unknown |\n\n"
             "## 最近一次自动化运行记录\n\n"
             "暂无。\n",
             encoding="utf-8",
@@ -422,9 +514,10 @@ def write_weekly_file(
     source_items: list[dict[str, object]],
     collection_errors: list[str],
     source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
 ) -> None:
     if weekly_path.exists():
-        print(f"检测到本周周报已存在，将更新真实来源采集结果并整理自动化测试记录：{weekly_path}")
+        print(f"检测到本周周报已存在，将更新真实来源采集结果、解析质量诊断并整理自动化测试记录：{weekly_path}")
         if dry_run:
             print(f"[dry-run] 不会实际更新周报内容；最多保留最近 {max_records} 条记录。")
             return
@@ -433,9 +526,12 @@ def write_weekly_file(
         records = _parse_history_records(history_text)
         records.append(meta)
         records = records[-max_records:]
-        updated = f"{build_weekly_base(meta, source_items, collection_errors, source_statuses)}\n{HISTORY_HEADING}\n\n{render_history_records(records)}\n"
+        updated = (
+            f"{build_weekly_base(meta, source_items, collection_errors, source_statuses, quality_sources)}\n"
+            f"{HISTORY_HEADING}\n\n{render_history_records(records)}\n"
+        )
         weekly_path.write_text(updated, encoding="utf-8", newline="\n")
-        print(f"已更新真实来源采集结果，并限制自动化测试记录最多保留最近 {max_records} 条。")
+        print(f"已更新真实来源采集结果和解析质量诊断，并限制自动化测试记录最多保留最近 {max_records} 条。")
         return
 
     print(f"将创建本周周报：{weekly_path}")
@@ -444,7 +540,11 @@ def write_weekly_file(
         return
 
     WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
-    weekly_path.write_text(build_weekly_document(meta, source_items, collection_errors, source_statuses), encoding="utf-8", newline="\n")
+    weekly_path.write_text(
+        build_weekly_document(meta, source_items, collection_errors, source_statuses, quality_sources),
+        encoding="utf-8",
+        newline="\n",
+    )
     print("已创建本周 Markdown 周报。")
 
 
@@ -465,6 +565,31 @@ def load_statuses_for_report() -> dict[str, dict[str, object]]:
     status = load_source_status(SOURCE_STATUS_FILE)
     sources = status.get("sources", {})
     return sources if isinstance(sources, dict) else {}
+
+
+def load_quality_for_report() -> dict[str, dict[str, object]]:
+    return quality_sources_from_data(load_extraction_quality(EXTRACTION_QUALITY_FILE))
+
+
+def build_quality_overview(
+    quality_sources: dict[str, dict[str, object]],
+    source_statuses: dict[str, dict[str, object]],
+) -> str:
+    if not quality_sources and not source_statuses:
+        return "无"
+
+    lines: list[str] = []
+    ordered_ids = list(source_statuses.keys()) or list(quality_sources.keys())
+    for source_id in ordered_ids:
+        quality = quality_sources.get(source_id, {})
+        status = source_statuses.get(source_id, {})
+        source_name = quality.get("source_name") or status.get("source_name") or source_id
+        level = quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"
+        source_quality = quality.get("dominant_source_quality") or status.get("dominant_source_quality") or "unknown"
+        confidence = quality.get("average_confidence") or status.get("average_confidence") or 0
+        links = quality.get("candidate_links_total") or status.get("candidate_links_total") or 0
+        lines.append(f"- {source_name}：{level} / {source_quality} / 平均置信度 {confidence} / 候选链接 {links}")
+    return "\n".join(lines)
 
 
 def apply_status_to_meta(meta: dict[str, str], source_statuses: dict[str, dict[str, object]]) -> None:
@@ -498,12 +623,27 @@ def apply_status_to_meta(meta: dict[str, str], source_statuses: dict[str, dict[s
     meta["source_overview"] = "\n".join(
         f"- {status.get('source_name', source_id)}：{status.get('health_status', 'unknown')} / "
         f"{status.get('change_status', 'unknown')} / 新增{status.get('new_items', 0)} / "
-        f"变化{status.get('changed_items', 0)} / 未变化{status.get('unchanged_items', 0)}"
+        f"变化{status.get('changed_items', 0)} / 未变化{status.get('unchanged_items', 0)} / "
+        f"解析{status.get('dominant_extracted_level', 'unknown')}:{status.get('dominant_source_quality', 'unknown')}"
         for source_id, status in source_statuses.items()
     )
 
 
-def update_knowledge_base(meta: dict[str, str], dry_run: bool, source_statuses: dict[str, dict[str, object]]) -> None:
+def apply_quality_to_meta(
+    meta: dict[str, str],
+    quality_sources: dict[str, dict[str, object]],
+    source_statuses: dict[str, dict[str, object]],
+) -> None:
+    meta["quality_generated"] = "是" if quality_sources or source_statuses else "否"
+    meta["quality_overview"] = build_quality_overview(quality_sources, source_statuses)
+
+
+def update_knowledge_base(
+    meta: dict[str, str],
+    dry_run: bool,
+    source_statuses: dict[str, dict[str, object]],
+    quality_sources: dict[str, dict[str, object]],
+) -> None:
     print(f"将更新长期知识库：{KNOWLEDGE_BASE}")
     if dry_run:
         print("[dry-run] 不会实际更新长期知识库。")
@@ -511,9 +651,9 @@ def update_knowledge_base(meta: dict[str, str], dry_run: bool, source_statuses: 
 
     ensure_knowledge_base_exists()
     existing = KNOWLEDGE_BASE.read_text(encoding="utf-8")
-    updated = update_knowledge_base_text(existing, meta, source_statuses)
+    updated = update_knowledge_base_text(existing, meta, source_statuses, quality_sources)
     KNOWLEDGE_BASE.write_text(updated, encoding="utf-8", newline="\n")
-    print("已更新长期知识库最近一次自动化运行记录。")
+    print("已更新长期知识库最近一次自动化运行记录和解析质量诊断。")
 
 
 def main() -> int:
@@ -550,12 +690,14 @@ def main() -> int:
     collection_errors: list[str] = []
     source_items: list[dict[str, object]] = []
     source_statuses: dict[str, dict[str, object]] = {}
+    quality_sources: dict[str, dict[str, object]] = {}
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
     print(f"当前 ISO 周编号：{meta['iso_week']}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
+    print("当前阶段：2D 官方来源解析质量增强。")
 
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录最多展示：{args.max_source_items} 条")
@@ -564,7 +706,9 @@ def main() -> int:
     if args.no_collect:
         print("已按 --no-collect 参数跳过真实来源采集。")
         source_statuses = load_statuses_for_report()
+        quality_sources = load_quality_for_report()
         apply_status_to_meta(meta, source_statuses)
+        apply_quality_to_meta(meta, quality_sources, source_statuses)
         source_items = latest_items_for_report(args.max_source_items, source_statuses)
     else:
         print("开始采集真实来源：全部 enabled 官方来源。")
@@ -581,8 +725,10 @@ def main() -> int:
         meta["changed_items"] = str(collection_result.changed_count)
         meta["unchanged_items"] = str(collection_result.unchanged_count)
         source_statuses = collection_result.source_statuses
+        quality_sources = quality_sources_from_data(collection_result.extraction_quality)
         apply_status_to_meta(meta, source_statuses)
-        source_items = collection_result.items or latest_items_for_report(args.max_source_items)
+        apply_quality_to_meta(meta, quality_sources, source_statuses)
+        source_items = collection_result.items or latest_items_for_report(args.max_source_items, source_statuses)
 
     write_weekly_file(
         weekly_path=weekly_path,
@@ -592,13 +738,15 @@ def main() -> int:
         source_items=source_items,
         collection_errors=collection_errors,
         source_statuses=source_statuses,
+        quality_sources=quality_sources,
     )
-    update_knowledge_base(meta, args.dry_run, source_statuses)
+    update_knowledge_base(meta, args.dry_run, source_statuses, quality_sources)
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
         print(f"[dry-run] 本次将生成或更新的周报路径：{weekly_path}")
         print(f"[dry-run] 本次将更新的知识库路径：{KNOWLEDGE_BASE}")
+        print(f"[dry-run] 本次将生成解析质量诊断：{meta['quality_generated']}")
         return 0
 
     if args.no_email:
@@ -620,6 +768,8 @@ def main() -> int:
         "attachment": str(weekly_path),
         "connected_source_count": meta["connected_source_count"],
         "source_overview": meta["source_overview"],
+        "quality_overview": meta["quality_overview"],
+        "quality_generated": meta["quality_generated"],
     }
     if not send_weekly_email(weekly_path, meta["iso_week"], collection_context=collection_context):
         return 1

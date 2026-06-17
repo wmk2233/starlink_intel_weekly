@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches；仍不包含大模型总结，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并新增官方来源解析质量诊断；仍不包含大模型总结，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -9,7 +9,7 @@
 - 通过 SMTP 发送测试邮件；
 - 通过 GitHub Actions 每周自动运行并提交 `docs/` 和 `weekly/` 的变化；
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
-- 阶段 2C 已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches。
+- 阶段 2D 已在两个官方来源基础上增强解析质量诊断。
 
 ## 阶段 1B 工程加固
 
@@ -92,6 +92,20 @@
 - 不编造发射时间、任务状态、载荷数量；
 - 不使用第三方发射日程 API，不使用大模型。
 
+## 阶段 2D 官方来源解析质量增强
+
+阶段 2D 不新增来源，只增强现有两个官方来源的规则化解析质量诊断。采集器版本升级为 `rule_based_html_v4`，每条记录新增以下解析字段：
+
+- `extracted_level`：解析层级，取值为 `page_level`、`link_level` 或 `item_level`；
+- `source_quality`：解析质量，取值为 `high`、`medium` 或 `low`，只表示解析完整度；
+- `extraction_confidence`：解析置信度，范围为 0 到 1，但不会输出 1.0；
+- `matched_keywords`：命中的来源相关关键词；
+- `candidate_links`：最多 5 个当前官方来源域名内的候选链接；
+- `extraction_notes`：中文解析说明，不包含密钥，也不补写事实；
+- `parser_version`：当前为 `rule_based_html_v4`。
+
+阶段 2D 会维护 `data/extraction_quality.json`，并把每个来源的主导解析层级、主导解析质量、平均置信度、候选链接数同步写入 `data/source_status.json`。这些质量指标只描述当前规则解析结果，不代表事实可信度、任务重要性或技术结论。
+
 ## 项目结构
 
 ```text
@@ -111,6 +125,7 @@ E:\starlink_intel_weekly
 ├── data/
 │   ├── items.jsonl
 │   ├── source_status.json
+│   ├── extraction_quality.json
 │   ├── raw/
 │   └── cache/
 ├── docs/
@@ -208,6 +223,16 @@ python scripts/collect_sources.py --source-id spacex_official_launches --dry-run
 python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
 ```
 
+阶段 2D 推荐解析质量测试命令：
+
+```powershell
+python scripts/collect_sources.py --source-id starlink_official_updates --dry-run --limit 10
+python scripts/collect_sources.py --source-id spacex_official_launches --dry-run --limit 10
+python scripts/collect_sources.py --limit 10
+python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
+python scripts/print_action_summary.py
+```
+
 ## 配置 `.env`
 
 本项目不会提交真实 `.env`。本地测试邮件发送前，可以参考 `.env.example` 手动创建 `.env`：
@@ -246,7 +271,7 @@ python scripts/run_weekly.py
 
 脚本会生成或追加本周周报，更新长期知识库，并把 Markdown 正文和附件通过 SMTP 发送到 `MAIL_TO`。
 
-邮件正文会包含阶段 2C 说明、本次是否执行真实来源采集、已接入来源数量，以及两个来源的可达性、页面变化状态和条目统计。
+邮件正文会包含阶段 2D 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。
 
 ## 来源配置
 
@@ -295,19 +320,43 @@ sources:
   "tags": ["starlink", "official", "updates"],
   "summary": "...",
   "evidence": "...",
+  "extracted_level": "page_level",
+  "source_quality": "low",
+  "extraction_confidence": 0.35,
+  "matched_keywords": ["starlink"],
+  "candidate_links": [],
+  "extraction_notes": "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。",
+  "parser_version": "rule_based_html_v4",
   "content_hash": "...",
   "first_seen_at": "...",
   "last_seen_at": "...",
   "last_changed_at": "...",
   "change_status": "new",
   "previous_content_hash": null,
-  "collector": "rule_based_html_v3"
+  "collector": "rule_based_html_v4"
 }
 ```
 
-`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。阶段 2C 起，`collector` 使用 `rule_based_html_v3`。
+`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。阶段 2D 起，`collector` 和 `parser_version` 使用 `rule_based_html_v4`。
 
-`data/source_status.json` 中的 `sources` 会同时维护两个来源的状态，例如 `starlink_official_updates` 和 `spacex_official_launches`，每个来源独立记录页面 hash、健康状态、变化状态和条目统计。
+`data/source_status.json` 中的 `sources` 会同时维护两个来源的状态，例如 `starlink_official_updates` 和 `spacex_official_launches`，每个来源独立记录页面 hash、健康状态、变化状态、条目统计和解析质量摘要。
+
+`data/extraction_quality.json` 记录每个来源的解析质量诊断，核心字段包括：
+
+```json
+{
+  "parser_version": "rule_based_html_v4",
+  "sources": {
+    "starlink_official_updates": {
+      "dominant_extracted_level": "page_level",
+      "dominant_source_quality": "low",
+      "average_confidence": 0.35,
+      "candidate_links_total": 0,
+      "items_collected": 1
+    }
+  }
+}
+```
 
 ## 配置 GitHub Secrets
 
@@ -334,9 +383,9 @@ GITEE_REMOTE
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
 - 运行 `python scripts/run_weekly.py --max-source-items 10 --max-history-records 20` 执行真实来源采集；
-- 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
+- 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2C、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数；
+- Summary 中展示阶段 2D、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -451,6 +500,15 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 动态渲染页面可能只能生成页面级记录；
 - hash 变化不等于事实变化；
 - 当前只接入两个官方来源。
+
+## 阶段 2D 局限性
+
+- 不使用大模型；
+- 不新增来源；
+- 不编造发射事实、技术事实或发布时间；
+- 解析质量只描述规则解析完整度，不代表事实可信度；
+- 动态渲染页面仍可能只能生成页面级或链接级记录；
+- 当前只处理 Starlink Official Updates 与 SpaceX Official Launches。
 
 ## 后续扩展计划
 
