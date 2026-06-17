@@ -50,20 +50,26 @@ def build_message(
     week_id: str,
     config: dict[str, str],
     collection_context: dict[str, str] | None = None,
+    attachment_paths: list[str | Path] | None = None,
 ) -> EmailMessage:
     markdown_text = markdown_path.read_text(encoding="utf-8")
     recipients = _split_recipients(config["MAIL_TO"])
     collection_context = collection_context or {}
+    attachments = [Path(path) for path in (attachment_paths or [markdown_path])]
 
     message = EmailMessage()
     message["Subject"] = f"Starlink 情报周报自动化测试 - {week_id}"
     message["From"] = config["MAIL_FROM"]
     message["To"] = ", ".join(recipients)
 
+    attachment_lines = "\n".join(f"- {path.name}" for path in attachments)
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 2D：官方来源解析质量增强。\n"
+        "当前阶段为阶段 2E：周报双文档输出结构优化。\n"
         "内容来自规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。\n\n"
+        "本周输出文档：\n"
+        f"- 总结版：{collection_context.get('summary_file', markdown_path.name)}\n"
+        f"- 明细版：{collection_context.get('details_file', '未生成')}\n\n"
         f"本次是否执行真实来源采集：{collection_context.get('collected', '未知')}\n"
         f"已接入来源数量：{collection_context.get('connected_source_count', '未知')}\n"
         "来源状态概览：\n"
@@ -77,18 +83,21 @@ def build_message(
         f"新增条目数量：{collection_context.get('new_items', '未知')}\n"
         f"内容变化条目数量：{collection_context.get('changed_items', '未知')}\n"
         f"未变化条目数量：{collection_context.get('unchanged_items', '未知')}\n"
-        f"本周 Markdown 附件：{markdown_path.name}\n\n"
+        "附件：\n"
+        f"{attachment_lines}\n\n"
         "页面变化状态只反映 hash 变化检测结果；解析质量只表示当前规则解析完整度，不代表事实判断。\n\n"
-        "以下为本次生成的 Markdown 正文：\n\n"
+        "以下为本次生成的总结版 Markdown 正文：\n\n"
         f"{markdown_text}\n"
     )
     message.set_content(body)
-    message.add_attachment(
-        markdown_text.encode("utf-8"),
-        maintype="text",
-        subtype="markdown",
-        filename=markdown_path.name,
-    )
+    for attachment in attachments:
+        attachment_text = attachment.read_text(encoding="utf-8")
+        message.add_attachment(
+            attachment_text.encode("utf-8"),
+            maintype="text",
+            subtype="markdown",
+            filename=attachment.name,
+        )
     return message
 
 
@@ -96,9 +105,11 @@ def send_weekly_email(
     markdown_path: str | Path,
     week_id: str,
     collection_context: dict[str, str] | None = None,
+    attachment_paths: list[str | Path] | None = None,
 ) -> bool:
     """Send the weekly Markdown as email body and attachment."""
     path = Path(markdown_path)
+    attachments = [Path(item) for item in (attachment_paths or [path])]
     config, missing = _get_config()
 
     if missing:
@@ -111,6 +122,10 @@ def send_weekly_email(
     if not path.exists():
         print(f"邮件发送失败：附件路径不存在：{path}")
         return False
+    for attachment in attachments:
+        if not attachment.exists():
+            print(f"邮件发送失败：附件路径不存在：{attachment}")
+            return False
 
     recipients = _split_recipients(config["MAIL_TO"])
     if not recipients:
@@ -123,7 +138,7 @@ def send_weekly_email(
         print("邮件发送失败：SMTP_PORT 必须是数字。请先运行 python scripts/validate_env.py 检查配置。")
         return False
 
-    message = build_message(path, week_id, config, collection_context=collection_context)
+    message = build_message(path, week_id, config, collection_context=collection_context, attachment_paths=attachments)
 
     try:
         context = ssl.create_default_context()

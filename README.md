@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并新增官方来源解析质量诊断；仍不包含大模型总结，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并将每周周报拆分为总结版与明细版；仍不包含大模型总结，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -9,7 +9,7 @@
 - 通过 SMTP 发送测试邮件；
 - 通过 GitHub Actions 每周自动运行并提交 `docs/` 和 `weekly/` 的变化；
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
-- 阶段 2D 已在两个官方来源基础上增强解析质量诊断。
+- 阶段 2E 已将每周输出优化为总结版、明细版和兼容索引三份 Markdown。
 
 ## 阶段 1B 工程加固
 
@@ -106,6 +106,16 @@
 
 阶段 2D 会维护 `data/extraction_quality.json`，并把每个来源的主导解析层级、主导解析质量、平均置信度、候选链接数同步写入 `data/source_status.json`。这些质量指标只描述当前规则解析结果，不代表事实可信度、任务重要性或技术结论。
 
+## 阶段 2E 周报双文档输出
+
+阶段 2E 不新增来源、不接入大模型，只优化每周 Markdown 输出结构。默认运行会生成三份文档：
+
+- `weekly/YYYY-WW-summary.md`：总结版，适合老师、同学和组会快速阅读；
+- `weekly/YYYY-WW-details.md`：明细版，适合来源复查、结构化数据核验和知识库维护；
+- `weekly/YYYY-WW.md`：兼容索引，指向总结版和明细版，避免旧路径失效。
+
+总结版不会展示完整 hash、过长 evidence 或完整 candidate_links。明细版会保留 record id、hash、解析层级、解析质量、候选链接和截断后的证据片段。兼容索引不再无限追加完整周报内容。
+
 ## 项目结构
 
 ```text
@@ -131,6 +141,9 @@ E:\starlink_intel_weekly
 ├── docs/
 │   └── starlink_knowledge_base.md
 ├── weekly/
+│   ├── YYYY-WW-summary.md
+│   ├── YYYY-WW-details.md
+│   ├── YYYY-WW.md
 │   └── .gitkeep
 ├── outputs/
 │   └── logs/
@@ -233,6 +246,26 @@ python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-reco
 python scripts/print_action_summary.py
 ```
 
+阶段 2E 推荐双文档输出命令：
+
+```powershell
+python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
+```
+
+指定输出模式：
+
+```powershell
+python scripts/run_weekly.py --no-email --output-mode dual
+python scripts/run_weekly.py --no-email --output-mode legacy
+python scripts/run_weekly.py --no-email --output-mode both
+```
+
+`--output-mode` 说明：
+
+- `dual`：默认模式，生成总结版、明细版和兼容索引；
+- `legacy`：仅更新旧版 `weekly/YYYY-WW.md`，不会删除已有总结版和明细版；
+- `both`：生成总结版、明细版和兼容索引，并在兼容索引中附带较完整摘要。
+
 ## 配置 `.env`
 
 本项目不会提交真实 `.env`。本地测试邮件发送前，可以参考 `.env.example` 手动创建 `.env`：
@@ -271,7 +304,12 @@ python scripts/run_weekly.py
 
 脚本会生成或追加本周周报，更新长期知识库，并把 Markdown 正文和附件通过 SMTP 发送到 `MAIL_TO`。
 
-邮件正文会包含阶段 2D 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。
+邮件正文会包含阶段 2E 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。邮件会同时附带：
+
+- `YYYY-WW-summary.md`
+- `YYYY-WW-details.md`
+
+兼容索引 `YYYY-WW.md` 默认不作为邮件附件发送。
 
 ## 来源配置
 
@@ -382,10 +420,10 @@ GITEE_REMOTE
 - 每周自动触发：每周一 00:17 UTC，对应北京时间 08:17、日本时间 09:17；
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
-- 运行 `python scripts/run_weekly.py --max-source-items 10 --max-history-records 20` 执行真实来源采集；
+- 运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
 - 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2D、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数和解析质量表；
+- Summary 中展示阶段 2E、三个周报输出路径、所有来源的健康状态、页面变化状态、新增/变化/未变化条目数和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -413,7 +451,8 @@ GITEE_REMOTE=https://用户名:私人令牌@gitee.com/用户名/仓库名.git
 
 - GitHub Actions 手动运行成功；
 - 邮件已发送到 `MAIL_TO`；
-- `weekly/YYYY-WW.md` 已生成或追加记录；
+- `weekly/YYYY-WW-summary.md` 与 `weekly/YYYY-WW-details.md` 已生成；
+- `weekly/YYYY-WW.md` 已作为兼容索引或 legacy 输出保留；
 - `docs/starlink_knowledge_base.md` 已更新最近一次自动化运行记录；
 - GitHub 自动生成 `chore: update weekly Starlink automation output` 提交；
 - Gitee 仓库同步到最新 `main`；
@@ -509,6 +548,15 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 解析质量只描述规则解析完整度，不代表事实可信度；
 - 动态渲染页面仍可能只能生成页面级或链接级记录；
 - 当前只处理 Starlink Official Updates 与 SpaceX Official Launches。
+
+## 阶段 2E 局限性
+
+- 总结版不等于人工研判报告；
+- 明细版中的 hash 变化不等于事实变化；
+- 页面级记录不应直接当作具体情报事实；
+- 当前不使用大模型；
+- 当前不编造事实；
+- 当前不新增来源，不接入第三方发射日程网站。
 
 ## 后续扩展计划
 

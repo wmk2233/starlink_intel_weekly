@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from datetime import datetime
 from pathlib import Path
 
 
@@ -64,16 +65,23 @@ def _extraction_quality() -> tuple[bool, dict[str, dict[str, object]]]:
     return True, sources if isinstance(sources, dict) else {}
 
 
+def _week_id() -> str:
+    now = datetime.now().astimezone()
+    iso = now.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
 def main() -> int:
     status_exists, statuses = _source_statuses()
     quality_exists, quality_sources = _extraction_quality()
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
+    week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：2D",
+        "- 阶段：2E",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -90,6 +98,14 @@ def main() -> int:
         f"- extraction_quality.json 是否存在：{_yes_no(quality_exists)}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
+        "",
+        "### 本周输出文档",
+        "",
+        "| 类型 | 路径 |",
+        "|---|---|",
+        f"| 总结版 | weekly/{week_id}-summary.md |",
+        f"| 明细版 | weekly/{week_id}-details.md |",
+        f"| 兼容索引 | weekly/{week_id}.md |",
         "",
         "### 来源状态",
         "",
