@@ -70,11 +70,39 @@ jobs:
         run: |
           if [ -z "$GITEE_REMOTE" ]; then
             echo "GITEE_REMOTE 未配置，跳过 Gitee 同步。"
-          else
-            git remote remove gitee 2>/dev/null || true
-            git remote add gitee "$GITEE_REMOTE"
-            git push gitee main
+            echo "GITEE_SYNC_STATUS=skipped" >> "$GITHUB_ENV"
+            exit 0
           fi
+
+          git remote remove gitee 2>/dev/null || true
+          if ! git remote add gitee "$GITEE_REMOTE" 2>/dev/null; then
+            echo "::warning::Gitee remote 添加失败，已跳过，不阻断 GitHub 周报主流程。请检查 GITEE_REMOTE。"
+            echo "GITEE_SYNC_STATUS=failed" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          success=0
+          push_log="$(mktemp)"
+          for attempt in 1 2 3; do
+            echo "尝试同步到 Gitee，第 ${attempt}/3 次..."
+            if git push gitee main >"$push_log" 2>&1; then
+              echo "Gitee 同步成功。"
+              echo "GITEE_SYNC_STATUS=success" >> "$GITHUB_ENV"
+              success=1
+              break
+            else
+              echo "::warning::Gitee 同步第 ${attempt} 次失败，可能是 Gitee 认证服务超时、网络波动或令牌权限问题。"
+              sleep $((attempt * 10))
+            fi
+          done
+
+          if [ "$success" -ne 1 ]; then
+            echo "::warning::Gitee 同步失败，已跳过，不阻断 GitHub 周报主流程。请稍后手动重新运行 workflow 或检查 GITEE_REMOTE。"
+            echo "GITEE_SYNC_STATUS=failed" >> "$GITHUB_ENV"
+          fi
+          rm -f "$push_log"
+
+          exit 0
 
       - name: Write run summary
         if: always()

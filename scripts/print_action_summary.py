@@ -52,6 +52,7 @@ def _source_status() -> dict[str, object]:
 def main() -> int:
     status = _source_status()
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
+    gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
 
     lines = [
         "## Starlink Weekly Automation",
@@ -75,6 +76,7 @@ def main() -> int:
         f"- 变化条目数：{status['changed_items']}",
         f"- 未变化条目数：{status['unchanged_items']}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
+        f"- Gitee 同步状态：{gitee_sync_status}",
     ]
     print("\n".join(lines))
     return 0
