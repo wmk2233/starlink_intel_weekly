@@ -15,16 +15,16 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-06-17T18:30:05+08:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
-| SpaceX Official Launches | 2026-06-17T18:30:07+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-06-17T10:42:18+00:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
+| SpaceX Official Launches | 2026-06-17T10:42:18+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-06-17 18:30:05 中国标准时间+0800
+- 运行时间：2026-06-17 10:42:18 UTC+0000
 - ISO 周编号：2026-W25
-- 执行环境：Windows 10
-- Python 版本：3.11.9
-- 是否发送邮件：否
+- 执行环境：Linux 6.17.0-1018-azure
+- Python 版本：3.11.15
+- 是否发送邮件：是
 - 是否执行真实来源采集：是
 - 本次采集来源名称：Starlink Official Updates、SpaceX Official Launches
 - 本次采集条目数量：2
