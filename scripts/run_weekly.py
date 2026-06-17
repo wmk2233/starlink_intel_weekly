@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from collect_sources import ITEMS_FILE, collect_all_sources, load_items
+from collect_sources import ITEMS_FILE, SOURCE_STATUS_FILE, collect_all_sources, load_items, load_source_status
 from send_email import send_weekly_email
 
 
@@ -14,9 +14,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEEKLY_DIR = PROJECT_ROOT / "weekly"
 DOCS_DIR = PROJECT_ROOT / "docs"
 KNOWLEDGE_BASE = DOCS_DIR / "starlink_knowledge_base.md"
-HISTORY_HEADING = "## 4. 自动化测试记录"
-LEGACY_HISTORY_HEADING = "## 自动化测试记录"
+HISTORY_HEADING = "## 6. 自动化测试记录"
+LEGACY_HISTORY_HEADINGS = ["## 4. 自动化测试记录", "## 自动化测试记录"]
 CONNECTED_SOURCES_HEADING = "## 已接入来源"
+SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool) -> dict[str, str]:
@@ -32,6 +33,15 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool) -> dict[st
         "collect_sources": "是" if collect_enabled else "否",
         "source_names": "无",
         "source_item_count": "0",
+        "new_items": "0",
+        "changed_items": "0",
+        "unchanged_items": "0",
+        "health_status": "unknown",
+        "page_change_status": "unknown",
+        "http_status": "unknown",
+        "last_checked_at": "未知",
+        "source_status_path": str(SOURCE_STATUS_FILE),
+        "items_path": str(ITEMS_FILE),
     }
 
 
@@ -45,22 +55,55 @@ def render_source_items_table(source_items: list[dict[str, object]]) -> str:
         return "本次未采集到有效条目。"
 
     rows = [
-        "| 标题 | 来源 | 类型 | 可信度 | 采集时间 | 链接 |",
-        "|---|---|---|---|---|---|",
+        "| 标题 | 来源 | 类型 | 可信度 | 条目状态 | 采集时间 | 链接 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for item in source_items:
         title = escape_table_cell(item.get("title", ""))
         source_name = escape_table_cell(item.get("source_name", ""))
         source_type = escape_table_cell(item.get("source_type", ""))
         reliability = escape_table_cell(item.get("reliability_tier", ""))
-        fetched_at = escape_table_cell(item.get("fetched_at", ""))
+        change_status = escape_table_cell(item.get("change_status", "unknown"))
+        fetched_at = escape_table_cell(item.get("last_seen_at") or item.get("fetched_at", ""))
         url = str(item.get("url") or "").strip()
         link = f"[链接]({url})" if url else ""
-        rows.append(f"| {title} | {source_name} | {source_type} | {reliability} | {fetched_at} | {link} |")
+        rows.append(f"| {title} | {source_name} | {source_type} | {reliability} | {change_status} | {fetched_at} | {link} |")
     return "\n".join(rows)
 
 
-def build_weekly_base(meta: dict[str, str], source_items: list[dict[str, object]], collection_errors: list[str]) -> str:
+def render_source_status_table(source_statuses: dict[str, dict[str, object]]) -> str:
+    if not source_statuses:
+        return "本次没有来源状态记录。"
+
+    rows = [
+        "| 来源 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for status in source_statuses.values():
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(status.get("source_name", "")),
+                    escape_table_cell(status.get("source_type", "")),
+                    escape_table_cell(status.get("reliability_tier", "")),
+                    escape_table_cell(status.get("health_status", "")),
+                    escape_table_cell(status.get("change_status", "")),
+                    escape_table_cell(status.get("http_status", "")),
+                    escape_table_cell(status.get("last_checked_at", "")),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(rows)
+
+
+def build_weekly_base(
+    meta: dict[str, str],
+    source_items: list[dict[str, object]],
+    collection_errors: list[str],
+    source_statuses: dict[str, dict[str, object]],
+) -> str:
     week_id = meta["iso_week"]
     error_note = ""
     if collection_errors:
@@ -69,29 +112,47 @@ def build_weekly_base(meta: dict[str, str], source_items: list[dict[str, object]
 
 ## 1. 本周摘要
 
-本周自动化流程已运行。当前阶段已接入 Starlink 官方 Updates 页面作为第一个真实来源。
+本周自动化流程已运行。当前阶段已接入 Starlink 官方 Updates 页面作为第一个真实来源，并加入来源状态诊断与页面变化检测。
 
-## 2. 真实来源采集结果
+## 2. 来源状态诊断
+
+{render_source_status_table(source_statuses)}
+
+## 3. 本周变化检测
+
+- 新增条目数：{meta["new_items"]}
+- 内容变化条目数：{meta["changed_items"]}
+- 未变化条目数：{meta["unchanged_items"]}
+- 页面级变化状态：{meta["page_change_status"]}
+- 说明：当前阶段仅基于规则化页面抽取和 hash 变化检测，不代表事实判断。{error_note}
+
+## 4. 真实来源采集结果
 
 本次是否执行真实来源采集：{meta["collect_sources"]}
 
 本次采集来源名称：{meta["source_names"]}
 
-本次采集条目数量：{meta["source_item_count"]}{error_note}
+本次采集条目数量：{meta["source_item_count"]}
 
 {render_source_items_table(source_items)}
 
-## 3. 来源说明与局限性
+## 5. 来源说明与局限性
 
 - 当前阶段仅接入 Starlink 官方 Updates 页面。
 - 当前阶段仅进行规则化网页抽取，不使用大模型生成事实判断。
 - 如果页面由 JavaScript 动态渲染，可能只能提取页面级记录或部分链接。
+- 页面变化状态基于 hash 检测，只代表采集到的页面内容发生变化或未变化。
 - 不对未提取到发布时间的信息进行编造，无法确定时记为 null。
 """
 
 
-def build_weekly_document(meta: dict[str, str], source_items: list[dict[str, object]], collection_errors: list[str]) -> str:
-    return f"{build_weekly_base(meta, source_items, collection_errors)}\n{HISTORY_HEADING}\n\n{render_history_records([meta])}\n"
+def build_weekly_document(
+    meta: dict[str, str],
+    source_items: list[dict[str, object]],
+    collection_errors: list[str],
+    source_statuses: dict[str, dict[str, object]],
+) -> str:
+    return f"{build_weekly_base(meta, source_items, collection_errors, source_statuses)}\n{HISTORY_HEADING}\n\n{render_history_records([meta])}\n"
 
 
 def render_history_records(records: list[dict[str, str]]) -> str:
@@ -106,6 +167,7 @@ def render_history_records(records: list[dict[str, str]]) -> str:
                     f"  - Python 版本：{record.get('python_version', '未知')}",
                     f"  - 是否发送邮件：{record.get('send_email', '未知')}",
                     f"  - 是否执行真实来源采集：{record.get('collect_sources', '未知')}",
+                    f"  - 页面变化状态：{record.get('page_change_status', '未知')}",
                 ]
             )
         )
@@ -114,7 +176,7 @@ def render_history_records(records: list[dict[str, str]]) -> str:
 
 def _split_base_and_history(existing: str) -> tuple[str, str]:
     candidates = []
-    for heading in (HISTORY_HEADING, LEGACY_HISTORY_HEADING):
+    for heading in [HISTORY_HEADING, *LEGACY_HISTORY_HEADINGS]:
         index = existing.find(heading)
         if index != -1:
             candidates.append(index)
@@ -137,6 +199,7 @@ def _parse_history_records(history_text: str) -> list[dict[str, str]]:
         "Python 版本": "python_version",
         "是否发送邮件": "send_email",
         "是否执行真实来源采集": "collect_sources",
+        "页面变化状态": "page_change_status",
     }
 
     for raw_line in history_text.splitlines():
@@ -177,6 +240,7 @@ def update_knowledge_base_text(existing: str, meta: dict[str, str]) -> str:
         "当前阶段已接入第一个真实来源：Starlink 官方 Updates 页面。采集方式为规则化网页抽取，不包含大模型事实推理。",
     )
     existing = ensure_connected_sources_section_text(existing)
+    existing = update_source_change_section_text(existing, meta)
     heading = "## 最近一次自动化运行记录"
     new_section = f"""{heading}
 
@@ -188,6 +252,11 @@ def update_knowledge_base_text(existing: str, meta: dict[str, str]) -> str:
 - 是否执行真实来源采集：{meta["collect_sources"]}
 - 本次采集来源名称：{meta["source_names"]}
 - 本次采集条目数量：{meta["source_item_count"]}
+- 来源可达性：{meta["health_status"]}
+- 页面变化状态：{meta["page_change_status"]}
+- 新增条目数：{meta["new_items"]}
+- 内容变化条目数：{meta["changed_items"]}
+- 未变化条目数：{meta["unchanged_items"]}
 """
 
     if heading not in existing:
@@ -223,6 +292,33 @@ def ensure_connected_sources_section_text(existing: str) -> str:
     return existing.rstrip() + separator + section + "\n"
 
 
+def update_source_change_section_text(existing: str, meta: dict[str, str]) -> str:
+    section = f"""{SOURCE_CHANGE_HEADING}
+
+| 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
+|---|---|---|---|---|---|
+| Starlink Official Updates | {meta["last_checked_at"]} | {meta["health_status"]} | {meta["page_change_status"]} | {meta.get("last_changed_at", "未知")} | {meta.get("current_status", "未知")} |
+"""
+    return replace_or_insert_section(existing, SOURCE_CHANGE_HEADING, section, before_heading="## 最近一次自动化运行记录")
+
+
+def replace_or_insert_section(existing: str, heading: str, section: str, before_heading: str | None = None) -> str:
+    if heading in existing:
+        before, rest = existing.split(heading, 1)
+        next_heading_index = rest.find("\n## ")
+        if next_heading_index == -1:
+            return before.rstrip() + "\n\n" + section + "\n"
+        after = rest[next_heading_index + 1 :]
+        return before.rstrip() + "\n\n" + section + "\n" + after
+
+    if before_heading and before_heading in existing:
+        before, after = existing.split(before_heading, 1)
+        return before.rstrip() + "\n\n" + section + "\n" + before_heading + after
+
+    separator = "\n\n" if existing.strip() else ""
+    return existing.rstrip() + separator + section + "\n"
+
+
 def ensure_knowledge_base_exists() -> None:
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     if not KNOWLEDGE_BASE.exists():
@@ -234,6 +330,10 @@ def ensure_knowledge_base_exists() -> None:
             "| 来源 | 类型 | 可信度 | 地址 | 状态 |\n"
             "|---|---|---|---|---|\n"
             "| Starlink Official Updates | official | S | https://www.starlink.com/updates | 已接入 |\n\n"
+            "## 来源状态与变化检测\n\n"
+            "| 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |\n"
+            "|---|---|---|---|---|---|\n"
+            "| Starlink Official Updates | 暂无 | unknown | unknown | 暂无 | 未检查 |\n\n"
             "## 最近一次自动化运行记录\n\n"
             "暂无。\n",
             encoding="utf-8",
@@ -247,6 +347,7 @@ def write_weekly_file(
     max_records: int,
     source_items: list[dict[str, object]],
     collection_errors: list[str],
+    source_statuses: dict[str, dict[str, object]],
 ) -> None:
     if weekly_path.exists():
         print(f"检测到本周周报已存在，将更新真实来源采集结果并整理自动化测试记录：{weekly_path}")
@@ -258,7 +359,7 @@ def write_weekly_file(
         records = _parse_history_records(history_text)
         records.append(meta)
         records = records[-max_records:]
-        updated = f"{build_weekly_base(meta, source_items, collection_errors)}\n{HISTORY_HEADING}\n\n{render_history_records(records)}\n"
+        updated = f"{build_weekly_base(meta, source_items, collection_errors, source_statuses)}\n{HISTORY_HEADING}\n\n{render_history_records(records)}\n"
         weekly_path.write_text(updated, encoding="utf-8", newline="\n")
         print(f"已更新真实来源采集结果，并限制自动化测试记录最多保留最近 {max_records} 条。")
         return
@@ -269,14 +370,36 @@ def write_weekly_file(
         return
 
     WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
-    weekly_path.write_text(build_weekly_document(meta, source_items, collection_errors), encoding="utf-8", newline="\n")
+    weekly_path.write_text(build_weekly_document(meta, source_items, collection_errors, source_statuses), encoding="utf-8", newline="\n")
     print("已创建本周 Markdown 周报。")
 
 
 def latest_items_for_report(max_source_items: int) -> list[dict[str, object]]:
     items = load_items(ITEMS_FILE)
-    items = sorted(items, key=lambda item: str(item.get("fetched_at") or ""), reverse=True)
+    items = sorted(items, key=lambda item: str(item.get("last_seen_at") or item.get("fetched_at") or ""), reverse=True)
     return items[:max_source_items]
+
+
+def load_statuses_for_report() -> dict[str, dict[str, object]]:
+    status = load_source_status(SOURCE_STATUS_FILE)
+    sources = status.get("sources", {})
+    return sources if isinstance(sources, dict) else {}
+
+
+def apply_status_to_meta(meta: dict[str, str], source_statuses: dict[str, dict[str, object]]) -> None:
+    if not source_statuses:
+        return
+
+    status = next(iter(source_statuses.values()))
+    meta["health_status"] = str(status.get("health_status") or "unknown")
+    meta["page_change_status"] = str(status.get("change_status") or "unknown")
+    meta["http_status"] = str(status.get("http_status") or "unknown")
+    meta["last_checked_at"] = str(status.get("last_checked_at") or "未知")
+    meta["last_changed_at"] = str(status.get("last_changed_at") or "未知")
+    meta["new_items"] = str(status.get("new_items") or 0)
+    meta["changed_items"] = str(status.get("changed_items") or 0)
+    meta["unchanged_items"] = str(status.get("unchanged_items") or 0)
+    meta["current_status"] = "正常" if meta["health_status"] == "reachable" else "异常"
 
 
 def update_knowledge_base(meta: dict[str, str], dry_run: bool) -> None:
@@ -325,6 +448,7 @@ def main() -> int:
     collection_result = None
     collection_errors: list[str] = []
     source_items: list[dict[str, object]] = []
+    source_statuses: dict[str, dict[str, object]] = {}
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
@@ -338,6 +462,8 @@ def main() -> int:
     if args.no_collect:
         print("已按 --no-collect 参数跳过真实来源采集。")
         source_items = latest_items_for_report(args.max_source_items)
+        source_statuses = load_statuses_for_report()
+        apply_status_to_meta(meta, source_statuses)
     else:
         print("开始采集真实来源：Starlink Official Updates。")
         collection_result = collect_all_sources(
@@ -350,6 +476,11 @@ def main() -> int:
         collection_errors = collection_result.errors
         meta["source_names"] = "、".join(collection_result.sources) if collection_result.sources else "无"
         meta["source_item_count"] = str(len(collection_result.items))
+        meta["new_items"] = str(collection_result.new_count)
+        meta["changed_items"] = str(collection_result.changed_count)
+        meta["unchanged_items"] = str(collection_result.unchanged_count)
+        source_statuses = collection_result.source_statuses
+        apply_status_to_meta(meta, source_statuses)
         source_items = collection_result.items or latest_items_for_report(args.max_source_items)
 
     write_weekly_file(
@@ -359,6 +490,7 @@ def main() -> int:
         max_records=args.max_history_records,
         source_items=source_items,
         collection_errors=collection_errors,
+        source_statuses=source_statuses,
     )
     update_knowledge_base(meta, args.dry_run)
 
@@ -379,6 +511,12 @@ def main() -> int:
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
+        "health_status": meta["health_status"],
+        "page_change_status": meta["page_change_status"],
+        "new_items": meta["new_items"],
+        "changed_items": meta["changed_items"],
+        "unchanged_items": meta["unchanged_items"],
+        "attachment": str(weekly_path),
     }
     if not send_weekly_email(weekly_path, meta["iso_week"], collection_context=collection_context):
         return 1

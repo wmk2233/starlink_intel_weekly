@@ -36,6 +36,45 @@
 - 不编造发布时间，无法确定时 `published_at` 保持为 `null`；
 - 不使用大模型进行事实判断。
 
+## 阶段 2B 变化检测
+
+阶段 2B 在第一个真实来源基础上增加来源健康状态与 hash 变化检测。当前仍只监测 `Starlink Official Updates`，不接入大模型、不接入多个来源，也不编造 Starlink 技术事实。
+
+变化检测分为两层：
+
+- `page_hash`：基于页面主要文本或规范化 HTML 计算，用于判断来源页面相对上次采集是否变化；
+- `content_hash`：基于条目的 `title + url + summary + evidence` 计算，用于判断单条记录内容是否变化。
+
+`change_status` 含义：
+
+- `new`：首次采集到；
+- `changed`：记录内容 hash 或页面 hash 相比上次发生变化；
+- `unchanged`：记录内容 hash 或页面 hash 未变化；
+- `failed`：来源访问或采集失败。
+
+`data/source_status.json` 记录来源最近一次健康状态和页面变化状态，核心结构包括：
+
+```json
+{
+  "generated_at": "...",
+  "sources": {
+    "starlink_official_updates": {
+      "source_id": "starlink_official_updates",
+      "source_name": "Starlink Official Updates",
+      "url": "https://www.starlink.com/updates",
+      "health_status": "reachable",
+      "change_status": "unchanged",
+      "current_page_hash": "...",
+      "previous_page_hash": "...",
+      "items_collected": 1,
+      "new_items": 0,
+      "changed_items": 0,
+      "unchanged_items": 1
+    }
+  }
+}
+```
+
 ## 项目结构
 
 ```text
@@ -54,6 +93,7 @@ E:\starlink_intel_weekly
 │   └── self_check.py
 ├── data/
 │   ├── items.jsonl
+│   ├── source_status.json
 │   ├── raw/
 │   └── cache/
 ├── docs/
@@ -132,6 +172,14 @@ python scripts/collect_sources.py --source-id starlink_official_updates --dry-ru
 
 ```powershell
 python scripts/run_weekly.py --no-email --max-source-items 10
+```
+
+阶段 2B 推荐变化检测命令：
+
+```powershell
+python scripts/collect_sources.py --source-id starlink_official_updates --limit 10
+python scripts/collect_sources.py --source-id starlink_official_updates --dry-run --limit 10
+python scripts/run_weekly.py --no-email --max-source-items 10 --max-history-records 20
 ```
 
 ## 配置 `.env`
@@ -213,11 +261,17 @@ sources:
   "tags": ["starlink", "official", "updates"],
   "summary": "...",
   "evidence": "...",
-  "collector": "rule_based_html_v1"
+  "content_hash": "...",
+  "first_seen_at": "...",
+  "last_seen_at": "...",
+  "last_changed_at": "...",
+  "change_status": "new",
+  "previous_content_hash": null,
+  "collector": "rule_based_html_v2"
 }
 ```
 
-`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。
+`id` 由 URL 和标题生成 SHA256 前 16 位；重复采集时按 `id` upsert。阶段 2B 起，`collector` 使用 `rule_based_html_v2`。
 
 ## 配置 GitHub Secrets
 
@@ -244,8 +298,9 @@ GITEE_REMOTE
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
 - 运行 `python scripts/run_weekly.py --max-source-items 10 --max-history-records 20` 执行真实来源采集；
-- 自动提交 `docs/`、`weekly/` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
+- 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
+- Summary 中展示阶段 2B、来源健康状态、页面变化状态、新增/变化/未变化条目数；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -342,6 +397,14 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 不保证动态渲染页面能完全解析；
 - 只接入一个官方来源；
 - 后续阶段再接入 SpaceX Launches、FCC、CelesTrak、arXiv 和中文来源。
+
+## 阶段 2B 局限性
+
+- hash 变化不等于事实变化；
+- 页面由 JavaScript 动态渲染时仍可能只能生成页面级记录；
+- 当前不使用大模型；
+- 当前不做跨来源事实核验；
+- 当前仍只接入一个官方来源。
 
 ## 后续扩展计划
 

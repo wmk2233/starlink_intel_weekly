@@ -55,9 +55,9 @@ jobs:
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add docs weekly data/items.jsonl outputs/logs/.gitkeep sources.yml
+          git add README.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
           if git diff --cached --quiet; then
-            echo "docs/、weekly/、data/items.jsonl、outputs/logs/.gitkeep 和 sources.yml 没有变化，跳过提交。"
+            echo "阶段 2B 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main
@@ -88,6 +88,7 @@ jobs:
           {
             echo "## Starlink Weekly Automation"
             echo ""
+            echo "- 阶段：2B"
             echo "- 工作流名称：$GITHUB_WORKFLOW"
             echo "- 分支：$GITHUB_REF_NAME"
             echo "- 触发方式：$GITHUB_EVENT_NAME"
@@ -96,11 +97,33 @@ jobs:
             echo "- 更新文件路径：docs/starlink_knowledge_base.md、weekly/"
             echo "- 是否执行真实来源采集：是"
             echo "- 数据文件路径：data/items.jsonl"
+            echo "- source_status.json 路径：data/source_status.json"
             echo "- sources.yml 路径：sources.yml"
             if [ -f "data/items.jsonl" ]; then
               echo "- items.jsonl 是否存在：是"
             else
               echo "- items.jsonl 是否存在：否"
+            fi
+            if [ -f "data/source_status.json" ]; then
+              python - <<'PY'
+import json
+from pathlib import Path
+
+status_path = Path("data/source_status.json")
+data = json.loads(status_path.read_text(encoding="utf-8"))
+source = data.get("sources", {}).get("starlink_official_updates", {})
+print(f"- 来源健康状态：{source.get('health_status', 'unknown')}")
+print(f"- 页面变化状态：{source.get('change_status', 'unknown')}")
+print(f"- 新增条目数：{source.get('new_items', 0)}")
+print(f"- 变化条目数：{source.get('changed_items', 0)}")
+print(f"- 未变化条目数：{source.get('unchanged_items', 0)}")
+PY
+            else
+              echo "- 来源健康状态：unknown"
+              echo "- 页面变化状态：unknown"
+              echo "- 新增条目数：0"
+              echo "- 变化条目数：0"
+              echo "- 未变化条目数：0"
             fi
             echo "- Gitee 同步是否配置：$GITEE_STATUS"
           } >> "$GITHUB_STEP_SUMMARY"
