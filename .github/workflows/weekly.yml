@@ -57,11 +57,16 @@ jobs:
           python scripts/check_outputs.py --strict
           echo "OUTPUT_CHECK_STATUS=passed" >> "$GITHUB_ENV"
 
+      - name: Audit project stability
+        run: |
+          python scripts/audit_project.py --strict
+          echo "PROJECT_AUDIT_STATUS=passed" >> "$GITHUB_ENV"
+
       - name: Commit generated weekly files
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add README.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          git add README.md RELEASE_NOTES.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl outputs/logs/.gitkeep sources.yml requirements.txt .env.example
           if git diff --cached --quiet; then
             echo "阶段 2F 自动化输出没有变化，跳过提交。"
           else

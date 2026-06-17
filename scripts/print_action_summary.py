@@ -79,12 +79,13 @@ def main() -> int:
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
     output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
+    project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：2F",
+        "- 阶段：2G",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -124,6 +125,14 @@ def main() -> int:
         "",
         f"- 检查状态：{output_check_status}",
         "- 检查脚本：scripts/check_outputs.py",
+        "",
+        "### 稳定性与配置审计",
+        "",
+        f"- 审计状态：{project_audit_status}",
+        "- 审计脚本：scripts/audit_project.py",
+        "- 部署检查清单：docs/deployment_checklist.md",
+        "- 运维指南：docs/operations_guide.md",
+        "- 发布说明：RELEASE_NOTES.md",
         "",
         "### 来源状态",
         "",

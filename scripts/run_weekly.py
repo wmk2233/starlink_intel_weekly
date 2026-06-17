@@ -576,7 +576,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 2E：周报双文档输出结构优化。
+当前阶段为阶段 2G：发布前稳定性与配置审计。
 
 ## 2. 本周核心结论
 
@@ -615,7 +615,7 @@ def build_weekly_summary_markdown(
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 后续可在解析质量增强后再引入大模型摘要。
+- 后续阶段 3A 才考虑引入大模型摘要。
 
 ## 7. 本周文档
 
@@ -1331,7 +1331,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：2F 周报归档、历史索引与输出质量检查。")
+    print("当前阶段：2G 发布前稳定性与配置审计。")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
     meta["max_source_items"] = str(args.max_source_items)

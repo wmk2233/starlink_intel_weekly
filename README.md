@@ -10,6 +10,7 @@
 - 通过 GitHub Actions 每周自动运行并提交 `docs/` 和 `weekly/` 的变化；
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
 - 阶段 2F 已增加周报总索引、机器可读 manifest、运行历史和输出质量检查。
+- 阶段 2G 已增加发布前稳定性审计、部署检查清单、运维指南和 Release Notes。
 
 ## 阶段 1B 工程加固
 
@@ -127,11 +128,25 @@
 
 GitHub Actions 会在主脚本运行后执行 `python scripts/check_outputs.py --strict`。该检查是主流程质量门禁，失败时 workflow 会失败。
 
+## 阶段 2G 发布前稳定性与配置审计
+
+阶段 2G 不新增来源、不接入大模型、不编造事实，只对当前官方来源自动化周报系统做稳定版整理：
+
+- 新增 `scripts/audit_project.py`，静态审计仓库结构、workflow、sources、数据文件、weekly 输出、邮件附件能力和敏感信息风险；
+- 新增 `docs/deployment_checklist.md`，作为正式部署前检查清单；
+- 新增 `docs/operations_guide.md`，作为每周运行后的运维手册；
+- 新增 `RELEASE_NOTES.md`，记录 v0.2G-stable 稳定版能力和边界；
+- GitHub Actions 在 `check_outputs.py --strict` 之后运行 `audit_project.py --strict`；
+- GitHub Actions Summary 展示稳定性与配置审计状态。
+
+当前稳定版仍只接入两个官方来源，当前不使用大模型，当前不编造 Starlink 或 SpaceX 事实。页面级记录不等于具体情报事实，hash 变化不等于事实变化，解析质量只表示规则抽取完整度。
+
 ## 项目结构
 
 ```text
 E:\starlink_intel_weekly
 ├── README.md
+├── RELEASE_NOTES.md
 ├── requirements.txt
 ├── .gitignore
 ├── .env.example
@@ -142,7 +157,10 @@ E:\starlink_intel_weekly
 │   ├── run_weekly.py
 │   ├── send_email.py
 │   ├── validate_env.py
-│   └── self_check.py
+│   ├── self_check.py
+│   ├── print_action_summary.py
+│   ├── check_outputs.py
+│   └── audit_project.py
 ├── data/
 │   ├── items.jsonl
 │   ├── source_status.json
@@ -152,7 +170,9 @@ E:\starlink_intel_weekly
 │   ├── raw/
 │   └── cache/
 ├── docs/
-│   └── starlink_knowledge_base.md
+│   ├── starlink_knowledge_base.md
+│   ├── deployment_checklist.md
+│   └── operations_guide.md
 ├── weekly/
 │   ├── YYYY-WW-summary.md
 │   ├── YYYY-WW-details.md
@@ -299,6 +319,41 @@ JSON 输出检查：
 python scripts/check_outputs.py --json
 ```
 
+阶段 2G 推荐发布前稳定性审计：
+
+```powershell
+python scripts/check_outputs.py --strict
+python scripts/audit_project.py --strict
+python scripts/audit_project.py --json
+```
+
+## 手动运行与自动运行
+
+手动运行适合本地调试、部署前验证和 GitHub Actions 页面上的临时执行。本地手动运行如果不想发送真实邮件，可以使用：
+
+```powershell
+python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20
+```
+
+自动运行由 GitHub Actions 云端执行，本地电脑无需开机，本地 Codex 不需要打开。定时规则为：
+
+- 每周一 UTC 00:17；
+- 北京时间每周一 08:17；
+- 日本时间每周一 09:17。
+
+自动运行结束后，如果 GitHub 生成了自动提交，本地需要同步：
+
+```powershell
+git pull --rebase origin main
+```
+
+## 运维文档入口
+
+- 部署检查清单：`docs/deployment_checklist.md`
+- 运维指南：`docs/operations_guide.md`
+- 发布说明：`RELEASE_NOTES.md`
+- 周报历史入口：`weekly/index.md`
+
 ## 配置 `.env`
 
 本项目不会提交真实 `.env`。本地测试邮件发送前，可以参考 `.env.example` 手动创建 `.env`：
@@ -337,7 +392,7 @@ python scripts/run_weekly.py
 
 脚本会生成或追加本周周报，更新长期知识库，并把 Markdown 正文和附件通过 SMTP 发送到 `MAIL_TO`。
 
-邮件正文会包含阶段 2F 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。邮件会同时附带：
+邮件正文会包含阶段 2G 说明、本次是否执行真实来源采集、已接入来源数量、解析质量概览，以及两个来源的可达性、页面变化状态和条目统计。邮件会同时附带：
 
 - `YYYY-WW-summary.md`
 - `YYYY-WW-details.md`
@@ -458,14 +513,15 @@ GITEE_REMOTE
 工作流文件位于 `.github/workflows/weekly.yml`，支持：
 
 - 手动触发：`workflow_dispatch`；
-- 每周自动触发：每周一 00:17 UTC，对应北京时间 08:17、日本时间 09:17；
+- 每周自动触发：每周一 UTC 00:17，对应北京时间每周一 08:17、日本时间每周一 09:17；
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
 - 运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
 - 运行 `python scripts/check_outputs.py --strict` 检查本周输出质量；
+- 运行 `python scripts/audit_project.py --strict` 执行稳定性与配置审计；
 - 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json`、`data/weekly_manifest.json`、`data/run_history.jsonl` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2F、三个周报输出路径、周报归档、输出质量检查状态、所有来源的健康状态、页面变化状态和解析质量表；
+- Summary 中展示阶段 2G、三个周报输出路径、周报归档、输出质量检查状态、稳定性与配置审计状态、所有来源的健康状态、页面变化状态和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -496,6 +552,8 @@ GITEE_REMOTE=https://用户名:私人令牌@gitee.com/用户名/仓库名.git
 - `weekly/YYYY-WW-summary.md` 与 `weekly/YYYY-WW-details.md` 已生成；
 - `weekly/YYYY-WW.md` 已作为兼容索引或 legacy 输出保留；
 - `weekly/index.md`、`data/weekly_manifest.json`、`data/run_history.jsonl` 已更新；
+- `python scripts/check_outputs.py --strict` 已通过；
+- `python scripts/audit_project.py --strict` 已通过；
 - `docs/starlink_knowledge_base.md` 已更新最近一次自动化运行记录；
 - GitHub 自动生成 `chore: update weekly Starlink automation output` 提交；
 - Gitee 仓库同步到最新 `main`；
@@ -610,9 +668,20 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 当前不编造事实；
 - 当前不新增来源，不接入第三方发射日程网站。
 
+## 阶段 2G 局限性
+
+- 稳定性审计是静态工程检查，不代表真实情报质量审查；
+- 当前只接入两个官方来源；
+- 当前不使用大模型；
+- 当前不编造事实；
+- 页面级记录不等于具体情报事实；
+- hash 变化不等于事实变化；
+- 解析质量只表示抽取完整度；
+- 当前不新增来源，不接入第三方发射日程网站。
+
 ## 后续扩展计划
 
-- 接入 Starlink 官方网站、SpaceX Launches、FCC、CelesTrak、arXiv、技术博客和微信公众号白名单等信息来源；
+- 在新的受控阶段评估 FCC、CelesTrak、arXiv、技术博客和微信公众号白名单等信息来源；
 - 增加数据去重、来源标注和结构化归档；
-- 增加大模型总结、趋势分析和长期知识库自动沉淀；
+- 阶段 3A 再考虑增加大模型总结、趋势分析和长期知识库自动沉淀；
 - 增加失败告警、运行日志归档和更细粒度的测试。

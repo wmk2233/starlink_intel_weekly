@@ -65,7 +65,7 @@ def build_message(
     attachment_lines = "\n".join(f"- {path.name}" for path in attachments)
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 2F：周报归档、历史索引与输出质量检查。\n"
+        "当前阶段为阶段 2G：发布前稳定性与配置审计。\n"
         "内容来自规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。\n\n"
         "本周输出文档：\n"
         f"- 总结版：{collection_context.get('summary_file', markdown_path.name)}\n"
