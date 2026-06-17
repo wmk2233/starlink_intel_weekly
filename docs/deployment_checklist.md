@@ -56,6 +56,16 @@ GITEE_REMOTE
 
 `GITEE_REMOTE` 可以暂时不配置。未配置时，workflow 会跳过 Gitee 同步。
 
+阶段 3A 的 LLM 摘要为可选项，默认不启用。后续如需启用，需要额外配置：
+
+```text
+LLM_ENABLED=true
+OPENAI_API_KEY=...
+OPENAI_MODEL=...
+```
+
+ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key。未配置 `OPENAI_API_KEY` 时，阶段 3A 的大模型摘要会自动跳过，不影响周报主流程。
+
 ## 5. 邮件 SMTP 配置
 
 本地只使用 `.env` 保存 SMTP 测试配置，GitHub Actions 只从 Secrets 读取配置。示例占位符：
@@ -108,12 +118,14 @@ GitHub Actions 定时规则为：
 ## 9. 自动运行后的检查项
 
 - workflow 是否为 Success；
-- Summary 是否包含输出质量检查、稳定性与配置审计、Gitee 同步状态；
+- Summary 是否包含输出质量检查、稳定性与配置审计、LLM 摘要状态、Gitee 同步状态；
+- 无 API Key 时，LLM 状态应为 `skipped` 或 `skipped_no_api_key`；
 - 邮箱是否收到本周周报；
 - GitHub 是否生成 `chore: update weekly Starlink automation output` 提交；
 - `weekly/YYYY-WW-summary.md`、`weekly/YYYY-WW-details.md`、`weekly/index.md` 是否更新；
 - `data/weekly_manifest.json`、`data/run_history.jsonl` 是否更新；
-- Gitee 是否同步到最新 `main`。若 Gitee 失败但 workflow 成功，主流程仍可视为可用。
+- Gitee 是否同步到最新 `main`。若 Gitee 失败但 workflow 成功，主流程仍可视为可用；
+- `data/llm_audit.json` 是否存在且不包含任何 API Key。
 
 ## 10. 常见故障与处理
 
@@ -146,3 +158,15 @@ GitHub Actions 定时规则为：
 - GitHub Actions 已包含项目审计门禁；
 - Summary 已展示稳定性与配置审计状态；
 - 部署检查清单、运维指南和发布说明已提交。
+
+## 13. 阶段 3A LLM 来源约束确认清单
+
+- LLM 默认关闭；
+- 无 `OPENAI_API_KEY` 时不阻断采集、周报、邮件、GitHub 提交和 Gitee 同步；
+- LLM 摘要只基于本地结构化来源数据；
+- 无来源不写结论；
+- 页面级记录不扩展成具体事实；
+- 不编造发射时间、任务状态、载荷数量或技术细节；
+- LLM 输出与原始采集数据分离；
+- `data/llm_audit.json` 可以提交；
+- `data/llm_summaries.json` 只有生成并通过校验后才提交。

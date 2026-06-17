@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引和输出质量检查；仍不包含大模型总结，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引、输出质量检查和可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -11,6 +11,7 @@
 - 预留通过 GitHub Secrets 中的 `GITEE_REMOTE` 同步到 Gitee 的能力。
 - 阶段 2F 已增加周报总索引、机器可读 manifest、运行历史和输出质量检查。
 - 阶段 2G 已增加发布前稳定性审计、部署检查清单、运维指南和 Release Notes。
+- 阶段 3A 已增加可选的大模型摘要模块，但默认关闭，无 API Key 时自动跳过且不阻断主流程。
 
 ## 阶段 1B 工程加固
 
@@ -141,6 +142,27 @@ GitHub Actions 会在主脚本运行后执行 `python scripts/check_outputs.py -
 
 当前稳定版仍只接入两个官方来源，当前不使用大模型，当前不编造 Starlink 或 SpaceX 事实。页面级记录不等于具体情报事实，hash 变化不等于事实变化，解析质量只表示规则抽取完整度。
 
+## 阶段 3A 可选 LLM 摘要与来源约束
+
+阶段 3A 引入可选的大模型摘要模块，但 LLM 默认关闭。只有显式启用并配置 `OPENAI_API_KEY` 后，系统才会调用 OpenAI API；未配置 API Key 时会自动写入跳过审计，不影响采集、周报、邮件、GitHub 自动提交和 Gitee 同步。
+
+重要边界：
+
+- ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
+- GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key；
+- 如果未配置 `OPENAI_API_KEY`，阶段 3A 的大模型摘要会自动跳过，不影响周报主流程；
+- LLM 摘要只基于本地结构化来源数据，例如 `data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json` 和 `data/weekly_manifest.json`；
+- 无来源不写结论；
+- 页面级记录不扩展成具体事实；
+- 不编造发射时间、任务状态、载荷数量、技术细节或商业服务状态；
+- LLM 输出与原始采集数据分离，不覆盖 `data/items.jsonl`。
+
+LLM 相关输出：
+
+- `data/llm_audit.json`：记录 LLM 是否启用、是否跳过、输入记录数、校验状态和 guardrails；
+- `data/llm_summaries.json`：仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；
+- `scripts/llm_summarize.py`：独立 LLM 摘要脚本，默认不读取 `.env`，只读取环境变量。
+
 ## 项目结构
 
 ```text
@@ -160,13 +182,16 @@ E:\starlink_intel_weekly
 │   ├── self_check.py
 │   ├── print_action_summary.py
 │   ├── check_outputs.py
-│   └── audit_project.py
+│   ├── audit_project.py
+│   └── llm_summarize.py
 ├── data/
 │   ├── items.jsonl
 │   ├── source_status.json
 │   ├── extraction_quality.json
 │   ├── weekly_manifest.json
 │   ├── run_history.jsonl
+│   ├── llm_audit.json
+│   ├── llm_summaries.json  # 可选，仅 LLM 生成并校验通过后出现
 │   ├── raw/
 │   └── cache/
 ├── docs/
@@ -327,6 +352,22 @@ python scripts/audit_project.py --strict
 python scripts/audit_project.py --json
 ```
 
+阶段 3A 推荐无 API Key / LLM 默认关闭测试：
+
+```powershell
+python scripts/llm_summarize.py --dry-run
+python scripts/llm_summarize.py
+python scripts/llm_summarize.py --enabled
+python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-run-history 200
+python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --max-source-items 10 --max-history-records 20 --max-run-history 200
+```
+
+预期结果：
+
+- 默认关闭时 `llm_status=skipped`；
+- 启用但无 `OPENAI_API_KEY` 时 `llm_status=skipped_no_api_key`；
+- 两种情况都不发送真实邮件，不阻断主流程。
+
 ## 手动运行与自动运行
 
 手动运行适合本地调试、部署前验证和 GitHub Actions 页面上的临时执行。本地手动运行如果不想发送真实邮件，可以使用：
@@ -353,6 +394,7 @@ git pull --rebase origin main
 - 运维指南：`docs/operations_guide.md`
 - 发布说明：`RELEASE_NOTES.md`
 - 周报历史入口：`weekly/index.md`
+- LLM 审计文件：`data/llm_audit.json`
 
 ## 配置 `.env`
 
@@ -366,9 +408,16 @@ SMTP_PASSWORD=your_email_authorization_code
 MAIL_FROM=your_email@example.com
 MAIL_TO=target_email@example.com
 GITEE_REMOTE=https://username:token@gitee.com/username/starlink_intel_weekly.git
+LLM_ENABLED=false
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=your_openai_model_here
+LLM_MAX_ITEMS=10
+LLM_STRICT_SOURCE=true
 ```
 
 `.env` 已加入 `.gitignore`，不要把邮箱授权码、Token 或密码提交到仓库。
+
+LLM 配置是可选项。`LLM_ENABLED` 默认应保持 `false`。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；如需 GitHub Actions 自动调用大模型，必须单独配置 OpenAI API Key。
 
 注意 `.env` 中每一行只能有一个等号，例如：
 
@@ -492,6 +541,8 @@ sources:
 
 `data/weekly_manifest.json` 记录每周 summary、details、兼容索引和关键统计。`data/run_history.jsonl` 记录每次自动化运行摘要，不保存 Secrets，不记录完整 Gitee Remote。
 
+`data/llm_audit.json` 记录阶段 3A 可选 LLM 摘要的状态，包括是否启用、是否跳过、输入记录数、校验状态和 guardrails。`data/llm_summaries.json` 仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；它不覆盖原始采集数据。
+
 ## 配置 GitHub Secrets
 
 在 GitHub 仓库的 `Settings` → `Secrets and variables` → `Actions` 中添加：
@@ -504,9 +555,22 @@ SMTP_PASSWORD
 MAIL_FROM
 MAIL_TO
 GITEE_REMOTE
+LLM_ENABLED
+OPENAI_API_KEY
+OPENAI_MODEL
 ```
 
 其中 `GITEE_REMOTE` 可以暂时不配置。未配置时，GitHub Actions 会跳过 Gitee 同步。
+
+LLM 相关 Secrets 也是可选项。当前默认不启用 LLM；后续如需启用，可配置：
+
+```text
+LLM_ENABLED=true
+OPENAI_API_KEY=...
+OPENAI_MODEL=...
+```
+
+不要把真实 API Key 写入代码、README、workflow 或命令行。
 
 ## 配置 GitHub Actions
 
@@ -516,12 +580,13 @@ GITEE_REMOTE
 - 每周自动触发：每周一 UTC 00:17，对应北京时间每周一 08:17、日本时间每周一 09:17；
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
-- 运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
+- 默认运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
+- 仅当 `LLM_ENABLED=true` 且 `OPENAI_API_KEY` 已配置时，才运行带 `--enable-llm` 的可选 LLM 摘要流程；
 - 运行 `python scripts/check_outputs.py --strict` 检查本周输出质量；
 - 运行 `python scripts/audit_project.py --strict` 执行稳定性与配置审计；
 - 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json`、`data/weekly_manifest.json`、`data/run_history.jsonl` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 2G、三个周报输出路径、周报归档、输出质量检查状态、稳定性与配置审计状态、所有来源的健康状态、页面变化状态和解析质量表；
+- Summary 中展示阶段 3A、三个周报输出路径、周报归档、输出质量检查状态、稳定性与配置审计状态、LLM 摘要状态、所有来源的健康状态、页面变化状态和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行

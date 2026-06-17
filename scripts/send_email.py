@@ -65,8 +65,17 @@ def build_message(
     attachment_lines = "\n".join(f"- {path.name}" for path in attachments)
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 2G：发布前稳定性与配置审计。\n"
+        "当前阶段为阶段 3A：引入大模型摘要，但强制来源约束。\n"
         "内容来自规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。\n\n"
+        "LLM 摘要状态：\n"
+        f"- 是否启用：{collection_context.get('llm_enabled', 'false')}\n"
+        f"- 当前状态：{collection_context.get('llm_status', 'unknown')}\n"
+        f"- 摘要是否生成：{collection_context.get('llm_summary_generated', 'false')}\n"
+        f"- 原因：{collection_context.get('llm_reason', '未知')}\n\n"
+        "LLM 说明：\n"
+        "- ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；\n"
+        "- 如果后续需要自动生成 LLM 摘要，需要单独配置 OPENAI_API_KEY；\n"
+        "- 未配置 API Key 时不会影响采集、周报、邮件、GitHub 和 Gitee 主流程。\n\n"
         "本周输出文档：\n"
         f"- 总结版：{collection_context.get('summary_file', markdown_path.name)}\n"
         f"- 明细版：{collection_context.get('details_file', '未生成')}\n"

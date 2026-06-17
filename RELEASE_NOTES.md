@@ -94,3 +94,38 @@
 - 阶段 3A 才考虑引入大模型摘要；
 - 引入大模型前，需要继续保持事实、推断和待核验内容的边界；
 - 后续新增来源前，需要先更新来源配置、审计脚本、文档和安全边界。
+
+## v0.3A-llm-guarded：可选 LLM 来源约束摘要
+
+阶段 3A 在稳定版自动化链路上增加可选 LLM 摘要模块，但默认关闭。
+
+### 核心能力
+
+- 新增 `scripts/llm_summarize.py`；
+- 新增 `data/llm_audit.json` 记录 LLM 状态和 guardrails；
+- LLM 摘要生成成功并通过校验后，输出到 `data/llm_summaries.json`；
+- 周报总结版增加“大模型辅助摘要”；
+- 周报明细版增加“大模型摘要审计”；
+- 邮件正文和 GitHub Actions Summary 增加 LLM 状态。
+
+### 启用边界
+
+- LLM 默认关闭；
+- 未配置 `OPENAI_API_KEY` 时自动跳过，不阻断主流程；
+- ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
+- GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key。
+
+### 来源约束
+
+- 只基于本地结构化来源数据生成摘要；
+- 无来源不写结论；
+- 页面级记录不扩展成具体事实；
+- 不编造发射时间、任务状态、载荷数量、技术细节或商业服务状态；
+- LLM 输出与原始采集数据分离，不覆盖 `data/items.jsonl`。
+
+### 当前局限性
+
+- 当前仍只接入两个官方来源；
+- 当前不新增第三方发射日程网站；
+- 没有 API Key 时不会生成 `data/llm_summaries.json`；
+- 即使启用 LLM，输出仍需通过来源约束校验后才展示。

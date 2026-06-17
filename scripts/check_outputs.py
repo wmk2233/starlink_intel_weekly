@@ -33,6 +33,18 @@ def valid_json_file(path: Path) -> tuple[bool, str | None]:
     return True, None
 
 
+def load_json_file(path: Path) -> tuple[bool, dict[str, Any], str | None]:
+    if not path.exists():
+        return False, {}, "文件不存在"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return False, {}, f"JSON 解析失败：line {exc.lineno}"
+    if not isinstance(data, dict):
+        return False, {}, "JSON 顶层不是 object"
+    return True, data, None
+
+
 def valid_jsonl_file(path: Path) -> tuple[bool, str | None]:
     if not path.exists():
         return False, "文件不存在"
@@ -65,6 +77,8 @@ def build_report(week_id: str) -> dict[str, Any]:
     extraction_quality_path = DATA_DIR / "extraction_quality.json"
     weekly_manifest_path = DATA_DIR / "weekly_manifest.json"
     run_history_path = DATA_DIR / "run_history.jsonl"
+    llm_audit_path = DATA_DIR / "llm_audit.json"
+    llm_summary_path = DATA_DIR / "llm_summaries.json"
 
     report: dict[str, Any] = {"week_id": week_id, "status": "unknown", "checks": {}, "errors": []}
 
@@ -83,16 +97,29 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "weekly_manifest_valid", valid, error)
     valid, error = valid_jsonl_file(run_history_path)
     add_check(report, "run_history_valid", valid, error)
+    valid, llm_audit, error = load_json_file(llm_audit_path)
+    add_check(report, "llm_audit_valid", valid, error)
+    llm_status = str(llm_audit.get("llm_status") or "unknown") if valid else "unknown"
+    if llm_status == "generated":
+        valid_summary, error = valid_json_file(llm_summary_path)
+        add_check(report, "llm_summary_valid_when_generated", valid_summary, error)
+    elif llm_summary_path.exists():
+        valid_summary, error = valid_json_file(llm_summary_path)
+        add_check(report, "llm_summary_valid_if_present", valid_summary, error)
+    else:
+        add_check(report, "llm_summary_optional", True)
 
     summary_text = read_text(summary_path)
     add_check(report, "summary_has_core_conclusions", "本周核心结论" in summary_text, "summary 缺少“本周核心结论”")
     add_check(report, "summary_has_source_overview", "来源状态概览" in summary_text, "summary 缺少“来源状态概览”")
     add_check(report, "summary_has_quality_overview", "解析质量概览" in summary_text, "summary 缺少“解析质量概览”")
+    add_check(report, "summary_has_llm_section", "大模型辅助摘要" in summary_text, "summary 缺少“大模型辅助摘要”")
 
     details_text = read_text(details_path)
     add_check(report, "details_has_source_status", "来源状态诊断" in details_text, "details 缺少“来源状态诊断”")
     add_check(report, "details_has_quality", "解析质量诊断" in details_text, "details 缺少“解析质量诊断”")
     add_check(report, "details_has_items", "采集条目明细" in details_text, "details 缺少“采集条目明细”")
+    add_check(report, "details_has_llm_audit", "大模型摘要审计" in details_text, "details 缺少“大模型摘要审计”")
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")
@@ -118,6 +145,11 @@ def print_text_report(report: dict[str, Any]) -> None:
     print(f"extraction_quality.json：{'合法' if checks.get('extraction_quality_valid') else '异常'}")
     print(f"weekly_manifest.json：{'合法' if checks.get('weekly_manifest_valid') else '异常'}")
     print(f"run_history.jsonl：{'合法' if checks.get('run_history_valid') else '异常'}")
+    print(f"llm_audit.json：{'合法' if checks.get('llm_audit_valid') else '异常'}")
+    print(
+        "llm_summaries.json："
+        + ("合法或可选" if checks.get("llm_summary_valid_when_generated") or checks.get("llm_summary_valid_if_present") or checks.get("llm_summary_optional") else "异常")
+    )
     if report["errors"]:
         print("检查发现问题：")
         for error in report["errors"]:

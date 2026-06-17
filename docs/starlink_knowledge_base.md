@@ -15,8 +15,8 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-06-17T12:40:22+00:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
-| SpaceX Official Launches | 2026-06-17T12:40:22+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-06-17T21:02:38+08:00 | reachable | unchanged | 2026-06-17T17:43:22+08:00 | 正常 |
+| SpaceX Official Launches | 2026-06-17T21:02:40+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
@@ -57,14 +57,33 @@
 | `RELEASE_NOTES.md` | 稳定版发布说明 |
 | `scripts/audit_project.py` | 项目配置与稳定性审计脚本 |
 
+## 阶段 3A 大模型摘要边界
+
+阶段 3A 引入可选 LLM 摘要，但默认关闭。没有 `OPENAI_API_KEY` 时，系统会写入 `data/llm_audit.json` 记录跳过状态，不阻断采集、周报、邮件、GitHub 自动提交或 Gitee 同步。
+
+| 文件 | 用途 |
+|---|---|
+| `scripts/llm_summarize.py` | 基于本地结构化数据生成受来源约束的可选 LLM 摘要 |
+| `data/llm_audit.json` | 记录 LLM 是否启用、是否跳过、校验状态和 guardrails |
+| `data/llm_summaries.json` | 仅在 LLM 启用且校验通过后保存摘要 |
+
+约束：
+
+- ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
+- GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key；
+- LLM 摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
+- 无来源不写结论；
+- 页面级记录不扩展成具体事实；
+- LLM 输出与原始采集数据分离。
+
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-06-17 12:40:22 UTC+0000
+- 运行时间：2026-06-17 21:02:38 中国标准时间+0800
 - ISO 周编号：2026-W25
-- 执行环境：Linux 6.17.0-1018-azure
-- Python 版本：3.11.15
+- 执行环境：Windows 10
+- Python 版本：3.11.9
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W25-summary.md

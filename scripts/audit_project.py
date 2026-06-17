@@ -13,7 +13,7 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "2G"
+CURRENT_STAGE = "3A"
 
 REQUIRED_FILES = [
     "README.md",
@@ -30,6 +30,7 @@ REQUIRED_FILES = [
     "scripts/print_action_summary.py",
     "scripts/check_outputs.py",
     "scripts/audit_project.py",
+    "scripts/llm_summarize.py",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
@@ -40,6 +41,7 @@ REQUIRED_FILES = [
     "data/extraction_quality.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
+    "data/llm_audit.json",
 ]
 
 GITIGNORE_RULES = [".env", "prompts/", "outputs/logs/*.log", "data/raw/", "data/cache/"]
@@ -59,6 +61,8 @@ SENSITIVE_SCAN_TARGETS = [
     "data/extraction_quality.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
+    "data/llm_audit.json",
+    "data/llm_summaries.json",
 ]
 
 ALLOWED_PLACEHOLDERS = [
@@ -67,6 +71,9 @@ ALLOWED_PLACEHOLDERS = [
     "GITEE_REMOTE=https://用户名:私人令牌@gitee.com/用户名/仓库名.git",
     "https://username:token@gitee.com/username/starlink_intel_weekly.git",
     "https://用户名:私人令牌@gitee.com/用户名/仓库名.git",
+    "OPENAI_API_KEY=your_openai_api_key_here",
+    "OPENAI_API_KEY=...",
+    "OPENAI_MODEL=your_openai_model_here",
 ]
 
 FORBIDDEN_SOURCE_HINTS = [
@@ -177,6 +184,12 @@ def check_workflow(report: dict[str, Any]) -> None:
         "python scripts/check_outputs.py --strict",
         "python scripts/audit_project.py --strict",
         "if: always()",
+        "LLM_ENABLED",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        'if [ "${LLM_ENABLED}" = "true" ] && [ -n "${OPENAI_API_KEY}" ]; then',
+        "--enable-llm",
+        "data/llm_audit.json",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in text]
     if missing:
@@ -190,6 +203,9 @@ def check_workflow(report: dict[str, Any]) -> None:
         return
     if 'echo "$GITEE_REMOTE"' in text or "echo $GITEE_REMOTE" in text:
         add_issue(report, section, "workflow 可能打印完整 GITEE_REMOTE")
+        return
+    if 'echo "$OPENAI_API_KEY"' in text or "echo $OPENAI_API_KEY" in text:
+        add_issue(report, section, "workflow 可能打印 OPENAI_API_KEY")
         return
     if "exit 0" not in text or "GITEE_SYNC_STATUS=failed" not in text:
         add_issue(report, section, "Gitee 同步非阻塞状态不明确")
@@ -238,6 +254,38 @@ def check_sources(report: dict[str, Any]) -> None:
     mark_passed_if_clean(report, section)
 
 
+def check_llm_config_docs(report: dict[str, Any]) -> None:
+    section = "llm_config"
+    env_example = read_text(".env.example") if (PROJECT_ROOT / ".env.example").exists() else ""
+    required_env = [
+        "LLM_ENABLED=false",
+        "OPENAI_API_KEY=your_openai_api_key_here",
+        "OPENAI_MODEL=your_openai_model_here",
+        "LLM_MAX_ITEMS=10",
+        "LLM_STRICT_SOURCE=true",
+    ]
+    missing_env = [item for item in required_env if item not in env_example]
+    if missing_env:
+        add_issue(report, section, ".env.example 缺少 LLM 占位符：" + "、".join(missing_env))
+        return
+
+    readme = read_text("README.md") if (PROJECT_ROOT / "README.md").exists() else ""
+    required_readme = [
+        "ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用",
+        "LLM 默认关闭",
+        "OPENAI_API_KEY",
+        "无来源不写结论",
+        "页面级记录不扩展成具体事实",
+        "data/llm_audit.json",
+        "data/llm_summaries.json",
+    ]
+    missing_readme = [item for item in required_readme if item not in readme]
+    if missing_readme:
+        add_issue(report, section, "README 缺少 LLM 说明：" + "、".join(missing_readme))
+        return
+    mark_passed_if_clean(report, section)
+
+
 def json_file(path: Path) -> tuple[bool, Any | None, str | None]:
     if not path.exists():
         return False, None, "文件不存在"
@@ -276,7 +324,7 @@ def check_data_files(report: dict[str, Any]) -> None:
             add_issue(report, section, "run_history.jsonl 超过 200 行")
             return
 
-    for relative in ["data/source_status.json", "data/extraction_quality.json", "data/weekly_manifest.json"]:
+    for relative in ["data/source_status.json", "data/extraction_quality.json", "data/weekly_manifest.json", "data/llm_audit.json"]:
         valid, data, error = json_file(PROJECT_ROOT / relative)
         if not valid:
             add_issue(report, section, f"{relative} 异常：{error}")
@@ -290,6 +338,22 @@ def check_data_files(report: dict[str, Any]) -> None:
             if current_week_id() not in weeks:
                 add_issue(report, section, "weekly_manifest.json 缺少当前周")
                 return
+        if relative == "data/llm_audit.json":
+            status = data.get("llm_status") if isinstance(data, dict) else None
+            if not status:
+                add_issue(report, section, "llm_audit.json 缺少 llm_status")
+                return
+            if status == "generated":
+                summary_valid, _summary_data, summary_error = json_file(PROJECT_ROOT / "data/llm_summaries.json")
+                if not summary_valid:
+                    add_issue(report, section, f"llm_status=generated 时 llm_summaries.json 异常：{summary_error}")
+                    return
+    summary_path = PROJECT_ROOT / "data/llm_summaries.json"
+    if summary_path.exists():
+        summary_valid, _summary_data, summary_error = json_file(summary_path)
+        if not summary_valid:
+            add_issue(report, section, f"data/llm_summaries.json 异常：{summary_error}")
+            return
     mark_passed_if_clean(report, section)
 
 
@@ -314,10 +378,16 @@ def check_weekly_outputs(report: dict[str, Any]) -> None:
         if required not in summary:
             add_issue(report, section, f"summary 缺少：{required}")
             return
+    if "大模型辅助摘要" not in summary:
+        add_issue(report, section, "summary 缺少：大模型辅助摘要")
+        return
     for required in ["来源状态诊断", "解析质量诊断", "采集条目明细"]:
         if required not in details:
             add_issue(report, section, f"details 缺少：{required}")
             return
+    if "大模型摘要审计" not in details:
+        add_issue(report, section, "details 缺少：大模型摘要审计")
+        return
     if f"./{week_id}-summary.md" not in index or f"./{week_id}-details.md" not in index:
         add_issue(report, section, "兼容索引缺少 summary/details 相对链接")
         return
@@ -359,7 +429,11 @@ def iter_scan_files() -> list[Path]:
         if path.is_file():
             files.append(path)
             continue
-        files.extend(item for item in path.rglob("*") if item.is_file())
+        files.extend(
+            item
+            for item in path.rglob("*")
+            if item.is_file() and "__pycache__" not in item.parts and item.suffix != ".pyc"
+        )
     return sorted(set(files))
 
 
@@ -384,6 +458,8 @@ def check_secret_scan(report: dict[str, Any]) -> None:
             (r"https://[^\s/:]+:[^\s@]+@gitee\.com", "gitee_remote_with_token"),
             (r"ghp_[A-Za-z0-9_]{20,}", "github_pat_legacy"),
             (r"github_pat_[A-Za-z0-9_]{20,}", "github_pat"),
+            (r"sk-[A-Za-z0-9_\-]{20,}", "openai_api_key"),
+            (r"OPENAI_API_KEY\s*=\s*(?!your_openai_api_key_here|\.\.\.)[^\s$#][^\n\r]*", "openai_api_key_value"),
             (r"(?i)(private\s*token|私人令牌)\s*[:=]\s*[A-Za-z0-9_\-]{16,}", "private_token"),
             (r"(?i)(authorization[_ -]?code|授权码)\s*[:=]\s*[A-Za-z0-9_\-]{16,}", "smtp_auth_code"),
         ]
@@ -408,6 +484,7 @@ def build_report() -> dict[str, Any]:
     check_gitignore(report)
     check_workflow(report)
     check_sources(report)
+    check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)
     check_email_attachments(report)
@@ -423,6 +500,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         ("gitignore", ".gitignore"),
         ("workflow", "GitHub Actions"),
         ("sources", "sources.yml"),
+        ("llm_config", "LLM 配置与文档"),
         ("data_files", "数据文件"),
         ("weekly_outputs", "weekly 输出"),
         ("email_attachments", "邮件附件能力"),

@@ -13,6 +13,8 @@ SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
 WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
 RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
+LLM_AUDIT_FILE = PROJECT_ROOT / "data" / "llm_audit.json"
+LLM_SUMMARY_FILE = PROJECT_ROOT / "data" / "llm_summaries.json"
 
 
 def _yes_no(value: bool) -> str:
@@ -67,6 +69,24 @@ def _extraction_quality() -> tuple[bool, dict[str, dict[str, object]]]:
     return True, sources if isinstance(sources, dict) else {}
 
 
+def _llm_audit() -> dict[str, object]:
+    if not LLM_AUDIT_FILE.exists():
+        return {
+            "llm_enabled": "unknown",
+            "llm_status": "unknown",
+            "summary_generated": "unknown",
+        }
+    try:
+        data = json.loads(LLM_AUDIT_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {
+            "llm_enabled": "unknown",
+            "llm_status": "invalid_json",
+            "summary_generated": "unknown",
+        }
+    return data if isinstance(data, dict) else {}
+
+
 def _week_id() -> str:
     now = datetime.now().astimezone()
     iso = now.isocalendar()
@@ -80,12 +100,13 @@ def main() -> int:
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
     output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
     project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
+    llm_audit = _llm_audit()
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：2G",
+        "- 阶段：3A",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -96,12 +117,14 @@ def main() -> int:
         "- 数据文件路径：data/items.jsonl",
         "- source_status.json 路径：data/source_status.json",
         "- extraction_quality.json 路径：data/extraction_quality.json",
+        "- llm_audit.json 路径：data/llm_audit.json",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
         f"- source_status.json 是否存在：{_yes_no(status_exists)}",
         f"- extraction_quality.json 是否存在：{_yes_no(quality_exists)}",
         f"- weekly_manifest.json 是否存在：{_yes_no(WEEKLY_MANIFEST_FILE.exists())}",
         f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
+        f"- llm_audit.json 是否存在：{_yes_no(LLM_AUDIT_FILE.exists())}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
         "",
@@ -133,6 +156,17 @@ def main() -> int:
         "- 部署检查清单：docs/deployment_checklist.md",
         "- 运维指南：docs/operations_guide.md",
         "- 发布说明：RELEASE_NOTES.md",
+        "",
+        "### 大模型摘要状态",
+        "",
+        "| 字段 | 状态 |",
+        "|---|---|",
+        f"| LLM 是否启用 | {_escape_table_cell(llm_audit.get('llm_enabled', 'unknown'))} |",
+        f"| LLM 状态 | {_escape_table_cell(llm_audit.get('llm_status', 'unknown'))} |",
+        f"| 摘要是否生成 | {_escape_table_cell(llm_audit.get('summary_generated', 'unknown'))} |",
+        "| 审计文件 | data/llm_audit.json |",
+        "| 摘要文件 | data/llm_summaries.json |",
+        f"| 摘要文件是否存在 | {_yes_no(LLM_SUMMARY_FILE.exists())} |",
         "",
         "### 来源状态",
         "",

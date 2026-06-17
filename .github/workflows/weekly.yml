@@ -50,7 +50,15 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20
+          LLM_ENABLED: ${{ secrets.LLM_ENABLED }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          if [ "${LLM_ENABLED}" = "true" ] && [ -n "${OPENAI_API_KEY}" ]; then
+            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm
+          else
+            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20
+          fi
 
       - name: Check weekly outputs
         run: |
@@ -66,9 +74,12 @@ jobs:
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add README.md RELEASE_NOTES.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          git add README.md RELEASE_NOTES.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl data/llm_audit.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          if [ -f data/llm_summaries.json ]; then
+            git add data/llm_summaries.json
+          fi
           if git diff --cached --quiet; then
-            echo "阶段 2F 自动化输出没有变化，跳过提交。"
+            echo "阶段 3A 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

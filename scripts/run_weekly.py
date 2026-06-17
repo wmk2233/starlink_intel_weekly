@@ -17,6 +17,7 @@ from collect_sources import (
     load_items,
     load_source_status,
 )
+from llm_summarize import LLM_AUDIT_FILE, LLM_SUMMARY_FILE, run_llm_summary
 from send_email import send_weekly_email
 
 
@@ -40,6 +41,7 @@ SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
 QUALITY_HEADING = "## 来源解析质量诊断"
 OUTPUT_STRUCTURE_HEADING = "## 周报输出结构"
 ARCHIVE_HEADING = "## 周报归档与历史索引"
+LLM_HEADING = "## 阶段 3A 大模型摘要边界"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mode: str) -> dict[str, str]:
@@ -81,6 +83,19 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "weekly_manifest_path": "data/weekly_manifest.json",
         "run_history_path": "data/run_history.jsonl",
         "quality_check_status": "skipped",
+        "llm_enabled": "false",
+        "llm_status": "skipped",
+        "llm_summary_generated": "false",
+        "llm_model": "未配置",
+        "llm_input_records": "0",
+        "llm_validation_status": "skipped",
+        "llm_reason": "LLM is disabled.",
+        "llm_audit_path": "data/llm_audit.json",
+        "llm_summary_path": "data/llm_summaries.json",
+        "llm_strict_source": "true",
+        "llm_page_level_no_fact_expansion": "true",
+        "llm_errors": "",
+        "llm_warnings": "",
     }
 
 
@@ -368,6 +383,119 @@ def render_page_change_notes(source_statuses: dict[str, dict[str, object]]) -> s
     return "\n".join(rows)
 
 
+def load_json_for_report(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
+    guardrails = audit.get("guardrails", {}) if isinstance(audit.get("guardrails"), dict) else {}
+    errors = audit.get("errors", [])
+    warnings = audit.get("warnings", [])
+    meta["llm_enabled"] = str(bool(audit.get("llm_enabled"))).lower()
+    meta["llm_status"] = str(audit.get("llm_status") or "unknown")
+    meta["llm_summary_generated"] = str(bool(audit.get("summary_generated"))).lower()
+    meta["llm_model"] = str(audit.get("model") or "未配置")
+    meta["llm_input_records"] = str(audit.get("input_records") or 0)
+    meta["llm_validation_status"] = str(audit.get("validation_status") or "unknown")
+    meta["llm_reason"] = str(audit.get("reason") or "")
+    meta["llm_audit_path"] = "data/llm_audit.json"
+    meta["llm_summary_path"] = "data/llm_summaries.json"
+    meta["llm_strict_source"] = str(bool(guardrails.get("strict_source"))).lower()
+    meta["llm_page_level_no_fact_expansion"] = str(bool(guardrails.get("page_level_no_fact_expansion"))).lower()
+    meta["llm_errors"] = "；".join(str(error) for error in errors) if isinstance(errors, list) else ""
+    meta["llm_warnings"] = "；".join(str(warning) for warning in warnings) if isinstance(warnings, list) else ""
+
+
+def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str, object]) -> str:
+    lines = [
+        "## 大模型辅助摘要",
+        "",
+        f"当前状态：{meta.get('llm_status', 'unknown')}",
+        "",
+        "说明：",
+        "- 本节仅在显式启用 LLM 且通过来源约束校验后生成；",
+        "- 未配置 OpenAI API Key 时会自动跳过；",
+        "- 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；",
+        "- 无来源不写结论；",
+        "- 页面级记录不扩展成具体事实。",
+        "",
+    ]
+    if meta.get("llm_status") != "generated":
+        reason = meta.get("llm_reason") or "LLM 未生成摘要。"
+        lines.extend(
+            [
+                f"跳过原因：{reason}",
+                "",
+                "当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。",
+                "",
+            ]
+        )
+        return "\n".join(lines)
+
+    summary = llm_summary_data.get("summary", {}) if isinstance(llm_summary_data.get("summary"), dict) else {}
+    overall = str(summary.get("overall_summary_cn") or "LLM 摘要文件缺少总体摘要。")
+    lines.extend(["### 总体摘要", "", overall, "", "### 来源约束要点", "", "| 要点 | 来源记录 | 来源链接 | 限制说明 |", "|---|---|---|---|"])
+    key_points = summary.get("key_points", [])
+    if isinstance(key_points, list) and key_points:
+        for point in key_points:
+            if not isinstance(point, dict):
+                continue
+            ids = "、".join(str(item) for item in point.get("source_record_ids", []) if item)
+            urls = "<br>".join(str(item) for item in point.get("source_urls", []) if item)
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        escape_table_cell(point.get("point", "")),
+                        escape_table_cell(ids),
+                        escape_table_cell(urls),
+                        escape_table_cell(point.get("caveat", "")),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.append("| 无 | 无 | 无 | LLM 未生成可展示要点 |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_llm_audit_section(meta: dict[str, str]) -> str:
+    rows = [
+        ("LLM 是否启用", meta.get("llm_enabled", "unknown")),
+        ("LLM 状态", meta.get("llm_status", "unknown")),
+        ("模型", meta.get("llm_model", "未配置")),
+        ("输入记录数", meta.get("llm_input_records", "0")),
+        ("校验状态", meta.get("llm_validation_status", "unknown")),
+        ("严格来源约束", meta.get("llm_strict_source", "unknown")),
+        ("页面级记录禁止事实扩展", meta.get("llm_page_level_no_fact_expansion", "unknown")),
+        ("审计文件", meta.get("llm_audit_path", "data/llm_audit.json")),
+        ("摘要文件", meta.get("llm_summary_path", "data/llm_summaries.json")),
+    ]
+    lines = [
+        "## 大模型摘要审计",
+        "",
+        "| 字段 | 内容 |",
+        "|---|---|",
+    ]
+    for label, value in rows:
+        lines.append(f"| {escape_table_cell(label)} | {escape_table_cell(value)} |")
+    if meta.get("llm_reason"):
+        lines.extend(["", f"- 原因：{meta['llm_reason']}"])
+    if meta.get("llm_errors"):
+        lines.extend(["", "### 错误类型", "", f"- {meta['llm_errors']}"])
+    if meta.get("llm_warnings"):
+        lines.extend(["", "### 警告类型", "", f"- {meta['llm_warnings']}"])
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_recent_run_summary(meta: dict[str, str]) -> str:
     return "\n".join(
         [
@@ -381,6 +509,7 @@ def render_recent_run_summary(meta: dict[str, str]) -> str:
             f"- 新增条目数：{meta.get('new_items', '未知')}",
             f"- 内容变化条目数：{meta.get('changed_items', '未知')}",
             f"- 未变化条目数：{meta.get('unchanged_items', '未知')}",
+            f"- LLM 摘要状态：{meta.get('llm_status', 'unknown')}",
         ]
     )
 
@@ -566,6 +695,7 @@ def build_weekly_summary_markdown(
     source_items: list[dict[str, object]],
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
+    llm_summary_data: dict[str, object],
 ) -> str:
     week_id = meta["iso_week"]
     return f"""# Starlink 情报周报总结版：{week_id}
@@ -576,7 +706,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 2G：发布前稳定性与配置审计。
+当前阶段为阶段 3A：引入大模型摘要，但强制来源约束。
 
 ## 2. 本周核心结论
 
@@ -589,6 +719,8 @@ def build_weekly_summary_markdown(
 - 当前解析质量总体判断：{meta["overall_quality"]}
 
 说明：本节仅基于规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。
+
+{render_llm_summary_section(meta, llm_summary_data)}
 
 ## 3. 来源状态概览
 
@@ -615,7 +747,7 @@ def build_weekly_summary_markdown(
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 后续阶段 3A 才考虑引入大模型摘要。
+- LLM 摘要默认关闭，只有显式启用且通过来源约束校验后才展示。
 
 ## 7. 本周文档
 
@@ -635,6 +767,7 @@ def build_weekly_details_markdown(
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
     history_records: list[dict[str, str]],
+    llm_audit: dict[str, object] | None = None,
 ) -> str:
     error_note = ""
     if collection_errors:
@@ -653,6 +786,10 @@ def build_weekly_details_markdown(
 | `data/items.jsonl` | 结构化采集条目 |
 | `data/source_status.json` | 来源状态与变化检测 |
 | `data/extraction_quality.json` | 解析质量诊断 |
+| `data/llm_audit.json` | 可选 LLM 摘要审计 |
+| `data/llm_summaries.json` | 可选 LLM 摘要输出 |
+
+{render_llm_audit_section(meta)}
 
 ## 3. 来源状态诊断
 
@@ -761,12 +898,14 @@ def write_weekly_outputs(
     collection_errors: list[str],
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
+    llm_summary_data: dict[str, object],
+    llm_audit: dict[str, object],
 ) -> None:
     history_records = load_existing_history([paths["details"], paths["index"]])
     history_records.append(meta)
     history_records = history_records[-max_records:]
 
-    summary_content = build_weekly_summary_markdown(meta, source_items, source_statuses, quality_sources)
+    summary_content = build_weekly_summary_markdown(meta, source_items, source_statuses, quality_sources, llm_summary_data)
     details_content = build_weekly_details_markdown(
         meta,
         source_items,
@@ -774,6 +913,7 @@ def write_weekly_outputs(
         source_statuses,
         quality_sources,
         history_records,
+        llm_audit,
     )
 
     if output_mode in {"dual", "both"}:
@@ -840,6 +980,10 @@ def summarize_current_week_outputs(
         "unchanged_items": int(meta.get("unchanged_items") or 0),
         "dominant_quality": dominant_quality_value(source_statuses, quality_sources),
         "dominant_extracted_level": dominant_extracted_level_value(source_statuses, quality_sources),
+        "llm_enabled": meta.get("llm_enabled") == "true",
+        "llm_status": meta.get("llm_status", "unknown"),
+        "llm_summary_path": meta.get("llm_summary_path", "data/llm_summaries.json"),
+        "llm_audit_path": meta.get("llm_audit_path", "data/llm_audit.json"),
         "summary_exists": paths["summary"].exists(),
         "details_exists": paths["details"].exists(),
         "index_exists": paths["index"].exists(),
@@ -991,6 +1135,9 @@ def append_run_history(
         "weekly_archive_index_path": meta["weekly_archive_index_path"],
         "weekly_manifest_path": meta["weekly_manifest_path"],
         "quality_check_status": meta.get("quality_check_status", "skipped"),
+        "llm_enabled": meta.get("llm_enabled") == "true",
+        "llm_status": meta.get("llm_status", "unknown"),
+        "llm_summary_generated": meta.get("llm_summary_generated") == "true",
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
     records = load_run_history()
@@ -1165,6 +1312,29 @@ def update_archive_section_text(existing: str) -> str:
     return replace_or_insert_section(existing, ARCHIVE_HEADING, section, before_heading="## 最近一次自动化运行记录")
 
 
+def update_llm_section_text(existing: str) -> str:
+    section = f"""{LLM_HEADING}
+
+阶段 3A 引入可选 LLM 摘要，但默认关闭。没有 `OPENAI_API_KEY` 时，系统会写入 `data/llm_audit.json` 记录跳过状态，不阻断采集、周报、邮件、GitHub 自动提交或 Gitee 同步。
+
+| 文件 | 用途 |
+|---|---|
+| `scripts/llm_summarize.py` | 基于本地结构化数据生成受来源约束的可选 LLM 摘要 |
+| `data/llm_audit.json` | 记录 LLM 是否启用、是否跳过、校验状态和 guardrails |
+| `data/llm_summaries.json` | 仅在 LLM 启用且校验通过后保存摘要 |
+
+约束：
+
+- ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
+- GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key；
+- LLM 摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
+- 无来源不写结论；
+- 页面级记录不扩展成具体事实；
+- LLM 输出与原始采集数据分离。
+"""
+    return replace_or_insert_section(existing, LLM_HEADING, section, before_heading="## 最近一次自动化运行记录")
+
+
 def replace_or_insert_section(existing: str, heading: str, section: str, before_heading: str | None = None) -> str:
     if heading in existing:
         before, rest = existing.split(heading, 1)
@@ -1212,6 +1382,7 @@ def update_knowledge_base_text(
     existing = update_quality_section_text(existing, quality_sources, source_statuses)
     existing = update_output_structure_section_text(existing)
     existing = update_archive_section_text(existing)
+    existing = update_llm_section_text(existing)
     heading = "## 最近一次自动化运行记录"
     new_section = f"""{heading}
 
@@ -1299,6 +1470,10 @@ def main() -> int:
         default=200,
         help="data/run_history.jsonl 最多保留的运行记录条数，默认 200。",
     )
+    parser.add_argument("--enable-llm", action="store_true", help="显式启用可选 LLM 摘要。")
+    parser.add_argument("--llm-model", default=None, help="指定 OpenAI 模型；默认读取 OPENAI_MODEL。")
+    parser.add_argument("--llm-max-items", type=int, default=10, help="LLM 摘要最多处理的来源记录数，默认 10。")
+    parser.add_argument("--fail-on-llm-error", action="store_true", help="LLM 调用或校验失败时阻断主流程。")
     args = parser.parse_args()
 
     if args.max_history_records < 1:
@@ -1309,6 +1484,9 @@ def main() -> int:
         return 2
     if args.max_run_history < 1:
         print("--max-run-history 必须是大于等于 1 的整数。")
+        return 2
+    if args.llm_max_items < 1:
+        print("--llm-max-items 必须是大于等于 1 的整数。")
         return 2
 
     send_email_enabled = not args.no_email and not args.dry_run
@@ -1331,7 +1509,8 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：2G 发布前稳定性与配置审计。")
+    print("当前阶段：3A 引入大模型摘要，但强制来源约束。")
+    print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
     meta["max_source_items"] = str(args.max_source_items)
@@ -1365,6 +1544,20 @@ def main() -> int:
         apply_quality_to_meta(meta, quality_sources, source_statuses)
         source_items = collection_result.items or latest_items_for_report(args.max_source_items, source_statuses)
 
+    llm_return_code, llm_audit = run_llm_summary(
+        enabled=args.enable_llm,
+        dry_run=args.dry_run,
+        max_items=args.llm_max_items,
+        model=args.llm_model,
+        strict_source=True,
+        fail_on_llm_error=args.fail_on_llm_error,
+    )
+    apply_llm_to_meta(meta, llm_audit)
+    llm_summary_data = load_json_for_report(LLM_SUMMARY_FILE) if meta.get("llm_status") == "generated" else {}
+    print(f"LLM 摘要状态：{meta['llm_status']}")
+    if llm_return_code != 0 and args.fail_on_llm_error:
+        return llm_return_code
+
     write_weekly_outputs(
         paths=paths,
         meta=meta,
@@ -1375,6 +1568,8 @@ def main() -> int:
         collection_errors=collection_errors,
         source_statuses=source_statuses,
         quality_sources=quality_sources,
+        llm_summary_data=llm_summary_data,
+        llm_audit=llm_audit,
     )
     manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
     update_weekly_archive_index(manifest, args.dry_run)
@@ -1387,6 +1582,8 @@ def main() -> int:
     print(f"周报总索引：{meta['weekly_archive_index_path']}")
     print(f"周报 manifest：{meta['weekly_manifest_path']}")
     print(f"运行历史：{meta['run_history_path']}")
+    print(f"LLM 审计文件：{meta['llm_audit_path']}")
+    print(f"LLM 摘要文件：{meta['llm_summary_path']}")
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
@@ -1398,7 +1595,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "2F",
+        "stage": "3A",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -1415,6 +1612,10 @@ def main() -> int:
         "details_file": paths["details"].name,
         "index_file": paths["index"].name,
         "weekly_archive_index": "weekly/index.md",
+        "llm_enabled": meta["llm_enabled"],
+        "llm_status": meta["llm_status"],
+        "llm_reason": meta["llm_reason"],
+        "llm_summary_generated": meta["llm_summary_generated"],
     }
     if not send_weekly_email(
         paths["summary"],

@@ -19,10 +19,13 @@ cron: "17 0 * * 1"
 - workflow 是否为 Success；
 - 输出质量检查状态；
 - 稳定性与配置审计状态；
+- 大模型摘要状态；
 - Gitee 同步状态；
 - 本周 summary、details、兼容索引路径；
 - 来源健康状态、页面变化状态和条目统计；
 - 解析质量状态。
+
+阶段 3A 默认不启用 LLM。未配置 `OPENAI_API_KEY` 时，LLM 状态显示为 `skipped` 或 `skipped_no_api_key` 是正常现象，主流程仍应成功。
 
 ## 3. 如何确认邮件是否正常
 
@@ -175,7 +178,26 @@ python scripts/validate_env.py
 
 ## 13. 后续接入大模型前的注意事项
 
-阶段 3A 才考虑大模型摘要。在接入前需要确认：
+阶段 3A 已提供可选 LLM 摘要，但默认关闭。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key。
+
+无 API Key 场景本地测试：
+
+```powershell
+cd E:\starlink_intel_weekly
+python scripts/llm_summarize.py
+python scripts/llm_summarize.py --enabled
+python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --max-source-items 10 --max-history-records 20 --max-run-history 200
+```
+
+后续如需启用 API Key 场景，只在本地 `.env` 或 GitHub Secrets 中配置占位项对应的真实值，不要写入代码：
+
+```text
+LLM_ENABLED=true
+OPENAI_API_KEY=...
+OPENAI_MODEL=...
+```
+
+启用前需要确认：
 
 - 当前官方来源采集链路稳定；
 - `check_outputs.py --strict` 长期通过；
@@ -184,3 +206,5 @@ python scripts/validate_env.py
 - 不允许把页面级记录包装成确定事实；
 - 不允许把 hash 变化解释成事实变化；
 - 新增来源必须先更新 `sources.yml`、审计脚本和安全边界说明。
+
+阶段 3A 的 LLM 摘要只基于本地结构化来源数据。无来源不写结论，页面级记录不扩展成具体事实，LLM 输出保存在 `data/llm_summaries.json`，审计结果保存在 `data/llm_audit.json`，两者均不覆盖原始采集数据。

@@ -1,0 +1,18 @@
+{
+  "errors": [],
+  "generated_at": "2026-06-17T21:03:41+08:00",
+  "guardrails": {
+    "no_external_knowledge": true,
+    "no_unsourced_claims": true,
+    "page_level_no_fact_expansion": true,
+    "strict_source": true
+  },
+  "input_records": 0,
+  "llm_enabled": true,
+  "llm_status": "skipped_no_api_key",
+  "model": "gpt-4o-mini",
+  "reason": "OPENAI_API_KEY is not configured.",
+  "summary_generated": false,
+  "validation_status": "skipped",
+  "warnings": []
+}
