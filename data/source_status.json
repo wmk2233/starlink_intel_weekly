@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-17T13:13:11+00:00",
+  "generated_at": "2026-06-22T05:29:20+00:00",
   "sources": {
     "spacex_official_launches": {
       "average_confidence": 0.35,
@@ -16,7 +16,7 @@
       "http_status": 200,
       "items_collected": 1,
       "last_changed_at": "2026-06-17T18:23:48+08:00",
-      "last_checked_at": "2026-06-17T13:13:11+00:00",
+      "last_checked_at": "2026-06-22T05:29:19+00:00",
       "new_items": 0,
       "parser_version": "rule_based_html_v4",
       "previous_page_hash": "afd623b148154a55",
@@ -43,7 +43,7 @@
       "http_status": 200,
       "items_collected": 1,
       "last_changed_at": "2026-06-17T17:43:22+08:00",
-      "last_checked_at": "2026-06-17T13:13:11+00:00",
+      "last_checked_at": "2026-06-22T05:29:19+00:00",
       "new_items": 0,
       "parser_version": "rule_based_html_v4",
       "previous_page_hash": "34d4db5ebd0e1223",

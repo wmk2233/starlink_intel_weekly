@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-17T13:13:11+00:00",
+  "generated_at": "2026-06-22T05:29:20+00:00",
   "weeks": {
     "2026-W25": {
       "changed_items": 0,
@@ -21,6 +21,27 @@
       "summary_path": "weekly/2026-W25-summary.md",
       "unchanged_items": 2,
       "week_id": "2026-W25"
+    },
+    "2026-W26": {
+      "changed_items": 0,
+      "details_exists": true,
+      "details_path": "weekly/2026-W26-details.md",
+      "dominant_extracted_level": "page_level",
+      "dominant_quality": "low",
+      "generated_at": "2026-06-22T05:29:19+00:00",
+      "index_exists": true,
+      "index_path": "weekly/2026-W26.md",
+      "llm_audit_path": "data/llm_audit.json",
+      "llm_enabled": false,
+      "llm_status": "skipped",
+      "llm_summary_path": "data/llm_summaries.json",
+      "new_items": 0,
+      "reachable_sources": 2,
+      "sources_total": 2,
+      "summary_exists": true,
+      "summary_path": "weekly/2026-W26-summary.md",
+      "unchanged_items": 2,
+      "week_id": "2026-W26"
     }
   }
 }
