@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-22T05:29:20+00:00",
+  "generated_at": "2026-06-29T04:58:34+00:00",
   "sources": {
     "spacex_official_launches": {
       "average_confidence": 0.35,
@@ -16,7 +16,7 @@
       "http_status": 200,
       "items_collected": 1,
       "last_changed_at": "2026-06-17T18:23:48+08:00",
-      "last_checked_at": "2026-06-22T05:29:19+00:00",
+      "last_checked_at": "2026-06-29T04:58:34+00:00",
       "new_items": 0,
       "parser_version": "rule_based_html_v4",
       "previous_page_hash": "afd623b148154a55",
@@ -32,19 +32,19 @@
       "average_confidence": 0.35,
       "candidate_links_total": 0,
       "category": "official_updates",
-      "change_status": "unchanged",
+      "change_status": "changed",
       "changed_items": 0,
       "collector": "rule_based_html_v4",
-      "current_page_hash": "34d4db5ebd0e1223",
+      "current_page_hash": "f72c29d6f27b4f0d",
       "dominant_extracted_level": "page_level",
       "dominant_source_quality": "low",
       "error": null,
       "health_status": "reachable",
       "http_status": 200,
       "items_collected": 1,
-      "last_changed_at": "2026-06-17T17:43:22+08:00",
-      "last_checked_at": "2026-06-22T05:29:19+00:00",
-      "new_items": 0,
+      "last_changed_at": "2026-06-29T04:58:34+00:00",
+      "last_checked_at": "2026-06-29T04:58:34+00:00",
+      "new_items": 1,
       "parser_version": "rule_based_html_v4",
       "previous_page_hash": "34d4db5ebd0e1223",
       "reachable": true,
@@ -52,7 +52,7 @@
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "source_type": "official",
-      "unchanged_items": 1,
+      "unchanged_items": 0,
       "url": "https://www.starlink.com/updates"
     }
   }
