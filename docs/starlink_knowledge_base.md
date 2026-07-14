@@ -15,8 +15,8 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-07-14T10:58:27+08:00 | reachable | changed | 2026-07-14T10:58:27+08:00 | 正常 |
-| SpaceX Official Launches | 2026-07-14T10:58:28+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-14T12:26:25+08:00 | reachable | changed | 2026-07-14T12:26:25+08:00 | 正常 |
+| SpaceX Official Launches | 2026-07-14T12:26:26+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
@@ -80,7 +80,7 @@
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-14 10:58:27 中国标准时间+0800
+- 运行时间：2026-07-14 12:26:25 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 执行环境：Windows 10
 - Python 版本：3.11.9
@@ -104,5 +104,5 @@
 - 未变化条目数：2
 - LLM Provider：deepseek
 - LLM 模型：deepseek-v4-flash
-- LLM 摘要状态：skipped_no_api_key
+- LLM 摘要状态：generated
 

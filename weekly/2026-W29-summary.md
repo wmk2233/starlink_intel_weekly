@@ -24,7 +24,7 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：skipped_no_api_key
+状态：generated
 
 说明：
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
@@ -33,9 +33,15 @@ LLM Provider：deepseek
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实。
 
-跳过原因：DEEPSEEK_API_KEY is not configured.
+### 总体摘要
 
-当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
+本周未检测到新增或内容变化条目。所有来源均为页面级低质量记录，未生成具体发射任务、时间或技术细节。
+
+### 来源约束要点
+
+| 要点 | 来源记录 | 来源链接 | 限制说明 |
+|---|---|---|---|
+| 本周未检测到新增或内容变化条目。 | 42a0ea622e13944d、8abfee15687a5064、e7e9456a75b0c4db | https://www.starlink.com/updates<br>https://www.starlink.com/updates<br>https://www.spacex.com/launches | 所有记录均为页面级低质量，未生成具体事实。 |
 
 
 ## 3. 来源状态概览
@@ -80,7 +86,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-14 10:58:27 中国标准时间+0800
+- 运行时间：2026-07-14 12:26:25 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 是否发送邮件：否
@@ -91,4 +97,4 @@ LLM Provider：deepseek
 - 内容变化条目数：0
 - 未变化条目数：2
 - LLM Provider：deepseek
-- LLM 摘要状态：skipped_no_api_key
+- LLM 摘要状态：generated

@@ -1,20 +1,20 @@
 {
   "base_url_label": "deepseek_default",
   "errors": [],
-  "generated_at": "2026-07-14T10:58:29+08:00",
+  "generated_at": "2026-07-14T12:26:40+08:00",
   "guardrails": {
     "no_external_knowledge": true,
     "no_unsourced_claims": true,
     "page_level_no_fact_expansion": true,
     "strict_source": true
   },
-  "input_records": 0,
+  "input_records": 3,
   "llm_enabled": true,
   "llm_provider": "deepseek",
-  "llm_status": "skipped_no_api_key",
+  "llm_status": "generated",
   "model": "deepseek-v4-flash",
-  "reason": "DEEPSEEK_API_KEY is not configured.",
-  "summary_generated": false,
-  "validation_status": "skipped",
+  "reason": "LLM summary generated and validated.",
+  "summary_generated": true,
+  "validation_status": "passed",
   "warnings": []
 }
