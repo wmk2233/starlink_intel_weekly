@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 from collect_sources import (
     EXTRACTION_QUALITY_FILE,
     ITEMS_FILE,
+    ITEM_EXTRACTION_REPORT_FILE,
+    ITEM_EXTRACTION_STATE_FILE,
     SOURCE_STATUS_FILE,
     collect_all_sources,
     load_extraction_quality,
@@ -77,6 +79,9 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "new_items": "0",
         "changed_items": "0",
         "unchanged_items": "0",
+        "baseline_items": "0",
+        "item_level_items": "0",
+        "page_level_items": "0",
         "health_status": "unknown",
         "page_change_status": "unknown",
         "http_status": "unknown",
@@ -84,6 +89,9 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "source_status_path": str(SOURCE_STATUS_FILE),
         "items_path": str(ITEMS_FILE),
         "quality_path": str(EXTRACTION_QUALITY_FILE),
+        "item_extraction_state_path": "data/item_extraction_state.json",
+        "item_extraction_report_path": "data/item_extraction_report.json",
+        "item_extraction_overview": "暂无官方条目抽取结果。",
         "connected_source_count": "0",
         "reachable_source_count": "0",
         "page_changed_source_count": "0",
@@ -391,13 +399,22 @@ def group_items_by_source(source_items: list[dict[str, object]], max_source_item
 
 
 def render_changed_items_summary(source_items: list[dict[str, object]]) -> str:
-    changed_items = [item for item in source_items if item.get("change_status") in {"new", "changed"}]
+    changed_items = [
+        item
+        for item in source_items
+        if item.get("record_scope") == "item"
+        and item.get("change_status") in {"new", "changed"}
+        and not (
+            item.get("source_id") == "spacex_official_launches"
+            and item.get("starlink_relevance") != "direct"
+        )
+    ]
     if not changed_items:
-        return "本周未检测到新增或内容变化条目。"
+        return "本周未检测到新增或内容变化的结构化官方条目。"
 
     rows = [
-        "| 标题 | 来源 | 条目状态 | 解析层级 | 链接 |",
-        "|---|---|---|---|---|",
+        "| 标题 | 来源 | 官方日期文本 | 状态 | 解析层级 | 质量 | 官方链接 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for item in changed_items:
         rows.append(
@@ -406,14 +423,132 @@ def render_changed_items_summary(source_items: list[dict[str, object]]) -> str:
                 [
                     escape_table_cell(item.get("title", "")),
                     escape_table_cell(item.get("source_name", "")),
+                    escape_table_cell(item.get("date_text") or item.get("published_date_text") or "未知"),
                     escape_table_cell(item.get("change_status", "")),
                     escape_table_cell(item.get("extracted_level", "unknown")),
+                    escape_table_cell(item.get("source_quality", "unknown")),
                     format_link(item.get("url")),
                 ]
             )
             + " |"
         )
     return "\n".join(rows)
+
+
+def render_official_item_quality_table(item_report: dict[str, object]) -> str:
+    sources = item_report.get("sources", {}) if isinstance(item_report, dict) else {}
+    if not isinstance(sources, dict) or not sources:
+        return "本次没有官方条目抽取报告。"
+    rows = [
+        "| 来源 | 解析器 | 静态候选 | 浏览器候选 | 选中候选 | 详情成功/失败 | baseline/new/changed/unchanged | item/page | 层级 | 质量 | 渲染 fallback | warning |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+    ]
+    for source_id, raw in sources.items():
+        report = raw if isinstance(raw, dict) else {}
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(report.get("source_name") or source_id),
+                    escape_table_cell(report.get("parser_version") or "unknown"),
+                    escape_table_cell(report.get("static_candidate_count", 0)),
+                    escape_table_cell(report.get("rendered_candidate_count", 0)),
+                    escape_table_cell(report.get("selected_candidate_count", report.get("candidate_count", 0))),
+                    f"{report.get('detail_fetch_success', 0)}/{report.get('detail_fetch_failed', 0)}",
+                    f"{report.get('baseline_items', 0)}/{report.get('new_items', 0)}/{report.get('changed_items', 0)}/{report.get('unchanged_items', 0)}",
+                    f"{report.get('item_level_items', 0)}/{report.get('page_level_items', 0)}",
+                    escape_table_cell(report.get("dominant_extracted_level", "unknown")),
+                    escape_table_cell(report.get("dominant_source_quality", "unknown")),
+                    f"{'是' if report.get('render_fallback_used') else '否'} / {escape_table_cell(report.get('render_fallback_status', 'unknown'))}",
+                    escape_table_cell(", ".join(report.get("warnings", [])) if isinstance(report.get("warnings"), list) else ""),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(rows)
+
+
+def render_structured_official_items(source_items: list[dict[str, object]], item_report: dict[str, object]) -> str:
+    sources = item_report.get("sources", {}) if isinstance(item_report, dict) else {}
+    reports = list(sources.values()) if isinstance(sources, dict) else []
+    baseline_count = sum(int(report.get("baseline_items") or 0) for report in reports if isinstance(report, dict))
+    overview = [
+        "| 来源 | 候选 | 详情成功 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 |",
+        "|---|---:|---:|---:|---:|---:|---:|---|---|",
+    ]
+    quality_rows = [
+        "| 来源 | Item-level 数量 | 标题完整度 | 日期完整度 | 证据完整度 | 页面级 fallback |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for report in reports:
+        overview.append(
+            f"| {escape_table_cell(report.get('source_name') or report.get('source_id'))} | "
+            f"{report.get('selected_candidate_count', report.get('candidate_count', 0))} | "
+            f"{report.get('detail_fetch_success', 0)} | {report.get('baseline_items', 0)} | "
+            f"{report.get('new_items', 0)} | {report.get('changed_items', 0)} | {report.get('unchanged_items', 0)} | "
+            f"{escape_table_cell(report.get('dominant_extracted_level', 'unknown'))} | "
+            f"{escape_table_cell(report.get('dominant_source_quality', 'unknown'))} |"
+        )
+        quality_rows.append(
+            f"| {escape_table_cell(report.get('source_name') or report.get('source_id'))} | "
+            f"{report.get('item_level_items', 0)} | {display_metric(report.get('title_completeness'))} | "
+            f"{display_metric(report.get('date_completeness'))} | {display_metric(report.get('evidence_completeness'))} | "
+            f"{'是' if report.get('page_level_fallback') else '否'} |"
+        )
+
+    sections = [
+        "### 抽取概览\n\n" + "\n".join(overview),
+        "### 本周新增或变化条目\n\n" + render_changed_items_summary(source_items),
+    ]
+    if baseline_count:
+        baseline_items = [item for item in source_items if item.get("record_scope") == "item" and item.get("change_status") == "baseline"][:5]
+        baseline_rows = ["| 来源 | 标题 | 日期文本 | 质量 | 官方链接 |", "|---|---|---|---|---|"]
+        for item in baseline_items:
+            baseline_rows.append(
+                f"| {escape_table_cell(item.get('source_name'))} | {escape_table_cell(item.get('title'))} | "
+                f"{escape_table_cell(item.get('date_text') or item.get('published_date_text') or '未知')} | "
+                f"{escape_table_cell(item.get('source_quality'))} | {format_link(item.get('url'))} |"
+            )
+        sections.append(
+            "### 首次采集基线\n\n"
+            "本次为条目级解析器首次成功运行，发现的既有官方条目被标记为 baseline。"
+            "baseline 仅表示建立采集基线，不代表这些内容在本周发布。\n\n"
+            + "\n".join(baseline_rows)
+        )
+    sections.append("### 条目抽取质量\n\n" + "\n".join(quality_rows))
+    return "\n\n".join(sections)
+
+
+def render_official_item_diagnostics(source_items: list[dict[str, object]], item_report: dict[str, object]) -> str:
+    item_records = [item for item in source_items if item.get("record_scope") == "item"]
+    if not item_records:
+        item_table = "当前仅形成页面级 fallback，没有达到条目级证据门槛的记录。"
+    else:
+        rows = [
+            "| 状态 | 来源 | 标题 | 日期文本 | 相关性 | 层级 | 质量 | 字段证据 | 官方链接 |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for item in item_records:
+            field_evidence = item.get("field_evidence") or {}
+            rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        escape_table_cell(item.get("change_status")),
+                        escape_table_cell(item.get("source_name")),
+                        escape_table_cell(item.get("title")),
+                        escape_table_cell(item.get("date_text") or item.get("published_date_text") or "未知"),
+                        escape_table_cell(item.get("starlink_relevance")),
+                        escape_table_cell(item.get("extracted_level")),
+                        f"{escape_table_cell(item.get('source_quality'))}/{escape_table_cell(item.get('extraction_confidence'))}",
+                        escape_table_cell(", ".join(sorted(field_evidence)) if isinstance(field_evidence, dict) else ""),
+                        format_link(item.get("url")),
+                    ]
+                )
+                + " |"
+            )
+        item_table = "\n".join(rows)
+    return render_official_item_quality_table(item_report) + "\n\n" + item_table
 
 
 def render_page_change_notes(source_statuses: dict[str, dict[str, object]]) -> str:
@@ -446,6 +581,29 @@ def load_json_for_report(path: Path) -> dict[str, object]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def apply_item_report_to_meta(meta: dict[str, str], item_report: dict[str, object]) -> None:
+    sources = item_report.get("sources", {}) if isinstance(item_report, dict) else {}
+    reports = list(sources.values()) if isinstance(sources, dict) else []
+    reports = [report for report in reports if isinstance(report, dict)]
+    baseline = sum(int(report.get("baseline_items") or 0) for report in reports)
+    item_level = sum(int(report.get("item_level_items") or 0) for report in reports)
+    page_level = sum(int(report.get("page_level_items") or 0) for report in reports)
+    meta["baseline_items"] = str(baseline)
+    meta["item_level_items"] = str(item_level)
+    meta["page_level_items"] = str(page_level)
+    lines = [
+        f"- {report.get('source_name') or report.get('source_id')}：候选 {report.get('candidate_count', 0)} / "
+        f"条目级 {report.get('item_level_items', 0)} / 页面级 {report.get('page_level_items', 0)} / "
+        f"baseline {report.get('baseline_items', 0)} / fallback "
+        f"{'是' if report.get('page_level_fallback') else '否'} / 直接 Starlink "
+        f"{(report.get('relevance_counts') or {}).get('direct', 0) if isinstance(report.get('relevance_counts'), dict) else 0}"
+        for report in reports
+    ]
+    if baseline:
+        lines.append("本次为条目级解析首次建库，baseline 条目不等同于本周新增。")
+    meta["item_extraction_overview"] = "\n".join(lines) if lines else "暂无官方条目抽取结果。"
 
 
 def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
@@ -817,6 +975,7 @@ def build_weekly_summary_markdown(
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
     llm_summary_data: dict[str, object],
+    item_report: dict[str, object],
 ) -> str:
     week_id = meta["iso_week"]
     return f"""# Starlink 情报周报总结版：{week_id}
@@ -827,13 +986,14 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3C：完成 LLM 输入与引用去重、变化层级解释和用量审计。
+当前阶段为阶段 4A：完成两个官方索引页的条目发现、详情解析、稳定 ID、baseline 与页面级 fallback。
 
 ## 2. 本周核心结论
 
 - 本周接入来源数量：{meta["connected_source_count"]}
 - 可达来源数量：{meta["reachable_source_count"]}
 - 页面发生变化的来源数量：{meta["page_changed_source_count"]}
+- baseline 条目数量：{meta["baseline_items"]}
 - 新增条目数量：{meta["new_items"]}
 - 内容变化条目数量：{meta["changed_items"]}
 - 未变化条目数量：{meta["unchanged_items"]}
@@ -842,6 +1002,10 @@ def build_weekly_summary_markdown(
 说明：本节统计结论由结构化采集结果确定性生成，不依赖大模型；后续“大模型辅助摘要”小节为单独的来源约束型摘要。
 
 {render_llm_summary_section(meta, llm_summary_data)}
+
+## 结构化官方条目
+
+{render_structured_official_items(source_items, item_report)}
 
 ## 3. 来源状态概览
 
@@ -888,6 +1052,7 @@ def build_weekly_details_markdown(
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
     history_records: list[dict[str, str]],
+    item_report: dict[str, object],
     llm_audit: dict[str, object] | None = None,
 ) -> str:
     error_note = ""
@@ -907,6 +1072,8 @@ def build_weekly_details_markdown(
 | `data/items.jsonl` | 结构化采集条目 |
 | `data/source_status.json` | 来源状态与变化检测 |
 | `data/extraction_quality.json` | 解析质量诊断 |
+| `data/item_extraction_state.json` | 条目 stable ID、baseline 与历史状态 |
+| `data/item_extraction_report.json` | 本次官方条目发现与详情解析报告 |
 | `data/llm_audit.json` | 可选 LLM 摘要审计 |
 | `data/llm_summaries.json` | 可选 LLM 摘要输出 |
 | `data/llm_usage.jsonl` | 限长的 LLM 状态、token 与耗时记录 |
@@ -933,11 +1100,15 @@ def build_weekly_details_markdown(
 
 {render_evidence_sections(source_items, int(meta.get("max_source_items", "10")))}
 
+## 官方条目解析诊断
+
+{render_official_item_diagnostics(source_items, item_report)}
+
 ## 8. 局限性
 
 - 当前仅接入两个官方来源；
-- 当前仅进行规则化静态 HTML 解析；
-- 动态渲染页面可能只能形成页面级记录；
+- 静态候选为 0 时才会按 `auto` 模式尝试受控 Chromium 索引渲染；
+- 浏览器不可用、候选为空或详情证据不足时会保留页面级 fallback；
 - hash 变化不等于事实变化；
 - 解析质量分数不代表事实重要性；
 - 不编造发布时间、发射时间、任务状态、载荷数量或 Starlink 技术事实。
@@ -989,6 +1160,7 @@ def build_legacy_markdown(
     source_statuses: dict[str, dict[str, object]],
     quality_sources: dict[str, dict[str, object]],
     history_records: list[dict[str, str]],
+    item_report: dict[str, object],
 ) -> str:
     # Legacy mode keeps the old single-file shape but rewrites bounded content instead of appending forever.
     return build_weekly_details_markdown(
@@ -998,6 +1170,7 @@ def build_legacy_markdown(
         source_statuses=source_statuses,
         quality_sources=quality_sources,
         history_records=history_records,
+        item_report=item_report,
     ).replace("Starlink 情报周报明细版", "Starlink 情报周报")
 
 
@@ -1022,12 +1195,15 @@ def write_weekly_outputs(
     quality_sources: dict[str, dict[str, object]],
     llm_summary_data: dict[str, object],
     llm_audit: dict[str, object],
+    item_report: dict[str, object],
 ) -> None:
     history_records = load_existing_history([paths["details"], paths["index"]])
     history_records.append(meta)
     history_records = history_records[-max_records:]
 
-    summary_content = build_weekly_summary_markdown(meta, source_items, source_statuses, quality_sources, llm_summary_data)
+    summary_content = build_weekly_summary_markdown(
+        meta, source_items, source_statuses, quality_sources, llm_summary_data, item_report
+    )
     details_content = build_weekly_details_markdown(
         meta,
         source_items,
@@ -1035,6 +1211,7 @@ def write_weekly_outputs(
         source_statuses,
         quality_sources,
         history_records,
+        item_report,
         llm_audit,
     )
 
@@ -1058,6 +1235,7 @@ def write_weekly_outputs(
             source_statuses,
             quality_sources,
             history_records,
+            item_report,
         )
         write_text_file(paths["index"], legacy_content, dry_run)
 
@@ -1287,13 +1465,24 @@ def append_run_history(
 
 def latest_items_for_report(max_source_items: int, source_statuses: dict[str, dict[str, object]] | None = None) -> list[dict[str, object]]:
     items = load_items(ITEMS_FILE)
-    items = sorted(items, key=lambda item: str(item.get("last_seen_at") or item.get("fetched_at") or ""), reverse=True)
+    status_priority = {"new": 0, "changed": 1, "baseline": 2, "unchanged": 3}
+    items = sorted(
+        items,
+        key=lambda item: status_priority.get(str(item.get("change_status") or ""), 4),
+    )
     if not source_statuses:
         return items[:max_source_items]
 
     selected: list[dict[str, object]] = []
     for source_id in source_statuses:
-        source_items = [item for item in items if item.get("source_id") == source_id]
+        source_items = [
+            item
+            for item in items
+            if item.get("source_id") == source_id and item.get("seen_in_current_index") is not False
+        ]
+        item_level = [item for item in source_items if item.get("record_scope") == "item"]
+        if item_level:
+            source_items = item_level
         selected.extend(source_items[:max_source_items])
     return selected
 
@@ -1359,9 +1548,10 @@ def apply_status_to_meta(meta: dict[str, str], source_statuses: dict[str, dict[s
     meta["new_items"] = str(sum(int(status.get("new_items") or 0) for status in source_statuses.values()))
     meta["changed_items"] = str(sum(int(status.get("changed_items") or 0) for status in source_statuses.values()))
     meta["unchanged_items"] = str(sum(int(status.get("unchanged_items") or 0) for status in source_statuses.values()))
+    meta["baseline_items"] = str(sum(int(status.get("baseline_items") or 0) for status in source_statuses.values()))
     meta["source_overview"] = "\n".join(
         f"- {status.get('source_name', source_id)}：{status.get('health_status', 'unknown')} / "
-        f"{status.get('change_status', 'unknown')} / 新增{status.get('new_items', 0)} / "
+        f"{status.get('change_status', 'unknown')} / baseline{status.get('baseline_items', 0)} / 新增{status.get('new_items', 0)} / "
         f"变化{status.get('changed_items', 0)} / 未变化{status.get('unchanged_items', 0)} / "
         f"解析{status.get('dominant_extracted_level', 'unknown')}:{status.get('dominant_source_quality', 'unknown')}"
         for source_id, status in source_statuses.items()
@@ -1601,6 +1791,17 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="打印将要执行的操作，不写文件、不发邮件。")
     parser.add_argument("--no-collect", action="store_true", help="不执行真实来源采集，只生成周报。")
     parser.add_argument(
+        "--render-mode",
+        choices=["auto", "never", "always"],
+        default="auto",
+        help="官方索引页受控渲染策略；默认 auto，仅在静态候选为 0 时启用。",
+    )
+    parser.add_argument(
+        "--rebootstrap-source",
+        choices=["starlink_official_updates", "spacex_official_launches"],
+        help="仅在人工明确重建基线时使用；GitHub Actions 不使用该参数。",
+    )
+    parser.add_argument(
         "--output-mode",
         choices=["dual", "legacy", "both"],
         default="dual",
@@ -1680,6 +1881,7 @@ def main() -> int:
     source_items: list[dict[str, object]] = []
     source_statuses: dict[str, dict[str, object]] = {}
     quality_sources: dict[str, dict[str, object]] = {}
+    item_report: dict[str, object] = {}
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
@@ -1687,7 +1889,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：3C LLM 去重、变化分层、配置分级与用量审计。")
+    print("当前阶段：4A 官方条目发现、详情解析、稳定 ID、baseline 与 fallback。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -1697,8 +1899,10 @@ def main() -> int:
         print("已按 --no-collect 参数跳过真实来源采集。")
         source_statuses = load_statuses_for_report()
         quality_sources = load_quality_for_report()
+        item_report = load_json_for_report(ITEM_EXTRACTION_REPORT_FILE)
         apply_status_to_meta(meta, source_statuses)
         apply_quality_to_meta(meta, quality_sources, source_statuses)
+        apply_item_report_to_meta(meta, item_report)
         source_items = latest_items_for_report(args.max_source_items, source_statuses)
         meta["source_names"] = "、".join(str(status.get("source_name", source_id)) for source_id, status in source_statuses.items()) or "无"
         meta["source_item_count"] = str(len(source_items))
@@ -1709,6 +1913,9 @@ def main() -> int:
             dry_run=args.dry_run,
             save_raw=False,
             fail_on_error=False,
+            render_mode=args.render_mode,
+            bootstrap_mode="baseline",
+            rebootstrap_source=args.rebootstrap_source,
         )
         collection_errors = collection_result.errors
         meta["source_names"] = "、".join(collection_result.sources) if collection_result.sources else "无"
@@ -1720,6 +1927,8 @@ def main() -> int:
         quality_sources = quality_sources_from_data(collection_result.extraction_quality)
         apply_status_to_meta(meta, source_statuses)
         apply_quality_to_meta(meta, quality_sources, source_statuses)
+        item_report = collection_result.item_extraction_report
+        apply_item_report_to_meta(meta, item_report)
         source_items = collection_result.items or latest_items_for_report(args.max_source_items, source_statuses)
 
     llm_return_code, llm_audit = run_llm_summary(
@@ -1754,6 +1963,7 @@ def main() -> int:
         quality_sources=quality_sources,
         llm_summary_data=llm_summary_data,
         llm_audit=llm_audit,
+        item_report=item_report,
     )
     manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
     update_weekly_archive_index(manifest, args.dry_run)
@@ -1780,7 +1990,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "3C",
+        "stage": "4A",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -1793,6 +2003,10 @@ def main() -> int:
         "source_overview": meta["source_overview"],
         "quality_overview": meta["quality_overview"],
         "quality_generated": meta["quality_generated"],
+        "baseline_items": meta["baseline_items"],
+        "item_level_items": meta["item_level_items"],
+        "page_level_items": meta["page_level_items"],
+        "item_extraction_overview": meta["item_extraction_overview"],
         "summary_file": paths["summary"].name,
         "details_file": paths["details"].name,
         "index_file": paths["index"].name,

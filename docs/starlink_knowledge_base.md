@@ -15,15 +15,15 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-07-14T05:59:08+00:00 | reachable | changed | 2026-07-14T05:59:08+00:00 | 正常 |
-| SpaceX Official Launches | 2026-07-14T05:59:09+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-14T15:04:29+08:00 | reachable | changed | 2026-07-14T15:04:29+08:00 | 正常 |
+| SpaceX Official Launches | 2026-07-14T15:04:45+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |
 |---|---|---|---:|---:|
-| Starlink Official Updates | page_level | low | 0.35 | 0 |
-| SpaceX Official Launches | page_level | low | 0.35 | 0 |
+| Starlink Official Updates | item_level | high | 0.9 | 0 |
+| SpaceX Official Launches | page_level | low | 0.35 | 1 |
 
 ## 周报输出结构
 
@@ -82,14 +82,27 @@
 - LLM 输出与原始采集数据分离。
 - 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
+## 阶段 4A 官方条目抽取知识
+
+- 两个官方索引页先做静态候选发现，静态候选为 0 时才受控运行 Playwright；
+- 允许路径仅为 Starlink `/updates/<slug>` 与 SpaceX `/launches/<slug>`；
+- item-level ID 由 `source_id + canonical_url` 生成，内容变化不改变稳定 ID；
+- 首次成功 item-level 抽取建立 baseline，历史条目不属于本周新增；
+- 页面级 hash 与条目级 baseline/new/changed/unchanged 是不同检测层级；
+- 条目缺失于当前索引时不删除历史，只把 `seen_in_current_index` 更新为 false；
+- SpaceX 的 Starlink 助推器历史提及属于 incidental，只有 direct 条目进入核心结论；
+- `data/item_extraction_state.json` 保存 bootstrap 和 stable ID 状态；
+- `data/item_extraction_report.json` 保存候选、详情成功/失败、fallback 和变化计数；
+- 浏览器不可用或证据不足时使用 page-level fallback，不编造标题、日期、任务状态或载荷事实。
+
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-14 05:59:08 UTC+0000
+- 运行时间：2026-07-14 15:04:29 中国标准时间+0800
 - ISO 周编号：2026-W29
-- 执行环境：Linux 6.17.0-1018-azure
-- Python 版本：3.11.15
+- 执行环境：Windows 10
+- Python 版本：3.11.9
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W29-summary.md
@@ -105,12 +118,12 @@
 - 页面变化状态概览：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
 - 新增条目数：0
 - 内容变化条目数：0
-- 未变化条目数：2
+- 未变化条目数：0
 - LLM Provider：deepseek
 - LLM 模型：deepseek-v4-flash
-- LLM 摘要状态：generated
-- LLM 输入记录（去重前 / 后）：3 / 2
-- LLM 唯一来源 URL：2
-- LLM Total tokens：5325
-- LLM API 调用耗时：10412.53 ms
+- LLM 摘要状态：skipped
+- LLM 输入记录（去重前 / 后）：5 / 3
+- LLM 唯一来源 URL：3
+- LLM Total tokens：unknown
+- LLM API 调用耗时：unknown ms
 

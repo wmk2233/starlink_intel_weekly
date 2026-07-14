@@ -1,5 +1,18 @@
 # Release Notes
 
+## v0.4A：官方条目级抽取
+
+- 为两个既有官方索引页增加静态候选发现、详情解析和受控 Playwright fallback；
+- 新增 `starlink_updates_item_v1` 与 `spacex_launches_item_v1` 模块化解析器；
+- 条目 ID 只基于 `source_id + canonical_url`，内容变化不改变 ID；
+- 新增 `data/item_extraction_state.json` 与 `data/item_extraction_report.json`；
+- 首次成功抽取建立 baseline，历史条目不会误报为本周 new；
+- 保留历史条目并使用 `seen_in_current_index` 标记当前索引可见性；
+- 浏览器或详情解析失败时回退到 page-level，不阻断周报主流程；
+- 周报、邮件与 Actions Summary 增加官方条目抽取诊断；
+- LLM 默认关闭，item-level 优先，SpaceX 核心内容只接受 direct Starlink 相关条目；
+- 未新增来源，未接入搜索引擎或第三方发射日程网站。
+
 ## v0.2G-stable：官方来源自动化周报稳定版
 
 阶段 2G 是进入大模型摘要阶段前的稳定版整理。目标是让当前自动化链路可长期运行、可复查、可交接，并明确安全边界。

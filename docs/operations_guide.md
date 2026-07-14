@@ -225,3 +225,24 @@ DEEPSEEK_API_KEY=<真实 API Key>
 `data/llm_usage.jsonl` 最多保留 200 条，只记录 provider、model、状态、输入去重数量、token 数量和调用耗时；不记录 API Key、完整 prompt、完整 response 或费用。token 缺失时显示 `unknown`，这是兼容不同 provider 响应格式的正常状态。
 
 Workflow 使用 `actions/checkout@v5` 与 `actions/setup-python@v6`，对应 Node.js 24 运行时。非敏感配置放 GitHub Variables，API Key 放 GitHub Secrets。创建 Variables 后，旧的 `LLM_ENABLED`、`LLM_PROVIDER`、`DEEPSEEK_MODEL`、`DEEPSEEK_BASE_URL` Secrets 需要用户在 GitHub 网页手动删除，代码不能自动代办。
+
+## 15. 阶段 4A 官方条目抽取运维
+
+日常只读诊断：
+
+```powershell
+python scripts/diagnose_official_pages.py --all --no-write
+python scripts/collect_sources.py --max-source-items 10 --render-mode auto --dry-run
+```
+
+`auto` 模式只在静态候选为 0 时启动 Playwright。浏览器不可用、索引候选为空、详情请求失败或详情证据不足时，来源保留 page-level fallback。此状态不表示官方页面没有内容，也不能扩展为具体事件事实。
+
+`data/item_extraction_state.json` 保存每个来源的 bootstrap 状态和已知 stable ID；`data/item_extraction_report.json` 保存本次候选数、详情成功/失败数、baseline/new/changed/unchanged 和 fallback 状态。两者不保存完整 HTML、Secrets 或 API Key。
+
+首次成功 item-level 抽取会把当前条目全部标记为 baseline，防止历史条目误报为本周 new。只有明确需要重建基线时，人工运行：
+
+```powershell
+python scripts/collect_sources.py --source-id starlink_official_updates --rebootstrap-source starlink_official_updates
+```
+
+该操作会改变变化检测语义，执行前应先备份数据并人工确认。GitHub Actions 永远不传入 `--rebootstrap-source`。

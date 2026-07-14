@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -15,6 +17,23 @@ from urllib.parse import urldefrag, urljoin, urlsplit, urlunsplit
 import requests
 import yaml
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from parsers.common import (
+    ItemCandidate,
+    ParsedOfficialItem,
+    candidates_from_dom_links,
+    discover_candidates,
+    item_content_hash as official_item_content_hash,
+    merge_candidates as merge_official_candidates,
+    parser_quality,
+    stable_item_id,
+)
+from parsers.spacex_launches import PARSER_VERSION as SPACEX_PARSER_VERSION
+from parsers.spacex_launches import parse_official_item as parse_spacex_launch
+from parsers.starlink_updates import PARSER_VERSION as STARLINK_PARSER_VERSION
+from parsers.starlink_updates import parse_official_item as parse_starlink_update
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,9 +41,11 @@ SOURCES_FILE = PROJECT_ROOT / "sources.yml"
 ITEMS_FILE = PROJECT_ROOT / "data" / "items.jsonl"
 SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
+ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json"
+ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
-USER_AGENT = "Mozilla/5.0 starlink-intel-weekly/0.4"
-COLLECTOR_NAME = "rule_based_html_v4"
+USER_AGENT = "starlink-intel-weekly/phase4a (+official-source-monitoring)"
+COLLECTOR_NAME = "official_item_extraction_v1"
 PARSER_VERSION = COLLECTOR_NAME
 SUPPORTED_SOURCE_IDS = {"starlink_official_updates", "spacex_official_launches"}
 
@@ -107,6 +128,9 @@ class CollectResult:
     errors: list[str]
     source_statuses: dict[str, dict[str, Any]] = field(default_factory=dict)
     extraction_quality: dict[str, Any] = field(default_factory=dict)
+    item_extraction_state: dict[str, Any] = field(default_factory=dict)
+    item_extraction_report: dict[str, Any] = field(default_factory=dict)
+    baseline_count: int = 0
     new_count: int = 0
     changed_count: int = 0
     unchanged_count: int = 0
@@ -114,6 +138,8 @@ class CollectResult:
     wrote_items: bool = False
     wrote_status: bool = False
     wrote_quality: bool = False
+    wrote_item_state: bool = False
+    wrote_item_report: bool = False
 
     @property
     def page_change_status(self) -> str:
@@ -129,6 +155,21 @@ class CollectResult:
         statuses = sorted({str(status.get("health_status", "unknown")) for status in self.source_statuses.values()})
         return ",".join(statuses)
 
+
+@dataclass
+class OfficialExtractionOutcome:
+    items: list[dict[str, Any]] = field(default_factory=list)
+    candidates: list[ItemCandidate] = field(default_factory=list)
+    static_candidate_count: int = 0
+    rendered_candidate_count: int = 0
+    detail_fetch_success: int = 0
+    detail_fetch_failed: int = 0
+    page_level_fallback: bool = False
+    render_fallback_used: bool = False
+    render_fallback_status: str = "not_needed"
+    parser_version: str = "unknown"
+    extraction_succeeded: bool = False
+    warnings: list[str] = field(default_factory=list)
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -196,9 +237,8 @@ def load_source_status(path: Path = SOURCE_STATUS_FILE) -> dict[str, Any]:
 
 
 def write_source_status(status: dict[str, Any], path: Path = SOURCE_STATUS_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     status["generated_at"] = now_iso()
-    path.write_text(json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    write_json_atomic(path, status)
 
 
 def load_extraction_quality(path: Path = EXTRACTION_QUALITY_FILE) -> dict[str, Any]:
@@ -220,10 +260,65 @@ def load_extraction_quality(path: Path = EXTRACTION_QUALITY_FILE) -> dict[str, A
 
 
 def write_extraction_quality(quality: dict[str, Any], path: Path = EXTRACTION_QUALITY_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     quality["generated_at"] = now_iso()
     quality["parser_version"] = PARSER_VERSION
-    path.write_text(json.dumps(quality, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    write_json_atomic(path, quality)
+
+
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    os.replace(temporary, path)
+
+
+def load_item_extraction_state(path: Path = ITEM_EXTRACTION_STATE_FILE) -> dict[str, Any]:
+    default = {"version": 1, "generated_at": None, "sources": {}}
+    if not path.exists():
+        return default
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print(f"条目抽取状态文件无法解析，将使用未完成 baseline 的内存状态：{path}")
+        return default
+    if not isinstance(payload, dict):
+        return default
+    if not isinstance(payload.get("sources"), dict):
+        payload["sources"] = {}
+    payload["version"] = 1
+    return payload
+
+
+def load_item_extraction_report(path: Path = ITEM_EXTRACTION_REPORT_FILE) -> dict[str, Any]:
+    default = {"version": 1, "generated_at": None, "sources": {}}
+    if not path.exists():
+        return default
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+    if not isinstance(payload, dict):
+        return default
+    if not isinstance(payload.get("sources"), dict):
+        payload["sources"] = {}
+    return payload
+
+
+def write_item_extraction_state(state: dict[str, Any], path: Path = ITEM_EXTRACTION_STATE_FILE) -> None:
+    state["version"] = 1
+    state["generated_at"] = now_iso()
+    write_json_atomic(path, state)
+
+
+def write_item_extraction_report(report: dict[str, Any], path: Path = ITEM_EXTRACTION_REPORT_FILE) -> None:
+    report["version"] = 1
+    report["stage"] = "4A"
+    report["generated_at"] = now_iso()
+    write_json_atomic(path, report)
 
 
 def make_item_id(url: str, title: str) -> str:
@@ -295,17 +390,6 @@ def is_source_related_url(source: dict[str, Any], url: str, text: str = "") -> b
     if source_id == "spacex_official_launches":
         return any(keyword in searchable for keyword in ("launch", "launches", "mission", "missions", "starlink"))
     return False
-
-
-def title_from_slug(url: str, fallback: str) -> str:
-    path = urlsplit(url).path.strip("/")
-    if not path:
-        return fallback
-    slug = path.split("/")[-1] or path.split("/")[0]
-    words = re.sub(r"[-_]+", " ", slug).strip()
-    if not words or words.lower() in {"updates", "launches", "launch"}:
-        return fallback
-    return words.title()
 
 
 def nearby_heading(link_node: Any) -> str:
@@ -483,7 +567,7 @@ def extract_anchor_candidates(source: dict[str, Any], soup: BeautifulSoup) -> li
             continue
 
         fallback = str(source.get("name") or source.get("id") or "Official Source")
-        title = link_text or heading or title_from_slug(normalized, fallback)
+        title = link_text or heading or fallback
         matched = match_keywords(f"{normalized} {title} {text}", keywords)
         candidates.append(
             {
@@ -655,7 +739,7 @@ def build_page_level_item(fetch: SourceFetch, candidates: list[dict[str, Any]]) 
         summary = "规则化采集生成 SpaceX Official Launches 页面级记录。未编造发射时间、任务状态或载荷数量。"
     else:
         summary = "规则化采集生成 Starlink Official Updates 页面级记录。未编造发布时间或具体技术事实。"
-    return build_item(
+    item = build_item(
         source=source,
         title=title or fallback_title,
         url=str(source["url"]),
@@ -669,6 +753,13 @@ def build_page_level_item(fetch: SourceFetch, candidates: list[dict[str, Any]]) 
         candidate_links=candidate_links_payload(candidates),
         extraction_notes="页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。",
     )
+    item["id"] = compute_hash(f"{source['id']}|page|{source['url']}")
+    item["canonical_url"] = str(source["url"])
+    item["record_scope"] = "page"
+    item["record_type"] = "official_page_monitor"
+    item["seen_in_current_index"] = True
+    item["content_hash"] = item_content_hash(item)
+    return item
 
 
 def build_items_from_candidates(fetch: SourceFetch, candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -679,7 +770,7 @@ def build_items_from_candidates(fetch: SourceFetch, candidates: list[dict[str, A
 
     for candidate in candidates:
         url = str(candidate.get("url") or "")
-        title = str(candidate.get("title") or title_from_slug(url, str(source.get("name") or "Official Source")))
+        title = str(candidate.get("title") or source.get("name") or "Official Source")
         if source_url and url == source_url:
             continue
 
@@ -716,17 +807,200 @@ def build_items_from_candidates(fetch: SourceFetch, candidates: list[dict[str, A
     return list(items_by_id.values())
 
 
-def extract_items(fetch: SourceFetch, limit: int) -> list[dict[str, Any]]:
+def _requests_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        backoff_factor=0.4,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update(
+        {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        }
+    )
+    return session
+
+
+def render_index_candidates(fetch: SourceFetch, timeout_seconds: int = 30, max_scrolls: int = 5) -> tuple[list[ItemCandidate], str]:
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return [], "browser_unavailable"
+
+    links: list[dict[str, Any]] = []
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=USER_AGENT)
+            page.route(
+                "**/*",
+                lambda route: route.abort()
+                if route.request.resource_type in {"image", "media", "font"}
+                else route.continue_(),
+            )
+            page.goto(
+                str(fetch.source["url"]),
+                wait_until="domcontentloaded",
+                timeout=timeout_seconds * 1000,
+            )
+            page.wait_for_timeout(7000)
+            for _ in range(max_scrolls):
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(700)
+            links = page.locator("a[href]").evaluate_all(
+                """elements => elements.slice(0, 500).map(anchor => ({
+                    href: anchor.href || '',
+                    text: (anchor.innerText || anchor.textContent || '').trim().slice(0, 240),
+                    heading: ((anchor.closest('article,section,li') || anchor.parentElement)
+                        ?.querySelector('h1,h2,h3,h4')?.innerText || '').trim().slice(0, 240),
+                    context: ((anchor.closest('article,section,li') || anchor.parentElement)?.innerText || '')
+                        .trim().slice(0, 800)
+                }))"""
+            )
+            browser.close()
+    except PlaywrightTimeoutError:
+        return [], "timeout"
+    except Exception as exc:  # Browser startup and DOM errors are a non-blocking fallback.
+        return [], f"failed:{exc.__class__.__name__}"
+    return candidates_from_dom_links(str(fetch.source["id"]), str(fetch.source["url"]), links), "success"
+
+
+def fetch_detail_html(session: requests.Session, url: str, timeout: int = 15, max_bytes: int = 2_000_000) -> tuple[str, int | None, str | None]:
+    try:
+        response = session.get(url, timeout=timeout, stream=True)
+        status = response.status_code
+        response.raise_for_status()
+        content_type = str(response.headers.get("Content-Type") or "").lower()
+        if "html" not in content_type:
+            return "", status, "detail_not_html"
+        chunks: list[bytes] = []
+        size = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            size += len(chunk)
+            if size > max_bytes:
+                return "", status, "detail_too_large"
+            chunks.append(chunk)
+        encoding = response.encoding or "utf-8"
+        return b"".join(chunks).decode(encoding, errors="replace"), status, None
+    except requests.RequestException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        return "", status, exc.__class__.__name__
+
+
+def parsed_item_to_record(
+    parsed: ParsedOfficialItem,
+    source: dict[str, Any],
+    fetched_at: str,
+    http_status: int | None,
+    discovery_method: str,
+) -> dict[str, Any]:
+    quality, confidence = parser_quality(parsed)
+    record = parsed.to_dict()
+    canonical_url = record.pop("canonical_url")
+    record.update(
+        {
+            "id": stable_item_id(parsed.source_id, canonical_url),
+            "canonical_url": canonical_url,
+            "url": canonical_url,
+            "source_name": source.get("name"),
+            "source_type": source.get("source_type"),
+            "reliability_tier": source.get("reliability_tier"),
+            "language": source.get("language"),
+            "fetched_at": fetched_at,
+            "http_status": http_status,
+            "record_scope": "item",
+            "date_text": record.get("published_date_text"),
+            "discovery_method": discovery_method,
+            "extracted_level": "item_level",
+            "source_quality": quality,
+            "extraction_confidence": confidence,
+            "collector": COLLECTOR_NAME,
+            "candidate_links": [],
+            "matched_keywords": ["starlink"] if parsed.starlink_relevance == "direct" else [],
+            "extraction_notes": "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。",
+            "seen_in_current_index": True,
+        }
+    )
+    record["content_hash"] = official_item_content_hash(record)
+    return record
+
+
+def extract_official_items(
+    fetch: SourceFetch,
+    max_source_items: int,
+    render_mode: str = "auto",
+) -> OfficialExtractionOutcome:
+    source_id = str(fetch.source.get("id") or "")
+    parser_version = STARLINK_PARSER_VERSION if source_id == "starlink_official_updates" else SPACEX_PARSER_VERSION
+    outcome = OfficialExtractionOutcome(parser_version=parser_version)
+    static_candidates = discover_candidates(fetch.html, source_id, str(fetch.source["url"]))
+    outcome.static_candidate_count = len(static_candidates)
+    candidates = list(static_candidates)
+
+    should_render = render_mode == "always" or (render_mode == "auto" and not static_candidates)
+    if should_render:
+        outcome.render_fallback_used = True
+        rendered, render_status = render_index_candidates(fetch)
+        outcome.rendered_candidate_count = len(rendered)
+        outcome.render_fallback_status = render_status
+        candidates = merge_official_candidates([*candidates, *rendered])
+        if render_status != "success":
+            outcome.warnings.append(f"render_fallback_{render_status}")
+    elif render_mode == "never":
+        outcome.render_fallback_status = "disabled"
+
+    outcome.candidates = candidates[:max_source_items]
+    session = _requests_session()
+    parser = parse_starlink_update if source_id == "starlink_official_updates" else parse_spacex_launch
+    for index, candidate in enumerate(outcome.candidates):
+        if index:
+            time.sleep(0.2)
+        detail_html, status, error = fetch_detail_html(session, candidate.canonical_url)
+        if error:
+            outcome.detail_fetch_failed += 1
+            outcome.warnings.append(f"detail_fetch_{error}")
+            continue
+        parsed = parser(
+            detail_html,
+            candidate.canonical_url,
+            candidate.index_evidence or candidate.evidence,
+            candidate.title,
+        )
+        if parsed is None:
+            outcome.detail_fetch_failed += 1
+            outcome.warnings.append("detail_parse_insufficient_evidence")
+            continue
+        outcome.detail_fetch_success += 1
+        outcome.items.append(
+            parsed_item_to_record(parsed, fetch.source, fetch.fetched_at, status, candidate.origin)
+        )
+
+    outcome.extraction_succeeded = bool(outcome.items)
+    if not outcome.items:
+        candidate_payload = [
+            {"url": candidate.canonical_url, "title": candidate.title, "matched_keywords": []}
+            for candidate in outcome.candidates
+        ]
+        outcome.items = [build_page_level_item(fetch, candidate_payload)]
+        outcome.page_level_fallback = True
+    return outcome
+
+
+def extract_items(fetch: SourceFetch, limit: int, render_mode: str = "auto") -> OfficialExtractionOutcome:
     source_id = fetch.source.get("id")
     if source_id not in SUPPORTED_SOURCE_IDS:
         print(f"跳过当前阶段未支持的来源：{source_id}")
-        return []
-
-    candidates = extract_source_candidates(fetch)
-    items = build_items_from_candidates(fetch, candidates, limit)
-    if not items:
-        items = [build_page_level_item(fetch, candidates)]
-    return items[:limit]
+        return OfficialExtractionOutcome(warnings=["unsupported_source"])
+    return extract_official_items(fetch, limit, render_mode)
 
 
 def apply_item_change_metadata(
@@ -768,14 +1042,95 @@ def apply_item_change_metadata(
     return new_count, changed_count, unchanged_count
 
 
-def write_items_upsert(new_items: list[dict[str, Any]], path: Path = ITEMS_FILE) -> tuple[int, int, int, int]:
+def apply_official_item_baseline_metadata(
+    items: list[dict[str, Any]],
+    existing_by_id: dict[str, dict[str, Any]],
+    source_state: dict[str, Any],
+    extraction_succeeded: bool,
+    rebootstrap: bool = False,
+) -> tuple[int, int, int, int]:
+    if rebootstrap:
+        source_state["bootstrap_completed"] = False
+        source_state["bootstrap_completed_at"] = None
+
+    baseline_count = 0
+    new_count = 0
+    changed_count = 0
+    unchanged_count = 0
+    bootstrap_completed = bool(source_state.get("bootstrap_completed"))
+    state_items = source_state.setdefault("items", {})
+    source_state["last_attempt_at"] = now_iso()
+
+    for item in items:
+        if item.get("record_scope") != "item":
+            continue
+        item_id = str(item.get("id") or "")
+        fetched_at = str(item.get("fetched_at") or now_iso())
+        current_hash = str(item.get("content_hash") or official_item_content_hash(item))
+        existing = existing_by_id.get(item_id)
+        item["content_hash"] = current_hash
+        item["last_seen_at"] = fetched_at
+        item["first_seen_at"] = (existing or {}).get("first_seen_at") or fetched_at
+
+        if not bootstrap_completed:
+            item["change_status"] = "baseline"
+            item["previous_content_hash"] = (existing or {}).get("content_hash")
+            item["last_changed_at"] = (existing or {}).get("last_changed_at") or fetched_at
+            baseline_count += 1
+        elif not existing:
+            item["change_status"] = "new"
+            item["previous_content_hash"] = None
+            item["last_changed_at"] = fetched_at
+            new_count += 1
+        elif existing.get("content_hash") != current_hash:
+            item["change_status"] = "changed"
+            item["previous_content_hash"] = existing.get("content_hash")
+            item["last_changed_at"] = fetched_at
+            changed_count += 1
+        else:
+            item["change_status"] = "unchanged"
+            item["previous_content_hash"] = existing.get("content_hash")
+            item["last_changed_at"] = existing.get("last_changed_at") or item["first_seen_at"]
+            unchanged_count += 1
+
+        state_items[item_id] = {
+            "canonical_url": item.get("canonical_url") or item.get("url"),
+            "content_hash": current_hash,
+            "first_seen_at": item.get("first_seen_at"),
+            "last_seen_at": fetched_at,
+        }
+
+    if extraction_succeeded:
+        source_state["last_success_at"] = now_iso()
+        if not bootstrap_completed:
+            source_state["bootstrap_completed"] = True
+            source_state["bootstrap_completed_at"] = now_iso()
+    else:
+        source_state.setdefault("bootstrap_completed", bootstrap_completed)
+        source_state["last_failure_at"] = now_iso()
+    source_state["known_item_count"] = len(state_items)
+    return baseline_count, new_count, changed_count, unchanged_count
+
+
+def write_items_upsert(
+    new_items: list[dict[str, Any]],
+    path: Path = ITEMS_FILE,
+    processed_source_ids: set[str] | None = None,
+) -> tuple[int, int, int, int, int]:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_items = load_items(path)
     by_id = {item.get("id"): item for item in existing_items if item.get("id")}
 
-    new_count = sum(1 for item in new_items if item.get("change_status") == "new")
-    changed_count = sum(1 for item in new_items if item.get("change_status") == "changed")
-    unchanged_count = sum(1 for item in new_items if item.get("change_status") == "unchanged")
+    if processed_source_ids:
+        for existing in by_id.values():
+            if existing.get("record_scope") == "item" and existing.get("source_id") in processed_source_ids:
+                existing["seen_in_current_index"] = False
+
+    item_level = [item for item in new_items if item.get("record_scope") == "item"]
+    baseline_count = sum(1 for item in item_level if item.get("change_status") == "baseline")
+    new_count = sum(1 for item in item_level if item.get("change_status") == "new")
+    changed_count = sum(1 for item in item_level if item.get("change_status") == "changed")
+    unchanged_count = sum(1 for item in item_level if item.get("change_status") == "unchanged")
 
     for item in new_items:
         item_id = item.get("id")
@@ -790,11 +1145,13 @@ def write_items_upsert(new_items: list[dict[str, Any]], path: Path = ITEMS_FILE)
         key=lambda item: str(item.get("last_seen_at") or item.get("fetched_at") or ""),
         reverse=True,
     )
-    with path.open("w", encoding="utf-8", newline="\n") as file:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as file:
         for item in ordered:
             file.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
+    os.replace(temporary, path)
 
-    return new_count, changed_count, unchanged_count, len(ordered)
+    return baseline_count, new_count, changed_count, unchanged_count, len(ordered)
 
 
 def dominant_value(values: list[str], rank: dict[str, int], default: str = "unknown") -> str:
@@ -810,6 +1167,19 @@ def summarize_quality_fields(items: list[dict[str, Any]]) -> dict[str, Any]:
     qualities = [str(item.get("source_quality") or "unknown") for item in items]
     confidences = [float(item.get("extraction_confidence") or 0) for item in items]
     candidate_links_total = sum(len(item.get("candidate_links") or []) for item in items)
+    item_records = [item for item in items if item.get("record_scope") == "item"]
+    page_records = [item for item in items if item.get("record_scope") == "page"]
+
+    def completeness(field: str) -> float | None:
+        if not item_records:
+            return None
+        return round(sum(bool(item.get(field)) for item in item_records) / len(item_records), 2)
+
+    field_evidence_complete = 0
+    for item in item_records:
+        evidence = item.get("field_evidence") or {}
+        if isinstance(evidence, dict) and evidence.get("title") and evidence.get("evidence"):
+            field_evidence_complete += 1
 
     return {
         "dominant_extracted_level": dominant_value(levels, LEVEL_RANK),
@@ -818,6 +1188,12 @@ def summarize_quality_fields(items: list[dict[str, Any]]) -> dict[str, Any]:
         "candidate_links_total": candidate_links_total,
         "level_counts": dict(sorted(Counter(levels).items())),
         "quality_counts": dict(sorted(Counter(qualities).items())),
+        "item_level_count": len(item_records),
+        "page_level_count": len(page_records),
+        "title_completeness": completeness("title"),
+        "date_completeness": completeness("published_at"),
+        "evidence_completeness": completeness("evidence"),
+        "field_evidence_completeness": round(field_evidence_complete / len(item_records), 2) if item_records else None,
     }
 
 
@@ -838,13 +1214,19 @@ def build_extraction_quality_summary(status: dict[str, Any], items: list[dict[st
         "health_status": status.get("health_status"),
         "change_status": status.get("change_status"),
         "items_collected": status.get("items_collected", len(items)),
-        "parser_version": PARSER_VERSION,
+        "parser_version": status.get("parser_version") or PARSER_VERSION,
         "dominant_extracted_level": quality["dominant_extracted_level"],
         "dominant_source_quality": quality["dominant_source_quality"],
         "average_confidence": quality["average_confidence"],
         "candidate_links_total": quality["candidate_links_total"],
         "level_counts": quality["level_counts"],
         "quality_counts": quality["quality_counts"],
+        "item_level_count": quality["item_level_count"],
+        "page_level_count": quality["page_level_count"],
+        "title_completeness": quality["title_completeness"],
+        "date_completeness": quality["date_completeness"],
+        "evidence_completeness": quality["evidence_completeness"],
+        "field_evidence_completeness": quality["field_evidence_completeness"],
         "notes": notes[:5],
     }
 
@@ -853,9 +1235,12 @@ def update_source_status(
     status: dict[str, Any],
     fetch: SourceFetch,
     items: list[dict[str, Any]],
+    baseline_count: int,
     new_count: int,
     changed_count: int,
     unchanged_count: int,
+    outcome: OfficialExtractionOutcome | None = None,
+    bootstrap_completed: bool | None = None,
 ) -> dict[str, Any]:
     sources = status.setdefault("sources", {})
     source = fetch.source
@@ -893,6 +1278,7 @@ def update_source_status(
         "previous_page_hash": previous_page_hash,
         "last_changed_at": last_changed_at,
         "items_collected": len(items),
+        "baseline_items": baseline_count,
         "new_items": new_count,
         "changed_items": changed_count,
         "unchanged_items": unchanged_count,
@@ -900,16 +1286,25 @@ def update_source_status(
         "dominant_source_quality": quality["dominant_source_quality"],
         "average_confidence": quality["average_confidence"],
         "candidate_links_total": quality["candidate_links_total"],
+        "candidate_count": len(outcome.candidates) if outcome else 0,
+        "detail_fetch_success": outcome.detail_fetch_success if outcome else 0,
+        "detail_fetch_failed": outcome.detail_fetch_failed if outcome else 0,
+        "item_level_items": quality["item_level_count"],
+        "page_level_items": quality["page_level_count"],
+        "page_level_fallback": outcome.page_level_fallback if outcome else True,
+        "render_fallback_used": outcome.render_fallback_used if outcome else False,
+        "render_fallback_status": outcome.render_fallback_status if outcome else "unknown",
+        "bootstrap_completed": bool(bootstrap_completed),
         "error": fetch.error,
         "collector": COLLECTOR_NAME,
-        "parser_version": PARSER_VERSION,
+        "parser_version": outcome.parser_version if outcome else PARSER_VERSION,
     }
     sources[source_id] = source_status
     return source_status
 
 
 def write_failed_source_status(status: dict[str, Any], fetch: SourceFetch) -> dict[str, Any]:
-    return update_source_status(status, fetch, [], 0, 0, 0)
+    return update_source_status(status, fetch, [], 0, 0, 0, 0)
 
 
 def save_raw_html(source_id: str, html: str, fetched_at: str) -> Path:
@@ -924,12 +1319,54 @@ def collect_source(
     source: dict[str, Any],
     existing_items: dict[str, dict[str, Any]],
     source_status: dict[str, Any],
+    item_extraction_state: dict[str, Any],
+    item_extraction_report: dict[str, Any],
     limit: int = 20,
     save_raw: bool = False,
     dry_run: bool = False,
+    render_mode: str = "auto",
+    rebootstrap: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
     fetch = fetch_source(source)
     if not fetch.reachable:
+        states = item_extraction_state.setdefault("sources", {})
+        state = states.setdefault(source["id"], {"bootstrap_completed": False, "items": {}})
+        state["parser_version"] = STARLINK_PARSER_VERSION if source["id"] == "starlink_official_updates" else SPACEX_PARSER_VERSION
+        state["last_attempt_at"] = fetch.fetched_at
+        state["last_failure_at"] = fetch.fetched_at
+        state["last_candidate_count"] = 0
+        state["last_item_count"] = 0
+        state["last_error_type"] = "index_fetch_failed"
+        item_extraction_report.setdefault("sources", {})[source["id"]] = {
+            "source_id": source["id"],
+            "source_name": source.get("name"),
+            "index_url": source.get("url"),
+            "checked_at": fetch.fetched_at,
+            "parser_version": STARLINK_PARSER_VERSION if source["id"] == "starlink_official_updates" else SPACEX_PARSER_VERSION,
+            "static_candidate_count": 0,
+            "rendered_candidate_count": 0,
+            "selected_candidate_count": 0,
+            "candidate_count": 0,
+            "detail_fetch_success": 0,
+            "detail_fetch_failed": 0,
+            "item_level_items": 0,
+            "page_level_items": 0,
+            "page_level_fallback": True,
+            "render_fallback_used": False,
+            "render_fallback_status": "not_run",
+            "dominant_extracted_level": "unknown",
+            "dominant_source_quality": "unknown",
+            "title_completeness": None,
+            "date_completeness": None,
+            "evidence_completeness": None,
+            "field_evidence_completeness": None,
+            "bootstrap_completed": bool(state.get("bootstrap_completed")),
+            "baseline_items": 0,
+            "new_items": 0,
+            "changed_items": 0,
+            "unchanged_items": 0,
+            "warnings": ["index_fetch_failed"],
+        }
         status = write_failed_source_status(source_status, fetch)
         message = f"{source.get('name', source.get('id'))} 采集失败：{fetch.error}"
         print(message)
@@ -941,9 +1378,77 @@ def collect_source(
     elif save_raw and dry_run:
         print("[dry-run] 已请求页面，但不会保存原始 HTML。")
 
-    items = extract_items(fetch, limit)
-    new_count, changed_count, unchanged_count = apply_item_change_metadata(items, existing_items)
-    status = update_source_status(source_status, fetch, items, new_count, changed_count, unchanged_count)
+    outcome = extract_items(fetch, limit, render_mode)
+    items = outcome.items
+    item_records = [item for item in items if item.get("record_scope") == "item"]
+    page_records = [item for item in items if item.get("record_scope") == "page"]
+    if page_records:
+        apply_item_change_metadata(page_records, existing_items)
+
+    states = item_extraction_state.setdefault("sources", {})
+    state = states.setdefault(
+        source["id"],
+        {"bootstrap_completed": False, "bootstrap_completed_at": None, "known_item_count": 0, "items": {}},
+    )
+    state["parser_version"] = outcome.parser_version
+    state["last_candidate_count"] = len(outcome.candidates)
+    state["last_item_count"] = len(item_records)
+    state["last_error_type"] = None if outcome.extraction_succeeded else (
+        sorted(set(outcome.warnings))[0] if outcome.warnings else "item_extraction_empty"
+    )
+    baseline_count, new_count, changed_count, unchanged_count = apply_official_item_baseline_metadata(
+        item_records,
+        existing_items,
+        state,
+        extraction_succeeded=outcome.extraction_succeeded,
+        rebootstrap=rebootstrap,
+    )
+    status = update_source_status(
+        source_status,
+        fetch,
+        items,
+        baseline_count,
+        new_count,
+        changed_count,
+        unchanged_count,
+        outcome=outcome,
+        bootstrap_completed=state.get("bootstrap_completed"),
+    )
+    quality = summarize_quality_fields(items)
+    relevance_counts = dict(
+        sorted(Counter(str(item.get("starlink_relevance") or "unknown") for item in item_records).items())
+    )
+    item_extraction_report.setdefault("sources", {})[source["id"]] = {
+        "source_id": source["id"],
+        "source_name": source.get("name"),
+        "index_url": source.get("url"),
+        "checked_at": fetch.fetched_at,
+        "parser_version": outcome.parser_version,
+        "static_candidate_count": outcome.static_candidate_count,
+        "rendered_candidate_count": outcome.rendered_candidate_count,
+        "selected_candidate_count": len(outcome.candidates),
+        "candidate_count": len(outcome.candidates),
+        "detail_fetch_success": outcome.detail_fetch_success,
+        "detail_fetch_failed": outcome.detail_fetch_failed,
+        "item_level_items": len(item_records),
+        "page_level_items": len(page_records),
+        "page_level_fallback": outcome.page_level_fallback,
+        "render_fallback_used": outcome.render_fallback_used,
+        "render_fallback_status": outcome.render_fallback_status,
+        "dominant_extracted_level": quality["dominant_extracted_level"],
+        "dominant_source_quality": quality["dominant_source_quality"],
+        "title_completeness": quality["title_completeness"],
+        "date_completeness": quality["date_completeness"],
+        "evidence_completeness": quality["evidence_completeness"],
+        "field_evidence_completeness": quality["field_evidence_completeness"],
+        "relevance_counts": relevance_counts,
+        "bootstrap_completed": bool(state.get("bootstrap_completed")),
+        "baseline_items": baseline_count,
+        "new_items": new_count,
+        "changed_items": changed_count,
+        "unchanged_items": unchanged_count,
+        "warnings": sorted(set(outcome.warnings))[:10],
+    }
     print_source_summary(status)
     return items, status, None
 
@@ -953,13 +1458,18 @@ def print_source_summary(status: dict[str, Any]) -> None:
     print(f"HTTP 状态：{status.get('http_status')}")
     print(f"页面状态：{status.get('health_status')}")
     print(f"页面变化状态：{status.get('change_status')}")
+    print(f"候选数量：{status.get('candidate_count')}")
+    print(f"详情成功/失败：{status.get('detail_fetch_success')}/{status.get('detail_fetch_failed')}")
     print(f"采集条目数：{status.get('items_collected')}")
+    print(f"baseline 条目数：{status.get('baseline_items')}")
     print(f"新增条目数：{status.get('new_items')}")
     print(f"变化条目数：{status.get('changed_items')}")
     print(f"未变化条目数：{status.get('unchanged_items')}")
     print(f"主导解析层级：{status.get('dominant_extracted_level')}")
     print(f"主导解析质量：{status.get('dominant_source_quality')}")
     print(f"平均解析置信度：{status.get('average_confidence')}")
+    print(f"页面级 fallback：{status.get('page_level_fallback')}")
+    print(f"受控渲染状态：{status.get('render_fallback_status')}")
 
 
 def collect_all_sources(
@@ -968,6 +1478,9 @@ def collect_all_sources(
     dry_run: bool = False,
     save_raw: bool = False,
     fail_on_error: bool = False,
+    render_mode: str = "auto",
+    bootstrap_mode: str = "baseline",
+    rebootstrap_source: str | None = None,
 ) -> CollectResult:
     try:
         sources = load_sources()
@@ -990,6 +1503,8 @@ def collect_all_sources(
     existing_items = {item.get("id"): item for item in load_items() if item.get("id")}
     source_status = load_source_status()
     extraction_quality = load_extraction_quality()
+    item_extraction_state = load_item_extraction_state()
+    item_extraction_report = load_item_extraction_report()
     quality_sources = extraction_quality.setdefault("sources", {})
     all_items: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -1006,9 +1521,13 @@ def collect_all_sources(
             source,
             existing_items=existing_items,
             source_status=source_status,
+            item_extraction_state=item_extraction_state,
+            item_extraction_report=item_extraction_report,
             limit=limit,
             save_raw=save_raw,
             dry_run=dry_run,
+            render_mode=render_mode,
+            rebootstrap=rebootstrap_source == source_id_value,
         )
         source_statuses[source["id"]] = status
         quality_sources[source["id"]] = build_extraction_quality_summary(status, items)
@@ -1026,26 +1545,46 @@ def collect_all_sources(
         errors=errors,
         source_statuses=source_statuses,
         extraction_quality=extraction_quality,
+        item_extraction_state=item_extraction_state,
+        item_extraction_report=item_extraction_report,
     )
-    result.new_count = sum(1 for item in all_items if item.get("change_status") == "new")
-    result.changed_count = sum(1 for item in all_items if item.get("change_status") == "changed")
-    result.unchanged_count = sum(1 for item in all_items if item.get("change_status") == "unchanged")
+    result.baseline_count = sum(
+        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "baseline"
+    )
+    result.new_count = sum(
+        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "new"
+    )
+    result.changed_count = sum(
+        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "changed"
+    )
+    result.unchanged_count = sum(
+        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "unchanged"
+    )
     result.total_items = len(existing_items)
 
     if dry_run:
         print(f"[dry-run] 本次解析 {len(all_items)} 条记录，不写入 {ITEMS_FILE}。")
         print(f"[dry-run] 不写入 {SOURCE_STATUS_FILE}。")
         print(f"[dry-run] 不写入 {EXTRACTION_QUALITY_FILE}。")
+        print(f"[dry-run] 不写入 {ITEM_EXTRACTION_STATE_FILE}。")
+        print(f"[dry-run] 不写入 {ITEM_EXTRACTION_REPORT_FILE}。")
         return result
 
     if all_items:
-        new_count, changed_count, unchanged_count, total_items = write_items_upsert(all_items)
+        baseline_count, new_count, changed_count, unchanged_count, total_items = write_items_upsert(
+            all_items,
+            processed_source_ids=set(source_statuses),
+        )
+        result.baseline_count = baseline_count
         result.new_count = new_count
         result.changed_count = changed_count
         result.unchanged_count = unchanged_count
         result.total_items = total_items
         result.wrote_items = True
-        print(f"{ITEMS_FILE} 已更新：新增 {new_count} 条，变化 {changed_count} 条，未变化 {unchanged_count} 条，当前总计 {total_items} 条。")
+        print(
+            f"{ITEMS_FILE} 已更新：baseline {baseline_count} 条，新增 {new_count} 条，"
+            f"变化 {changed_count} 条，未变化 {unchanged_count} 条，当前总计 {total_items} 条。"
+        )
     else:
         result.total_items = len(load_items())
         print("本次未采集到有效条目，未更新 data/items.jsonl。")
@@ -1057,14 +1596,38 @@ def collect_all_sources(
     write_extraction_quality(extraction_quality)
     result.wrote_quality = True
     print(f"{EXTRACTION_QUALITY_FILE} 已更新。")
+
+    write_item_extraction_state(item_extraction_state)
+    result.wrote_item_state = True
+    print(f"{ITEM_EXTRACTION_STATE_FILE} 已更新。")
+
+    write_item_extraction_report(item_extraction_report)
+    result.wrote_item_report = True
+    print(f"{ITEM_EXTRACTION_REPORT_FILE} 已更新。")
     return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="采集官方来源页面并写入 JSONL。")
     parser.add_argument("--source-id", help="只采集指定来源。")
-    parser.add_argument("--limit", type=int, default=20, help="每个来源最多输出或写入的本次采集记录数，默认 20。")
-    parser.add_argument("--dry-run", action="store_true", help="执行采集和解析，但不写入 data/items.jsonl。")
+    parser.add_argument(
+        "--limit",
+        "--max-source-items",
+        dest="limit",
+        type=int,
+        default=10,
+        help="每个来源最多请求和解析的候选详情数，默认 10。",
+    )
+    parser.add_argument("--render-mode", choices=["auto", "never", "always"], default="auto")
+    parser.add_argument("--bootstrap-mode", choices=["baseline"], default="baseline")
+    parser.add_argument("--rebootstrap-source", choices=sorted(SUPPORTED_SOURCE_IDS))
+    parser.add_argument(
+        "--dry-run",
+        "--no-write",
+        dest="dry_run",
+        action="store_true",
+        help="执行采集和解析，但不写入任何 data 文件。",
+    )
     parser.add_argument("--save-raw", action="store_true", help="保存原始 HTML 到 data/raw/，该目录不提交。")
     parser.add_argument("--fail-on-error", action="store_true", help="任一来源采集失败时返回非 0。")
     args = parser.parse_args()
@@ -1079,11 +1642,15 @@ def main() -> int:
         dry_run=args.dry_run,
         save_raw=args.save_raw,
         fail_on_error=args.fail_on_error,
+        render_mode=args.render_mode,
+        bootstrap_mode=args.bootstrap_mode,
+        rebootstrap_source=args.rebootstrap_source,
     )
 
     print(
         f"采集汇总：来源 {len(result.sources)} 个，解析 {len(result.items)} 条，"
-        f"新增 {result.new_count} 条，变化 {result.changed_count} 条，未变化 {result.unchanged_count} 条，错误 {len(result.errors)} 个。"
+        f"baseline {result.baseline_count} 条，新增 {result.new_count} 条，变化 {result.changed_count} 条，"
+        f"未变化 {result.unchanged_count} 条，错误 {len(result.errors)} 个。"
     )
 
     if result.errors and args.fail_on_error:

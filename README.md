@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持官方条目发现、详情页解析、稳定 ID、首次 baseline、页面级 fallback、双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -14,6 +14,30 @@
 - 阶段 3A 已增加可选的大模型摘要模块，但默认关闭，无 API Key 时自动跳过且不阻断主流程。
 - 阶段 3B 已支持 DeepSeek provider 和受控 LLM 验证，默认 provider 为 `deepseek`，但 LLM 默认仍关闭。
 - 阶段 3C 已增加 LLM 输入与引用去重、页面级/条目级变化分层、用量审计、GitHub Variables/Secrets 分级和 Node.js 24 Actions 版本。
+- 阶段 4A 已增加两个官方索引页的 item-level 抽取、详情证据、URL 稳定 ID、首次 baseline、防历史误报、受控 Playwright fallback 和 item-level 优先机制。
+
+## 阶段 4A 官方条目级抽取
+
+- 静态发现依次检查官方索引页锚点、JSON-LD 和有限嵌入 JSON；
+- 只接受 Starlink `/updates/<slug>` 与 SpaceX `/launches/<slug>` 同域路径；
+- `--render-mode auto` 只在静态候选为 0 时用 Playwright 受控渲染官方索引页；
+- GitHub Actions 需要安装 Chromium，运行时间会比纯静态采集更长；
+- 浏览器不可用、候选为空、详情请求失败或详情证据不足时，主流程保留 page-level fallback；
+- 条目 ID 为 `sha256(source_id + "|" + canonical_url)[:16]`，标题变化不会改变 ID；
+- 第一次成功 item-level 抽取全部记为 `baseline`，这些历史条目不属于本周新增；
+- 后续同一 canonical URL 按内容 hash 记为 `changed` 或 `unchanged`，新 URL 才记为 `new`；
+- `items.jsonl` 不删除历史条目，以 `seen_in_current_index` 标记本次索引是否仍可见；
+- SpaceX 条目只有官方标题或当前任务主句明确指向 Starlink 时才是 `direct`，助推器历史提及归为 `incidental`；
+- LLM 与周报核心内容优先使用 item-level；SpaceX 核心结论只使用 `starlink_relevance=direct`。
+
+安全诊断与只读采集：
+
+```powershell
+python scripts/diagnose_official_pages.py --all --no-write
+python scripts/collect_sources.py --max-source-items 10 --render-mode auto --dry-run
+```
+
+正式运行前先执行解析器、baseline 和质量单测。`--rebootstrap-source` 只用于人工明确重建某个来源基线，GitHub Actions 不使用该参数。
 
 ## 阶段 1B 工程加固
 
@@ -713,7 +737,7 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - SMTP 授权码和 Gitee Token 只放在本地 `.env` 或 GitHub Secrets；
 - 不要在命令行、日志、README 或代码中写入真实密钥；
 - 当前阶段只包含两个官方来源：Starlink Official Updates 与 SpaceX Official Launches；
-- 当前阶段不包含大模型总结，不编造 Starlink 或 SpaceX 发射事实；
+- LLM 摘要为可选能力且默认关闭；无 API Key 时跳过，不阻断主流程；
 - 当前阶段不使用第三方发射日程 API。
 
 ## 阶段 2A 局限性

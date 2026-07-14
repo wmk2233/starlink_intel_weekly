@@ -13,7 +13,7 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "3C"
+CURRENT_STAGE = "4A"
 
 REQUIRED_FILES = [
     "README.md",
@@ -31,16 +31,27 @@ REQUIRED_FILES = [
     "scripts/check_outputs.py",
     "scripts/audit_project.py",
     "scripts/llm_summarize.py",
+    "scripts/diagnose_official_pages.py",
+    "scripts/parsers/__init__.py",
+    "scripts/parsers/common.py",
+    "scripts/parsers/starlink_updates.py",
+    "scripts/parsers/spacex_launches.py",
+    "tests/test_official_item_parsers.py",
+    "tests/test_item_baseline_merge.py",
+    "tests/test_item_quality.py",
     "tests/test_llm_dedup.py",
     "tests/test_llm_guardrails.py",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
+    "docs/parser_reconnaissance.md",
     "RELEASE_NOTES.md",
     "weekly/index.md",
     "data/items.jsonl",
     "data/source_status.json",
     "data/extraction_quality.json",
+    "data/item_extraction_state.json",
+    "data/item_extraction_report.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -62,6 +73,8 @@ SENSITIVE_SCAN_TARGETS = [
     "data/items.jsonl",
     "data/source_status.json",
     "data/extraction_quality.json",
+    "data/item_extraction_state.json",
+    "data/item_extraction_report.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -213,6 +226,10 @@ def check_workflow(report: dict[str, Any]) -> None:
         "data/llm_usage.jsonl",
         "actions/checkout@v5",
         "actions/setup-python@v6",
+        "python -m playwright install --with-deps chromium",
+        "tests.test_official_item_parsers",
+        "data/item_extraction_state.json",
+        "data/item_extraction_report.json",
         "LLM_ENABLED: ${{ vars.LLM_ENABLED || 'false' }}",
         "LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'deepseek' }}",
         "DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-flash' }}",
@@ -289,6 +306,57 @@ def check_sources(report: dict[str, Any]) -> None:
     if forbidden:
         add_issue(report, section, "sources.yml 出现未允许来源线索：" + "、".join(forbidden))
         return
+    mark_passed_if_clean(report, section)
+
+
+def check_phase4a_item_extraction(report: dict[str, Any]) -> None:
+    section = "phase4a_item_extraction"
+    common = read_text("scripts/parsers/common.py")
+    starlink = read_text("scripts/parsers/starlink_updates.py")
+    spacex = read_text("scripts/parsers/spacex_launches.py")
+    collector = read_text("scripts/collect_sources.py")
+    llm = read_text("scripts/llm_summarize.py")
+    weekly = read_text("scripts/run_weekly.py")
+    required = {
+        "common": ["class ItemCandidate", "class ParsedOfficialItem", "def stable_item_id", "source_id}|{normalized"],
+        "starlink": ["starlink_updates_item_v1", "official_update", "starlink_update"],
+        "spacex": ["spacex_launches_item_v1", "starlink_relevance", "incidental", "not_direct", "mission_status"],
+        "collector": [
+            "render_mode", "browser_unavailable", "page_level_fallback", "apply_official_item_baseline_metadata",
+            "bootstrap_completed", "seen_in_current_index", "ITEM_EXTRACTION_STATE_FILE", "ITEM_EXTRACTION_REPORT_FILE",
+        ],
+        "llm": ["sources_with_item_level", 'item.get("starlink_relevance") != "direct"', 'item_status == "baseline"'],
+        "weekly": [
+            "## 结构化官方条目",
+            "## 官方条目解析诊断",
+            "baseline 仅表示建立采集基线，不代表这些内容在本周发布",
+        ],
+    }
+    texts = {"common": common, "starlink": starlink, "spacex": spacex, "collector": collector, "llm": llm, "weekly": weekly}
+    missing = [f"{name}:{snippet}" for name, snippets in required.items() for snippet in snippets if snippet not in texts[name]]
+    if missing:
+        add_issue(report, section, "阶段 4A 实现线索缺失：" + "、".join(missing))
+        return
+    parser_text = f"{starlink}\n{spacex}"
+    for forbidden in ["Last-Modified", "last-modified", "title_from_slug", "date_from_slug"]:
+        if forbidden in parser_text:
+            add_issue(report, section, f"解析器包含禁止的推断线索：{forbidden}")
+            return
+    source_text = read_text("sources.yml").lower()
+    if any(hint in source_text for hint in FORBIDDEN_SOURCE_HINTS):
+        add_issue(report, section, "sources.yml 包含搜索引擎或第三方来源线索")
+        return
+    if "playwright>=1.49.0" not in read_text("requirements.txt"):
+        add_issue(report, section, "requirements.txt 缺少 Playwright 依赖")
+        return
+    docs = "\n".join(
+        read_text(path)
+        for path in ["README.md", "RELEASE_NOTES.md", "docs/deployment_checklist.md", "docs/operations_guide.md", "docs/parser_reconnaissance.md"]
+    )
+    for required_doc in ["baseline", "page-level fallback", "item-level", "Playwright"]:
+        if required_doc not in docs:
+            add_issue(report, section, f"阶段 4A 文档缺少：{required_doc}")
+            return
     mark_passed_if_clean(report, section)
 
 
@@ -442,13 +510,25 @@ def check_data_files(report: dict[str, Any]) -> None:
                     add_issue(report, section, "llm_usage.jsonl 的 latency_ms 必须为 null 或非负数")
                     return
 
-    for relative in ["data/source_status.json", "data/extraction_quality.json", "data/weekly_manifest.json", "data/llm_audit.json"]:
+    for relative in [
+        "data/source_status.json",
+        "data/extraction_quality.json",
+        "data/item_extraction_state.json",
+        "data/item_extraction_report.json",
+        "data/weekly_manifest.json",
+        "data/llm_audit.json",
+    ]:
         valid, data, error = json_file(PROJECT_ROOT / relative)
         if not valid:
             add_issue(report, section, f"{relative} 异常：{error}")
             return
         sources = data.get("sources", {}) if isinstance(data, dict) else {}
-        if relative in {"data/source_status.json", "data/extraction_quality.json"} and len(sources) < 2:
+        if relative in {
+            "data/source_status.json",
+            "data/extraction_quality.json",
+            "data/item_extraction_state.json",
+            "data/item_extraction_report.json",
+        } and len(sources) < 2:
             add_issue(report, section, f"{relative} 至少应包含两个来源")
             return
         if relative == "data/weekly_manifest.json":
@@ -484,6 +564,20 @@ def check_data_files(report: dict[str, Any]) -> None:
                 if not summary_valid:
                     add_issue(report, section, f"llm_status=generated 时 llm_summaries.json 异常：{summary_error}")
                     return
+        if relative == "data/item_extraction_state.json":
+            for source_id, state in sources.items():
+                if not isinstance(state, dict) or not isinstance(state.get("bootstrap_completed"), bool):
+                    add_issue(report, section, f"{source_id} 缺少有效 bootstrap_completed")
+                    return
+        if relative == "data/item_extraction_report.json":
+            required = {
+                "parser_version", "candidate_count", "detail_fetch_success", "detail_fetch_failed",
+                "baseline_items", "new_items", "changed_items", "unchanged_items", "page_level_fallback",
+            }
+            for source_id, item_report in sources.items():
+                if not isinstance(item_report, dict) or not required <= set(item_report):
+                    add_issue(report, section, f"{source_id} 的条目抽取报告字段不完整")
+                    return
     summary_path = PROJECT_ROOT / "data/llm_summaries.json"
     if summary_path.exists():
         summary_valid, _summary_data, summary_error = json_file(summary_path)
@@ -510,14 +604,14 @@ def check_weekly_outputs(report: dict[str, Any]) -> None:
     details = paths["details"].read_text(encoding="utf-8")
     index = paths["index"].read_text(encoding="utf-8")
     weekly_index = paths["weekly_index"].read_text(encoding="utf-8")
-    for required in ["本周核心结论", "来源状态概览", "解析质量概览", "页面级监测解释", "去重前输入记录"]:
+    for required in ["本周核心结论", "来源状态概览", "解析质量概览", "页面级监测解释", "去重前输入记录", "## 结构化官方条目"]:
         if required not in summary:
             add_issue(report, section, f"summary 缺少：{required}")
             return
     if "大模型辅助摘要" not in summary:
         add_issue(report, section, "summary 缺少：大模型辅助摘要")
         return
-    for required in ["来源状态诊断", "解析质量诊断", "采集条目明细", "页面级监测解释", "去重前输入记录"]:
+    for required in ["来源状态诊断", "解析质量诊断", "采集条目明细", "页面级监测解释", "去重前输入记录", "## 官方条目解析诊断"]:
         if required not in details:
             add_issue(report, section, f"details 缺少：{required}")
             return
@@ -543,6 +637,8 @@ def check_email_attachments(report: dict[str, Any]) -> None:
         "for attachment in attachments",
         "summary_file",
         "details_file",
+        "官方条目抽取情况",
+        "baseline",
     ]
     missing = [item for item in required if item not in f"{send_email}\n{run_weekly}"]
     if missing:
@@ -621,6 +717,7 @@ def build_report() -> dict[str, Any]:
     check_gitignore(report)
     check_workflow(report)
     check_sources(report)
+    check_phase4a_item_extraction(report)
     check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)

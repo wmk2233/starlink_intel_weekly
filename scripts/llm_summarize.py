@@ -59,8 +59,13 @@ ALLOWED_ITEM_FIELDS = [
     "source_type",
     "reliability_tier",
     "category",
+    "record_type",
+    "record_scope",
     "title",
     "url",
+    "canonical_url",
+    "published_at",
+    "published_date_text",
     "summary",
     "evidence",
     "change_status",
@@ -70,6 +75,12 @@ ALLOWED_ITEM_FIELDS = [
     "matched_keywords",
     "candidate_links",
     "extraction_notes",
+    "field_evidence",
+    "structured_fields",
+    "is_starlink_related",
+    "relevance_reason",
+    "starlink_relevance",
+    "seen_in_current_index",
     "last_seen_at",
     "updated_at",
     "fetched_at",
@@ -307,6 +318,21 @@ def select_items(
     source_status: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     source_statuses = (source_status or {}).get("sources", {})
+    current_items = [item for item in items if item.get("seen_in_current_index") is not False]
+    sources_with_item_level = {
+        str(item.get("source_id") or "")
+        for item in current_items
+        if item.get("record_scope") == "item" or item.get("extracted_level") == "item_level"
+    }
+    preferred: list[dict[str, Any]] = []
+    for item in current_items:
+        source_id = str(item.get("source_id") or "")
+        is_item = item.get("record_scope") == "item" or item.get("extracted_level") == "item_level"
+        if source_id in sources_with_item_level and not is_item:
+            continue
+        if source_id == "spacex_official_launches" and is_item and item.get("starlink_relevance") != "direct":
+            continue
+        preferred.append(item)
 
     def priority(item: dict[str, Any]) -> int:
         item_status = str(item.get("change_status") or "").lower()
@@ -314,16 +340,18 @@ def select_items(
             return 0
         if item_status == "changed":
             return 1
+        if item_status == "baseline":
+            return 2
         source_id = str(item.get("source_id") or "")
         page_status = source_statuses.get(source_id, {}) if isinstance(source_statuses, dict) else {}
         if item_status == "unchanged" and str(page_status.get("change_status") or "").lower() == "changed":
-            return 2
-        if item_status == "unchanged":
             return 3
-        return 4
+        if item_status == "unchanged":
+            return 4
+        return 5
 
     sorted_items = sorted(
-        items,
+        preferred,
         key=lambda item: (
             priority(item),
             -_timestamp_value(item),
@@ -357,9 +385,12 @@ def build_monitoring_context(
         new_items = int(status.get("new_items") or 0)
         changed_items = int(status.get("changed_items") or 0)
         unchanged_items = int(status.get("unchanged_items") or 0)
+        baseline_items = int(status.get("baseline_items") or 0)
         page_change_status = str(status.get("change_status") or quality.get("change_status") or "unknown")
         if new_items > 0 or changed_items > 0:
             interpretation = "当前规则检测到新增或内容变化条目，仍需结合来源链接人工复核。"
+        elif baseline_items > 0:
+            interpretation = "首次成功条目抽取已建立 baseline；这些历史条目不属于本周新增。"
         elif page_change_status == "changed":
             interpretation = "页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。"
         elif page_change_status == "unchanged":
@@ -374,6 +405,7 @@ def build_monitoring_context(
                 "page_change_status": page_change_status,
                 "new_items": new_items,
                 "changed_items": changed_items,
+                "baseline_items": baseline_items,
                 "unchanged_items": unchanged_items,
                 "extracted_level": str(
                     status.get("dominant_extracted_level")
@@ -604,6 +636,9 @@ def system_prompt() -> str:
         "不得把页面级变化写成发射任务变化、服务更新、技术升级、网络容量变化、"
         "卫星部署变化、用户数量变化或其他事件事实。\n"
         "如果记录是 page_level 或 source_quality=low，只能说明页面级监测结果，不得写成具体事件。\n"
+        "baseline 表示首次成功条目抽取形成的历史基线，不是本周新增，禁止写成 new 或本周新事件。\n"
+        "同一来源存在 item_level 时，应以条目级记录为核心，不得把 page_level 当作核心事实。\n"
+        "SpaceX 条目只有 starlink_relevance=direct 时才能进入 Starlink 核心结论。\n"
         "如果没有 new 或 changed 条目，必须明确写“本周未检测到新增或内容变化条目”。\n"
         "每条摘要必须引用已有 record id 和 URL。\n"
         "输出必须是合法 JSON。"
@@ -656,6 +691,9 @@ def build_user_prompt(
             "allowed_urls": [item.get("url") for item in selected_items],
             "no_external_sources": True,
             "page_level_low_records_must_not_be_fact_expanded": True,
+            "baseline_is_not_new": True,
+            "item_level_preferred": True,
+            "spacex_core_requires_direct_starlink_relevance": True,
         },
         "items": selected_items,
         "monitoring_context": monitoring_context or [],

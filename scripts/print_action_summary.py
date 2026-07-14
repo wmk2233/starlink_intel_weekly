@@ -11,6 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ITEMS_FILE = PROJECT_ROOT / "data" / "items.jsonl"
 SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
+ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json"
+ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
 WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
 RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 LLM_AUDIT_FILE = PROJECT_ROOT / "data" / "llm_audit.json"
@@ -98,6 +100,17 @@ def _llm_audit() -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
+def _item_extraction_report() -> dict[str, dict[str, object]]:
+    if not ITEM_EXTRACTION_REPORT_FILE.exists():
+        return {}
+    try:
+        data = json.loads(ITEM_EXTRACTION_REPORT_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    sources = data.get("sources", {}) if isinstance(data, dict) else {}
+    return sources if isinstance(sources, dict) else {}
+
+
 def _week_id() -> str:
     now = datetime.now().astimezone()
     iso = now.isocalendar()
@@ -112,13 +125,14 @@ def main() -> int:
     output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
     project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
     llm_audit = _llm_audit()
+    item_reports = _item_extraction_report()
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：3C",
+        "- 阶段：4A",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -129,17 +143,26 @@ def main() -> int:
         "- 数据文件路径：data/items.jsonl",
         "- source_status.json 路径：data/source_status.json",
         "- extraction_quality.json 路径：data/extraction_quality.json",
+        "- item_extraction_state.json 路径：data/item_extraction_state.json",
+        "- item_extraction_report.json 路径：data/item_extraction_report.json",
         "- llm_audit.json 路径：data/llm_audit.json",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
         f"- source_status.json 是否存在：{_yes_no(status_exists)}",
         f"- extraction_quality.json 是否存在：{_yes_no(quality_exists)}",
+        f"- item_extraction_state.json 是否存在：{_yes_no(ITEM_EXTRACTION_STATE_FILE.exists())}",
+        f"- item_extraction_report.json 是否存在：{_yes_no(ITEM_EXTRACTION_REPORT_FILE.exists())}",
         f"- weekly_manifest.json 是否存在：{_yes_no(WEEKLY_MANIFEST_FILE.exists())}",
         f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
         f"- llm_audit.json 是否存在：{_yes_no(LLM_AUDIT_FILE.exists())}",
         f"- llm_usage.jsonl 是否存在：{_yes_no(LLM_USAGE_FILE.exists())}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
+        "",
+        "### 官方条目抽取",
+        "",
+        "| 来源 | 解析器 | 候选 | 详情成功 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 | 渲染 fallback |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
         "",
         "### 本周输出文档",
         "",
@@ -198,6 +221,33 @@ def main() -> int:
         "| 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 |",
         "|---|---|---|---:|---:|---:|",
     ]
+    if item_reports:
+        item_rows = []
+        for source_id, report in item_reports.items():
+            item_rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        _escape_table_cell(report.get("source_name") or source_id),
+                        _escape_table_cell(report.get("parser_version", "unknown")),
+                        _escape_table_cell(report.get("candidate_count", 0)),
+                        _escape_table_cell(report.get("detail_fetch_success", 0)),
+                        _escape_table_cell(report.get("baseline_items", 0)),
+                        _escape_table_cell(report.get("new_items", 0)),
+                        _escape_table_cell(report.get("changed_items", 0)),
+                        _escape_table_cell(report.get("unchanged_items", 0)),
+                        _escape_table_cell(report.get("dominant_extracted_level", "unknown")),
+                        _escape_table_cell(report.get("dominant_source_quality", "unknown")),
+                        f"{_yes_no(bool(report.get('render_fallback_used')))} / {_escape_table_cell(report.get('render_fallback_status', 'unknown'))}",
+                    ]
+                )
+                + " |"
+            )
+        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|") + 1
+        lines[insertion:insertion] = item_rows
+    else:
+        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|") + 1
+        lines[insertion:insertion] = ["| unknown | unknown | 0 | 0 | 0 | 0 | 0 | 0 | unknown | unknown | 否 / unknown |"]
     if statuses:
         for source_id, status in statuses.items():
             lines.append(

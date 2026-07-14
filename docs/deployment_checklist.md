@@ -190,3 +190,15 @@ GitHub Actions 定时规则为：
 - 用量记录不保存 API Key、完整 prompt、完整 response 或费用；
 - Workflow 使用 `actions/checkout@v5` 与 `actions/setup-python@v6`，对应 Node.js 24；
 - GitHub Variables 与 GitHub Secrets 已按非敏感配置和真实凭据分级。
+
+## 15. 阶段 4A 官方条目抽取部署清单
+
+- `requirements.txt` 包含 `playwright>=1.49.0`；
+- Workflow 运行 `python -m playwright install --with-deps chromium`；
+- Workflow 在正式周报前运行三个解析/baseline/质量测试模块；
+- Workflow 不使用 `--rebootstrap-source`；
+- `data/item_extraction_state.json` 与 `data/item_extraction_report.json` 被显式提交；
+- 首次成功 item-level 抽取只建立 baseline，不报告为本周新增；
+- Playwright 只渲染两个官方索引页，失败时 page-level fallback 且不阻断主流程；
+- GitHub Actions 保持 LLM 默认关闭，不需要 DeepSeek/OpenAI API Key；
+- `.env`、`prompts/`、`data/raw/` 和 `data/cache/` 仍不提交。

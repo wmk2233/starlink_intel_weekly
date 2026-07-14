@@ -29,7 +29,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Test official item parsers
+        run: python -m unittest tests.test_official_item_parsers tests.test_item_baseline_merge tests.test_item_quality -v
 
       - name: Validate environment
         env:
@@ -92,7 +97,7 @@ jobs:
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add README.md RELEASE_NOTES.md .gitignore .github scripts docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/weekly_manifest.json data/run_history.jsonl data/llm_audit.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          git add README.md RELEASE_NOTES.md .gitignore .github scripts tests docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/item_extraction_state.json data/item_extraction_report.json data/weekly_manifest.json data/run_history.jsonl data/llm_audit.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
           if [ -f data/llm_summaries.json ]; then
             git add data/llm_summaries.json
           fi
@@ -100,7 +105,7 @@ jobs:
             git add data/llm_usage.jsonl
           fi
           if git diff --cached --quiet; then
-            echo "阶段 3C 自动化输出没有变化，跳过提交。"
+            echo "阶段 4A 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

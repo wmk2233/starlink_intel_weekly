@@ -65,7 +65,7 @@ def build_message(
     attachment_lines = "\n".join(f"- {path.name}" for path in attachments)
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 3C：完成 LLM 去重、变化分层、配置分级与用量审计。\n"
+        "当前阶段为阶段 4A：完成官方条目发现、详情解析、稳定 ID、baseline 与页面级 fallback。\n"
         "原始事实与状态数据来自规则化网页采集、hash 变化检测和解析质量诊断。大模型仅对本地结构化来源数据进行受约束摘要，不使用外部知识，也不生成无来源事实。\n\n"
         "LLM 摘要状态：\n"
         f"- Provider：{collection_context.get('llm_provider', 'unknown')}\n"
@@ -106,6 +106,12 @@ def build_message(
         f"新增条目数量：{collection_context.get('new_items', '未知')}\n"
         f"内容变化条目数量：{collection_context.get('changed_items', '未知')}\n"
         f"未变化条目数量：{collection_context.get('unchanged_items', '未知')}\n"
+        "\n官方条目抽取情况：\n"
+        f"- 条目级记录：{collection_context.get('item_level_items', '0')}\n"
+        f"- 页面级 fallback：{collection_context.get('page_level_items', '0')}\n"
+        f"- baseline 条目：{collection_context.get('baseline_items', '0')}\n"
+        f"{collection_context.get('item_extraction_overview', '暂无官方条目抽取结果。')}\n"
+        "本次为条目级解析首次建库，baseline 条目不等同于本周新增。\n"
         "页面级监测解释：\n"
         f"{collection_context.get('llm_monitoring_overview', '暂无页面级监测解释。')}\n\n"
         "附件：\n"

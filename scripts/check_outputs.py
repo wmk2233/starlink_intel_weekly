@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -94,6 +96,8 @@ def build_report(week_id: str) -> dict[str, Any]:
     items_path = DATA_DIR / "items.jsonl"
     source_status_path = DATA_DIR / "source_status.json"
     extraction_quality_path = DATA_DIR / "extraction_quality.json"
+    item_state_path = DATA_DIR / "item_extraction_state.json"
+    item_report_path = DATA_DIR / "item_extraction_report.json"
     weekly_manifest_path = DATA_DIR / "weekly_manifest.json"
     run_history_path = DATA_DIR / "run_history.jsonl"
     llm_audit_path = DATA_DIR / "llm_audit.json"
@@ -109,6 +113,114 @@ def build_report(week_id: str) -> dict[str, Any]:
 
     valid, error = valid_jsonl_file(items_path)
     add_check(report, "items_jsonl_valid", valid, error)
+    valid_items, item_records_all, item_error = load_jsonl_records(items_path)
+    item_records = [record for record in item_records_all if record.get("record_scope") == "item"]
+    ids = [str(record.get("id") or "") for record in item_records_all]
+    add_check(report, "item_ids_unique", valid_items and len(ids) == len(set(ids)), "items.jsonl 存在重复 ID")
+    required_item_fields = {
+        "id", "source_id", "canonical_url", "title", "summary", "evidence", "field_evidence",
+        "parser_version", "record_type", "category", "record_scope", "source_quality",
+        "extraction_confidence", "change_status", "content_hash", "seen_in_current_index",
+        "date_text", "discovery_method",
+    }
+    add_check(
+        report,
+        "official_item_fields_complete",
+        valid_items and all(required_item_fields <= set(record) for record in item_records),
+        "条目级记录存在缺失字段",
+    )
+    add_check(
+        report,
+        "official_item_status_valid",
+        all(record.get("change_status") in {"baseline", "new", "changed", "unchanged"} for record in item_records),
+        "条目级 change_status 不在允许枚举中",
+    )
+    canonical_keys = [(record.get("source_id"), record.get("canonical_url")) for record in item_records]
+    add_check(
+        report,
+        "official_item_canonical_unique",
+        len(canonical_keys) == len(set(canonical_keys)),
+        "同一来源存在重复 canonical_url",
+    )
+    def allowed_item_url(record: dict[str, Any]) -> bool:
+        url = str(record.get("canonical_url") or "")
+        parts = urlsplit(url)
+        host = (parts.hostname or "").removeprefix("www.")
+        if record.get("source_id") == "starlink_official_updates":
+            return host == "starlink.com" and parts.path.startswith("/updates/")
+        if record.get("source_id") == "spacex_official_launches":
+            return host == "spacex.com" and parts.path.startswith("/launches/")
+        return False
+
+    allowed_urls = all(allowed_item_url(record) for record in item_records)
+    add_check(report, "official_item_urls_allowed", allowed_urls, "条目级记录包含非允许官方路径")
+    stable_ids = all(
+        record.get("id")
+        == hashlib.sha256(
+            f"{record.get('source_id')}|{str(record.get('canonical_url') or '').rstrip('/')}".encode("utf-8")
+        ).hexdigest()[:16]
+        for record in item_records
+    )
+    add_check(report, "official_item_ids_stable", stable_ids, "条目 ID 不符合 source_id + canonical_url 规则")
+    confidence_valid = all(
+        record.get("source_quality") in {"medium", "high"}
+        and isinstance(record.get("extraction_confidence"), (int, float))
+        and 0.65 <= float(record["extraction_confidence"]) <= 0.95
+        for record in item_records
+    )
+    add_check(report, "official_item_quality_valid", confidence_valid, "条目级质量或置信度不符合阶段 4A 规则")
+
+    valid_state, item_state, state_error = load_json_file(item_state_path)
+    add_check(report, "item_extraction_state_valid", valid_state, state_error)
+    state_sources = item_state.get("sources", {}) if valid_state else {}
+    add_check(
+        report,
+        "item_bootstrap_state_valid",
+        isinstance(state_sources, dict)
+        and all(
+            isinstance(value, dict)
+            and isinstance(value.get("bootstrap_completed"), bool)
+            and bool(value.get("parser_version"))
+            and "last_candidate_count" in value
+            and "last_item_count" in value
+            and "last_error_type" in value
+            for value in state_sources.values()
+        ),
+        "baseline/bootstrap 状态字段缺失",
+    )
+    valid_item_report, item_report, report_error = load_json_file(item_report_path)
+    add_check(report, "item_extraction_report_valid", valid_item_report, report_error)
+    extraction_sources = item_report.get("sources", {}) if valid_item_report else {}
+    required_report_fields = {
+        "parser_version", "candidate_count", "detail_fetch_success", "detail_fetch_failed",
+        "baseline_items", "new_items", "changed_items", "unchanged_items", "item_level_items",
+        "page_level_items", "page_level_fallback", "render_fallback_status", "bootstrap_completed",
+        "static_candidate_count", "rendered_candidate_count", "selected_candidate_count",
+        "dominant_extracted_level", "dominant_source_quality", "title_completeness",
+        "date_completeness", "evidence_completeness", "field_evidence_completeness", "warnings",
+    }
+    add_check(
+        report,
+        "item_extraction_report_fields_complete",
+        isinstance(extraction_sources, dict)
+        and all(isinstance(value, dict) and required_report_fields <= set(value) for value in extraction_sources.values()),
+        "item_extraction_report.json 字段不完整",
+    )
+    serialized_items = json.dumps({"items": item_records_all, "state": item_state, "report": item_report}, ensure_ascii=False)
+    forbidden_fields = {"html", "raw_html", "api_key", "smtp_password", "gitee_remote", "token"}
+    observed_fields = {
+        str(key).lower()
+        for value in [*item_records_all, item_state, item_report]
+        if isinstance(value, dict)
+        for key in value
+    }
+    secret_shape = bool(re.search(r"sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}", serialized_items))
+    add_check(
+        report,
+        "official_item_outputs_safe",
+        not (observed_fields & forbidden_fields) and not secret_shape and "<html" not in serialized_items.lower(),
+        "条目输出包含完整 HTML、敏感字段或密钥形态",
+    )
     valid, error = valid_json_file(source_status_path)
     add_check(report, "source_status_valid", valid, error)
     valid, error = valid_json_file(extraction_quality_path)
@@ -239,6 +351,14 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_llm_provider", "LLM Provider" in summary_text, "summary 缺少 LLM Provider")
     add_check(report, "summary_has_page_monitoring", "页面级监测解释" in summary_text, "summary 缺少页面级监测解释")
     add_check(report, "summary_has_input_dedup", "去重前输入记录" in summary_text, "summary 缺少输入去重统计")
+    add_check(report, "summary_has_structured_official_items", "## 结构化官方条目" in summary_text, "summary 缺少结构化官方条目")
+    baseline_total = sum(int(value.get("baseline_items") or 0) for value in extraction_sources.values() if isinstance(value, dict)) if isinstance(extraction_sources, dict) else 0
+    add_check(
+        report,
+        "summary_has_baseline_explanation",
+        baseline_total == 0 or "baseline 仅表示建立采集基线，不代表这些内容在本周发布" in summary_text,
+        "summary 缺少 baseline 非新增说明",
+    )
 
     details_text = read_text(details_path)
     add_check(report, "details_has_source_status", "来源状态诊断" in details_text, "details 缺少“来源状态诊断”")
@@ -248,6 +368,7 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "details_has_llm_provider", "LLM Provider" in details_text, "details 缺少 LLM Provider")
     add_check(report, "details_has_page_monitoring", "页面级监测解释" in details_text, "details 缺少页面级监测解释")
     add_check(report, "details_has_input_dedup", "去重前输入记录" in details_text, "details 缺少输入去重统计")
+    add_check(report, "details_has_official_item_diagnostics", "## 官方条目解析诊断" in details_text, "details 缺少官方条目解析诊断")
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")

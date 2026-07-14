@@ -6,16 +6,17 @@
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3C：完成 LLM 输入与引用去重、变化层级解释和用量审计。
+当前阶段为阶段 4A：完成两个官方索引页的条目发现、详情解析、稳定 ID、baseline 与页面级 fallback。
 
 ## 2. 本周核心结论
 
 - 本周接入来源数量：2
 - 可达来源数量：2
 - 页面发生变化的来源数量：1
+- baseline 条目数量：1
 - 新增条目数量：0
 - 内容变化条目数量：0
-- 未变化条目数量：2
+- 未变化条目数量：0
 - 当前解析质量总体判断：low（以当前规则解析完整度为准）
 
 说明：本节统计结论由结构化采集结果确定性生成，不依赖大模型；后续“大模型辅助摘要”小节为单独的来源约束型摘要。
@@ -24,7 +25,7 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：generated
+状态：skipped
 
 说明：
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
@@ -37,51 +38,72 @@ LLM Provider：deepseek
 
 | 指标 | 数量 |
 |---|---:|
-| 去重前输入记录 | 3 |
-| 去重后输入记录 | 2 |
-| 删除重复记录 | 1 |
-| 唯一来源 URL | 2 |
-| 输出 record ID 引用（前 / 后） | 4 / 4 |
-| 输出 URL 引用（前 / 后） | 4 / 4 |
+| 去重前输入记录 | 5 |
+| 去重后输入记录 | 3 |
+| 删除重复记录 | 2 |
+| 唯一来源 URL | 3 |
+| 输出 record ID 引用（前 / 后） | 0 / 0 |
+| 输出 URL 引用（前 / 后） | 0 / 0 |
 
 ### 页面级监测解释
 
 - SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
-- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
+- Starlink Official Updates：首次成功条目抽取已建立 baseline；这些历史条目不属于本周新增。
 
 ### LLM 调用统计
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | 4101 |
-| Completion tokens | 1224 |
-| Total tokens | 5325 |
-| API 调用耗时 | 10412.53 ms |
+| Prompt tokens | unknown |
+| Completion tokens | unknown |
+| Total tokens | unknown |
+| API 调用耗时 | unknown ms |
 
-### 总体摘要
+跳过原因：LLM is disabled.
 
-本周未检测到新增或内容变化条目。
+当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
 
-### 来源约束要点
 
-| 要点 | 来源记录 | 来源链接 | 限制说明 |
-|---|---|---|---|
-| SpaceX Official Launches 页面级hash未发生变化，当前规则未检测到新增或内容变化条目。 | e7e9456a75b0c4db | https://www.spacex.com/launches | 页面级hash未变化，无新增或更改条目 |
-| Starlink Official Updates 页面级hash发生变化，但当前规则未检测到可确认的新增或内容变化条目。 | 8abfee15687a5064 | https://www.starlink.com/updates | 页面级hash变化但未检测到条目级变化 |
+## 结构化官方条目
 
+### 抽取概览
+
+| 来源 | 候选 | 详情成功 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| SpaceX Official Launches | 1 | 0 | 0 | 0 | 0 | 0 | page_level | low |
+| Starlink Official Updates | 4 | 1 | 1 | 0 | 0 | 0 | item_level | high |
+
+### 本周新增或变化条目
+
+本周未检测到新增或内容变化的结构化官方条目。
+
+### 首次采集基线
+
+本次为条目级解析器首次成功运行，发现的既有官方条目被标记为 baseline。baseline 仅表示建立采集基线，不代表这些内容在本周发布。
+
+| 来源 | 标题 | 日期文本 | 质量 | 官方链接 |
+|---|---|---|---|---|
+| Starlink Official Updates | Stargaze | May 21, 2026 | high | [链接](https://starlink.com/updates/stargaze) |
+
+### 条目抽取质量
+
+| 来源 | Item-level 数量 | 标题完整度 | 日期完整度 | 证据完整度 | 页面级 fallback |
+|---|---:|---:|---:|---:|---|
+| SpaceX Official Launches | 0 | unknown | unknown | unknown | 是 |
+| Starlink Official Updates | 1 | 1.0 | 1.0 | 1.0 | 否 |
 
 ## 3. 来源状态概览
 
 | 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 | 主导解析层级 | 主导质量 |
 |---|---|---|---:|---:|---:|---|---|
-| Starlink Official Updates | reachable | changed | 0 | 0 | 1 | page_level | low |
-| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | page_level | low |
+| Starlink Official Updates | reachable | changed | 0 | 0 | 0 | item_level | high |
+| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 0 | page_level | low |
 
 ## 4. 本周值得关注的信息
 
 ### 4.1 新增或变化条目
 
-本周未检测到新增或内容变化条目。
+本周未检测到新增或内容变化的结构化官方条目。
 
 ### 4.2 页面级变化说明
 
@@ -93,8 +115,8 @@ LLM Provider：deepseek
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |
 |---|---|---|---:|---:|
-| Starlink Official Updates | page_level | low | 0.35 | 0 |
-| SpaceX Official Launches | page_level | low | 0.35 | 0 |
+| Starlink Official Updates | item_level | high | 0.9 | 0 |
+| SpaceX Official Launches | page_level | low | 0.35 | 1 |
 
 说明：解析质量只表示规则化抽取完整度，不表示事实重要性或事实可信度。
 
@@ -112,15 +134,15 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-14 05:59:08 UTC+0000
+- 运行时间：2026-07-14 15:04:29 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0
 - 内容变化条目数：0
-- 未变化条目数：2
+- 未变化条目数：0
 - LLM Provider：deepseek
-- LLM 摘要状态：generated
+- LLM 摘要状态：skipped

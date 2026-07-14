@@ -1,53 +1,65 @@
 {
-  "generated_at": "2026-07-14T05:59:09+00:00",
-  "parser_version": "rule_based_html_v4",
+  "generated_at": "2026-07-14T15:05:00+08:00",
+  "parser_version": "official_item_extraction_v1",
   "sources": {
     "spacex_official_launches": {
       "average_confidence": 0.35,
-      "candidate_links_total": 0,
+      "candidate_links_total": 1,
       "change_status": "unchanged",
+      "date_completeness": null,
       "dominant_extracted_level": "page_level",
       "dominant_source_quality": "low",
+      "evidence_completeness": null,
+      "field_evidence_completeness": null,
       "health_status": "reachable",
       "http_status": 200,
+      "item_level_count": 0,
       "items_collected": 1,
-      "last_checked_at": "2026-07-14T05:59:09+00:00",
+      "last_checked_at": "2026-07-14T15:04:45+08:00",
       "level_counts": {
         "page_level": 1
       },
       "notes": [
         "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。"
       ],
-      "parser_version": "rule_based_html_v4",
+      "page_level_count": 1,
+      "parser_version": "spacex_launches_item_v1",
       "quality_counts": {
         "low": 1
       },
       "source_id": "spacex_official_launches",
       "source_name": "SpaceX Official Launches",
+      "title_completeness": null,
       "url": "https://www.spacex.com/launches"
     },
     "starlink_official_updates": {
-      "average_confidence": 0.35,
+      "average_confidence": 0.9,
       "candidate_links_total": 0,
       "change_status": "changed",
-      "dominant_extracted_level": "page_level",
-      "dominant_source_quality": "low",
+      "date_completeness": 1.0,
+      "dominant_extracted_level": "item_level",
+      "dominant_source_quality": "high",
+      "evidence_completeness": 1.0,
+      "field_evidence_completeness": 1.0,
       "health_status": "reachable",
       "http_status": 200,
+      "item_level_count": 1,
       "items_collected": 1,
-      "last_checked_at": "2026-07-14T05:59:08+00:00",
+      "last_checked_at": "2026-07-14T15:04:29+08:00",
       "level_counts": {
-        "page_level": 1
+        "item_level": 1
       },
       "notes": [
-        "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。"
+        "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。"
       ],
-      "parser_version": "rule_based_html_v4",
+      "page_level_count": 0,
+      "parser_version": "starlink_updates_item_v1",
       "quality_counts": {
-        "low": 1
+        "high": 1
       },
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
+      "title_completeness": 1.0,
       "url": "https://www.starlink.com/updates"
     }
   }
