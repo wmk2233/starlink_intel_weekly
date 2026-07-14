@@ -1,11 +1,11 @@
 {
-  "api_called": false,
+  "api_called": true,
   "base_url_label": "deepseek_default",
   "dedup_strategy": "source_id+normalized_url_latest_record",
   "duplicate_records_removed": 1,
   "error_type": null,
   "errors": [],
-  "generated_at": "2026-07-14T13:17:17+08:00",
+  "generated_at": "2026-07-14T05:59:19+00:00",
   "guardrails": {
     "no_external_knowledge": true,
     "no_unsourced_claims": true,
@@ -15,9 +15,9 @@
   "input_records": 2,
   "input_records_after_dedup": 2,
   "input_records_before_dedup": 3,
-  "llm_enabled": false,
+  "llm_enabled": true,
   "llm_provider": "deepseek",
-  "llm_status": "skipped",
+  "llm_status": "generated",
   "model": "deepseek-v4-flash",
   "monitoring_context": [
     {
@@ -45,19 +45,19 @@
       "unchanged_items": 1
     }
   ],
-  "output_record_references_after_dedup": 0,
-  "output_record_references_before_dedup": 0,
-  "output_url_references_after_dedup": 0,
-  "output_url_references_before_dedup": 0,
-  "reason": "LLM is disabled.",
-  "summary_generated": false,
+  "output_record_references_after_dedup": 4,
+  "output_record_references_before_dedup": 4,
+  "output_url_references_after_dedup": 4,
+  "output_url_references_before_dedup": 4,
+  "reason": "LLM summary generated and validated.",
+  "summary_generated": true,
   "unique_source_urls": 2,
   "usage": {
-    "completion_tokens": null,
-    "latency_ms": null,
-    "prompt_tokens": null,
-    "total_tokens": null
+    "completion_tokens": 1224,
+    "latency_ms": 10412.53,
+    "prompt_tokens": 4101,
+    "total_tokens": 5325
   },
-  "validation_status": "skipped",
+  "validation_status": "passed",
   "warnings": []
 }
