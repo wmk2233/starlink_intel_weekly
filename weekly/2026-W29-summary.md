@@ -6,7 +6,7 @@
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3A：引入大模型摘要，但强制来源约束。
+当前阶段为阶段 3B：支持 DeepSeek provider，并继续强制来源约束。
 
 ## 2. 本周核心结论
 
@@ -22,16 +22,18 @@
 
 ## 大模型辅助摘要
 
-当前状态：skipped
+LLM Provider：deepseek
+模型：deepseek-v4-flash
+状态：skipped_no_api_key
 
 说明：
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
-- 未配置 OpenAI API Key 时会自动跳过；
+- 未配置当前 provider 对应的 API Key 时会自动跳过；
 - 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实。
 
-跳过原因：LLM is disabled.
+跳过原因：DEEPSEEK_API_KEY is not configured.
 
 当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
 
@@ -78,14 +80,15 @@
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-13 03:57:41 UTC+0000
+- 运行时间：2026-07-14 10:58:27 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0
 - 内容变化条目数：0
 - 未变化条目数：2
-- LLM 摘要状态：skipped
+- LLM Provider：deepseek
+- LLM 摘要状态：skipped_no_api_key

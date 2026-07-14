@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化部署检查清单
 
-本清单用于阶段 2G 稳定版部署前复查。当前系统只验证官方来源自动化周报链路，不包含大模型总结，不新增来源，不编造 Starlink 或 SpaceX 事实。
+本清单用于阶段 3B 部署前复查。当前系统仍只使用两个官方来源，可选 LLM 摘要默认关闭；本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
 ## 1. 部署目标
 
@@ -56,15 +56,16 @@ GITEE_REMOTE
 
 `GITEE_REMOTE` 可以暂时不配置。未配置时，workflow 会跳过 Gitee 同步。
 
-阶段 3A 的 LLM 摘要为可选项，默认不启用。后续如需启用，需要额外配置：
+阶段 3B 的 LLM 摘要为可选项，默认不启用。若要在 GitHub Actions 中启用 DeepSeek，需要额外配置：
 
 ```text
 LLM_ENABLED=true
-OPENAI_API_KEY=...
-OPENAI_MODEL=...
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
-ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key。未配置 `OPENAI_API_KEY` 时，阶段 3A 的大模型摘要会自动跳过，不影响周报主流程。
+可选 Secret `DEEPSEEK_BASE_URL` 默认无需配置，系统默认使用 `https://api.deepseek.com`。OpenAI provider 仍可使用 `OPENAI_API_KEY` 与 `OPENAI_MODEL`。DeepSeek API Key 需要单独在 DeepSeek 平台获取，只能保存到 GitHub Secrets；API Key 不得提交。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。启用 provider 但缺少对应 API Key 时，摘要状态为 `skipped_no_api_key`，不影响周报主流程。
 
 ## 5. 邮件 SMTP 配置
 
@@ -142,6 +143,7 @@ GitHub Actions 定时规则为：
 - 不提交 `prompts/`；
 - 不提交真实 SMTP 授权码；
 - 不提交真实 Gitee Token；
+- 不提交 OpenAI 或 DeepSeek API Key；
 - 不在日志中打印完整远程地址；
 - 不读取或展示 `.env` 内容；
 - 不把页面级记录直接解释为具体情报事实；
@@ -159,10 +161,13 @@ GitHub Actions 定时规则为：
 - Summary 已展示稳定性与配置审计状态；
 - 部署检查清单、运维指南和发布说明已提交。
 
-## 13. 阶段 3A LLM 来源约束确认清单
+## 13. 阶段 3B DeepSeek 与 LLM 来源约束确认清单
 
 - LLM 默认关闭；
-- 无 `OPENAI_API_KEY` 时不阻断采集、周报、邮件、GitHub 提交和 Gitee 同步；
+- GitHub Secrets 已明确区分 `LLM_ENABLED`、`LLM_PROVIDER`、`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL`；
+- 无 `DEEPSEEK_API_KEY` 时不阻断采集、周报、邮件、GitHub 提交和 Gitee 同步；
+- DeepSeek 推荐默认模型为 `deepseek-v4-flash`，可选模型为 `deepseek-v4-pro`；
+- 不再使用 `deepseek-chat` 或 `deepseek-reasoner` 作为默认模型；
 - LLM 摘要只基于本地结构化来源数据；
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实；

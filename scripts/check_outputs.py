@@ -99,6 +99,24 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "run_history_valid", valid, error)
     valid, llm_audit, error = load_json_file(llm_audit_path)
     add_check(report, "llm_audit_valid", valid, error)
+    add_check(
+        report,
+        "llm_provider_present",
+        valid and bool(str(llm_audit.get("llm_provider") or "").strip()),
+        "llm_audit.json 缺少 llm_provider",
+    )
+    add_check(
+        report,
+        "llm_status_present",
+        valid and bool(str(llm_audit.get("llm_status") or "").strip()),
+        "llm_audit.json 缺少 llm_status",
+    )
+    add_check(
+        report,
+        "llm_model_present",
+        valid and "model" in llm_audit,
+        "llm_audit.json 缺少 model 字段",
+    )
     llm_status = str(llm_audit.get("llm_status") or "unknown") if valid else "unknown"
     if llm_status == "generated":
         valid_summary, error = valid_json_file(llm_summary_path)
@@ -114,12 +132,14 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_source_overview", "来源状态概览" in summary_text, "summary 缺少“来源状态概览”")
     add_check(report, "summary_has_quality_overview", "解析质量概览" in summary_text, "summary 缺少“解析质量概览”")
     add_check(report, "summary_has_llm_section", "大模型辅助摘要" in summary_text, "summary 缺少“大模型辅助摘要”")
+    add_check(report, "summary_has_llm_provider", "LLM Provider" in summary_text, "summary 缺少 LLM Provider")
 
     details_text = read_text(details_path)
     add_check(report, "details_has_source_status", "来源状态诊断" in details_text, "details 缺少“来源状态诊断”")
     add_check(report, "details_has_quality", "解析质量诊断" in details_text, "details 缺少“解析质量诊断”")
     add_check(report, "details_has_items", "采集条目明细" in details_text, "details 缺少“采集条目明细”")
     add_check(report, "details_has_llm_audit", "大模型摘要审计" in details_text, "details 缺少“大模型摘要审计”")
+    add_check(report, "details_has_llm_provider", "LLM Provider" in details_text, "details 缺少 LLM Provider")
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")

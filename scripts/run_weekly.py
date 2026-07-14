@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 from collect_sources import (
     EXTRACTION_QUALITY_FILE,
@@ -17,7 +20,14 @@ from collect_sources import (
     load_items,
     load_source_status,
 )
-from llm_summarize import LLM_AUDIT_FILE, LLM_SUMMARY_FILE, run_llm_summary
+from llm_summarize import (
+    DEFAULT_DEEPSEEK_BASE_URL,
+    DEFAULT_DEEPSEEK_MODEL,
+    DEFAULT_PROVIDER,
+    LLM_AUDIT_FILE,
+    LLM_SUMMARY_FILE,
+    run_llm_summary,
+)
 from send_email import send_weekly_email
 
 
@@ -41,7 +51,8 @@ SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
 QUALITY_HEADING = "## 来源解析质量诊断"
 OUTPUT_STRUCTURE_HEADING = "## 周报输出结构"
 ARCHIVE_HEADING = "## 周报归档与历史索引"
-LLM_HEADING = "## 阶段 3A 大模型摘要边界"
+LLM_HEADING = "## 阶段 3B DeepSeek Provider 与大模型摘要边界"
+LEGACY_LLM_HEADING = "## 阶段 3A 大模型摘要边界"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mode: str) -> dict[str, str]:
@@ -84,9 +95,11 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "run_history_path": "data/run_history.jsonl",
         "quality_check_status": "skipped",
         "llm_enabled": "false",
+        "llm_provider": DEFAULT_PROVIDER,
         "llm_status": "skipped",
         "llm_summary_generated": "false",
-        "llm_model": "未配置",
+        "llm_model": DEFAULT_DEEPSEEK_MODEL,
+        "llm_base_url_label": "deepseek_default",
         "llm_input_records": "0",
         "llm_validation_status": "skipped",
         "llm_reason": "LLM is disabled.",
@@ -398,9 +411,11 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     errors = audit.get("errors", [])
     warnings = audit.get("warnings", [])
     meta["llm_enabled"] = str(bool(audit.get("llm_enabled"))).lower()
+    meta["llm_provider"] = str(audit.get("llm_provider") or "unknown")
     meta["llm_status"] = str(audit.get("llm_status") or "unknown")
     meta["llm_summary_generated"] = str(bool(audit.get("summary_generated"))).lower()
     meta["llm_model"] = str(audit.get("model") or "未配置")
+    meta["llm_base_url_label"] = str(audit.get("base_url_label") or "unknown")
     meta["llm_input_records"] = str(audit.get("input_records") or 0)
     meta["llm_validation_status"] = str(audit.get("validation_status") or "unknown")
     meta["llm_reason"] = str(audit.get("reason") or "")
@@ -416,11 +431,13 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
     lines = [
         "## 大模型辅助摘要",
         "",
-        f"当前状态：{meta.get('llm_status', 'unknown')}",
+        f"LLM Provider：{meta.get('llm_provider', 'unknown')}",
+        f"模型：{meta.get('llm_model', '未配置')}",
+        f"状态：{meta.get('llm_status', 'unknown')}",
         "",
         "说明：",
         "- 本节仅在显式启用 LLM 且通过来源约束校验后生成；",
-        "- 未配置 OpenAI API Key 时会自动跳过；",
+        "- 未配置当前 provider 对应的 API Key 时会自动跳过；",
         "- 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；",
         "- 无来源不写结论；",
         "- 页面级记录不扩展成具体事实。",
@@ -469,8 +486,10 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
 def render_llm_audit_section(meta: dict[str, str]) -> str:
     rows = [
         ("LLM 是否启用", meta.get("llm_enabled", "unknown")),
+        ("LLM Provider", meta.get("llm_provider", "unknown")),
         ("LLM 状态", meta.get("llm_status", "unknown")),
         ("模型", meta.get("llm_model", "未配置")),
+        ("Base URL 类型", meta.get("llm_base_url_label", "unknown")),
         ("输入记录数", meta.get("llm_input_records", "0")),
         ("校验状态", meta.get("llm_validation_status", "unknown")),
         ("严格来源约束", meta.get("llm_strict_source", "unknown")),
@@ -509,6 +528,7 @@ def render_recent_run_summary(meta: dict[str, str]) -> str:
             f"- 新增条目数：{meta.get('new_items', '未知')}",
             f"- 内容变化条目数：{meta.get('changed_items', '未知')}",
             f"- 未变化条目数：{meta.get('unchanged_items', '未知')}",
+            f"- LLM Provider：{meta.get('llm_provider', 'unknown')}",
             f"- LLM 摘要状态：{meta.get('llm_status', 'unknown')}",
         ]
     )
@@ -706,7 +726,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3A：引入大模型摘要，但强制来源约束。
+当前阶段为阶段 3B：支持 DeepSeek provider，并继续强制来源约束。
 
 ## 2. 本周核心结论
 
@@ -981,7 +1001,10 @@ def summarize_current_week_outputs(
         "dominant_quality": dominant_quality_value(source_statuses, quality_sources),
         "dominant_extracted_level": dominant_extracted_level_value(source_statuses, quality_sources),
         "llm_enabled": meta.get("llm_enabled") == "true",
+        "llm_provider": meta.get("llm_provider", "unknown"),
         "llm_status": meta.get("llm_status", "unknown"),
+        "llm_model": meta.get("llm_model", "未配置"),
+        "llm_base_url_label": meta.get("llm_base_url_label", "unknown"),
         "llm_summary_path": meta.get("llm_summary_path", "data/llm_summaries.json"),
         "llm_audit_path": meta.get("llm_audit_path", "data/llm_audit.json"),
         "summary_exists": paths["summary"].exists(),
@@ -1136,7 +1159,10 @@ def append_run_history(
         "weekly_manifest_path": meta["weekly_manifest_path"],
         "quality_check_status": meta.get("quality_check_status", "skipped"),
         "llm_enabled": meta.get("llm_enabled") == "true",
+        "llm_provider": meta.get("llm_provider", "unknown"),
         "llm_status": meta.get("llm_status", "unknown"),
+        "llm_model": meta.get("llm_model", "未配置"),
+        "llm_base_url_label": meta.get("llm_base_url_label", "unknown"),
         "llm_summary_generated": meta.get("llm_summary_generated") == "true",
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
@@ -1313,9 +1339,10 @@ def update_archive_section_text(existing: str) -> str:
 
 
 def update_llm_section_text(existing: str) -> str:
+    existing = existing.replace(LEGACY_LLM_HEADING, LLM_HEADING)
     section = f"""{LLM_HEADING}
 
-阶段 3A 引入可选 LLM 摘要，但默认关闭。没有 `OPENAI_API_KEY` 时，系统会写入 `data/llm_audit.json` 记录跳过状态，不阻断采集、周报、邮件、GitHub 自动提交或 Gitee 同步。
+阶段 3B 在来源约束护栏不变的前提下支持 `openai` 与 `deepseek` provider，默认 provider 为 `deepseek`，默认模型为 `deepseek-v4-flash`。LLM 仍默认关闭；只有显式启用后才会尝试调用 API，缺少当前 provider 对应的 API Key 时会写入跳过审计且不阻断主流程。
 
 | 文件 | 用途 |
 |---|---|
@@ -1326,11 +1353,13 @@ def update_llm_section_text(existing: str) -> str:
 约束：
 
 - ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
-- GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key；
+- DeepSeek API Key 需要单独在 DeepSeek 平台获取，本地只写入 `.env`，GitHub Actions 只写入 GitHub Secrets；
+- 不得把任何 API Key 写入代码、文档或提交记录；
 - LLM 摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实；
 - LLM 输出与原始采集数据分离。
+- 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 """
     return replace_or_insert_section(existing, LLM_HEADING, section, before_heading="## 最近一次自动化运行记录")
 
@@ -1408,6 +1437,9 @@ def update_knowledge_base_text(
 - 新增条目数：{meta["new_items"]}
 - 内容变化条目数：{meta["changed_items"]}
 - 未变化条目数：{meta["unchanged_items"]}
+- LLM Provider：{meta["llm_provider"]}
+- LLM 模型：{meta["llm_model"]}
+- LLM 摘要状态：{meta["llm_status"]}
 """
 
     if heading not in existing:
@@ -1442,6 +1474,7 @@ def update_knowledge_base(
 
 
 def main() -> int:
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
     parser = argparse.ArgumentParser(description="生成 Starlink 情报周报自动化测试文档。")
     parser.add_argument("--no-email", action="store_true", help="只生成 Markdown，不发送邮件。")
     parser.add_argument("--dry-run", action="store_true", help="打印将要执行的操作，不写文件、不发邮件。")
@@ -1471,7 +1504,22 @@ def main() -> int:
         help="data/run_history.jsonl 最多保留的运行记录条数，默认 200。",
     )
     parser.add_argument("--enable-llm", action="store_true", help="显式启用可选 LLM 摘要。")
-    parser.add_argument("--llm-model", default=None, help="指定 OpenAI 模型；默认读取 OPENAI_MODEL。")
+    parser.add_argument(
+        "--llm-provider",
+        default=os.getenv("LLM_PROVIDER") or DEFAULT_PROVIDER,
+        help="LLM provider；默认读取 LLM_PROVIDER，否则使用 deepseek。",
+    )
+    parser.add_argument("--llm-model", default=None, help="覆盖当前 provider 的模型名称。")
+    parser.add_argument(
+        "--deepseek-model",
+        default=os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL,
+        help="DeepSeek 模型；默认读取 DEEPSEEK_MODEL。",
+    )
+    parser.add_argument(
+        "--deepseek-base-url",
+        default=os.getenv("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL,
+        help="DeepSeek OpenAI-compatible API base URL。",
+    )
     parser.add_argument("--llm-max-items", type=int, default=10, help="LLM 摘要最多处理的来源记录数，默认 10。")
     parser.add_argument("--fail-on-llm-error", action="store_true", help="LLM 调用或校验失败时阻断主流程。")
     args = parser.parse_args()
@@ -1509,7 +1557,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：3A 引入大模型摘要，但强制来源约束。")
+    print("当前阶段：3B 支持 DeepSeek provider，并保持来源约束。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -1549,11 +1597,16 @@ def main() -> int:
         dry_run=args.dry_run,
         max_items=args.llm_max_items,
         model=args.llm_model,
+        provider=args.llm_provider,
+        deepseek_model=args.deepseek_model,
+        deepseek_base_url=args.deepseek_base_url,
         strict_source=True,
         fail_on_llm_error=args.fail_on_llm_error,
     )
     apply_llm_to_meta(meta, llm_audit)
     llm_summary_data = load_json_for_report(LLM_SUMMARY_FILE) if meta.get("llm_status") == "generated" else {}
+    print(f"LLM Provider：{meta['llm_provider']}")
+    print(f"LLM 模型：{meta['llm_model']}")
     print(f"LLM 摘要状态：{meta['llm_status']}")
     if llm_return_code != 0 and args.fail_on_llm_error:
         return llm_return_code
@@ -1595,7 +1648,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "3A",
+        "stage": "3B",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -1613,6 +1666,9 @@ def main() -> int:
         "index_file": paths["index"].name,
         "weekly_archive_index": "weekly/index.md",
         "llm_enabled": meta["llm_enabled"],
+        "llm_provider": meta["llm_provider"],
+        "llm_model": meta["llm_model"],
+        "llm_base_url_label": meta["llm_base_url_label"],
         "llm_status": meta["llm_status"],
         "llm_reason": meta["llm_reason"],
         "llm_summary_generated": meta["llm_summary_generated"],

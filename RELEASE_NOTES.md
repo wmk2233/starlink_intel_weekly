@@ -129,3 +129,24 @@
 - 当前不新增第三方发射日程网站；
 - 没有 API Key 时不会生成 `data/llm_summaries.json`；
 - 即使启用 LLM，输出仍需通过来源约束校验后才展示。
+
+## v0.3B-deepseek-provider：DeepSeek Provider 与受控 LLM 验证
+
+阶段 3B 在保持 LLM 默认关闭和来源约束护栏不变的前提下，新增 DeepSeek OpenAI-compatible provider，并保留 OpenAI provider。
+
+### 核心能力
+
+- 默认 provider 为 `deepseek`，推荐默认模型为 `deepseek-v4-flash`，可选模型为 `deepseek-v4-pro`；
+- 只有显式启用 LLM 才调用 API，启用但缺少 provider API Key 时记录 `skipped_no_api_key` 且不阻断主流程；
+- `data/llm_audit.json` 增加 provider、模型和脱敏 base URL 类型；
+- 周报 summary/details、邮件正文和 GitHub Actions Summary 显示 provider 与状态；
+- `check_outputs.py` 与 `audit_project.py` 检查 DeepSeek 配置、输出字段和敏感信息风险。
+
+### 安全与事实边界
+
+- DeepSeek API Key 需要单独在 DeepSeek 平台获取；本地只写入 `.env`，GitHub Actions 只写入 GitHub Secrets；
+- API Key 不得提交，也不得写入代码、文档、JSON 或日志；
+- 不再使用 `deepseek-chat` 或 `deepseek-reasoner` 作为默认模型；
+- LLM 摘要只基于本地结构化来源数据，无来源不写结论，页面级记录不得扩展成具体事实；
+- 校验失败不覆盖旧 `data/llm_summaries.json`；
+- 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。

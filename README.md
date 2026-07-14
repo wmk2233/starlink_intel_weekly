@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引、输出质量检查和可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -12,6 +12,7 @@
 - 阶段 2F 已增加周报总索引、机器可读 manifest、运行历史和输出质量检查。
 - 阶段 2G 已增加发布前稳定性审计、部署检查清单、运维指南和 Release Notes。
 - 阶段 3A 已增加可选的大模型摘要模块，但默认关闭，无 API Key 时自动跳过且不阻断主流程。
+- 阶段 3B 已支持 DeepSeek provider 和受控 LLM 验证，默认 provider 为 `deepseek`，但 LLM 默认仍关闭。
 
 ## 阶段 1B 工程加固
 
@@ -161,7 +162,22 @@ LLM 相关输出：
 
 - `data/llm_audit.json`：记录 LLM 是否启用、是否跳过、输入记录数、校验状态和 guardrails；
 - `data/llm_summaries.json`：仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；
-- `scripts/llm_summarize.py`：独立 LLM 摘要脚本，默认不读取 `.env`，只读取环境变量。
+- `scripts/llm_summarize.py`：独立 LLM 摘要脚本；API Key 只从环境变量读取，本地可由未提交的 `.env` 注入。
+
+## 阶段 3B DeepSeek Provider 与受控验证
+
+阶段 3B 支持 DeepSeek provider，同时保留 OpenAI provider。LLM 默认关闭，只有显式设置 `LLM_ENABLED=true` 或传入 `--enable-llm` 才进入启用路径；默认 provider 为 `deepseek`，推荐默认模型为 `deepseek-v4-flash`，可选模型为 `deepseek-v4-pro`。
+
+安全与来源边界：
+
+- DeepSeek API Key 需要单独在 DeepSeek 平台获取；ChatGPT Plus 或 OpenAI API Key 不能替代 DeepSeek API Key；
+- API Key 不得提交，也不得写入代码、README、其他文档、JSON 或日志；
+- 本地使用时只写入被忽略的 `.env`，GitHub Actions 使用时只写入 GitHub Secrets；
+- 不建议再把旧模型名 `deepseek-chat` 或 `deepseek-reasoner` 作为默认值；手动配置旧名称时审计会给出 warning；
+- LLM 摘要只基于本地结构化来源数据，无来源不写结论，页面级记录不扩展成具体事实；
+- `data/llm_audit.json` 保存 provider、模型、脱敏 base URL 类型和校验状态；
+- `data/llm_summaries.json` 仅保存通过来源约束校验的摘要，与原始采集数据分离；
+- 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
 ## 项目结构
 
@@ -352,20 +368,20 @@ python scripts/audit_project.py --strict
 python scripts/audit_project.py --json
 ```
 
-阶段 3A 推荐无 API Key / LLM 默认关闭测试：
+阶段 3B 推荐 DeepSeek 无 API Key / LLM 默认关闭测试：
 
 ```powershell
-python scripts/llm_summarize.py --dry-run
-python scripts/llm_summarize.py
-python scripts/llm_summarize.py --enabled
+python scripts/llm_summarize.py --provider deepseek --dry-run
+python scripts/llm_summarize.py --provider deepseek
+python scripts/llm_summarize.py --enabled --provider deepseek
 python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-run-history 200
-python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --max-source-items 10 --max-history-records 20 --max-run-history 200
+python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --llm-provider deepseek --max-source-items 10 --max-history-records 20 --max-run-history 200
 ```
 
 预期结果：
 
 - 默认关闭时 `llm_status=skipped`；
-- 启用但无 `OPENAI_API_KEY` 时 `llm_status=skipped_no_api_key`；
+- 启用 DeepSeek 但无 `DEEPSEEK_API_KEY` 时 `llm_status=skipped_no_api_key`；
 - 两种情况都不发送真实邮件，不阻断主流程。
 
 ## 手动运行与自动运行
@@ -409,15 +425,19 @@ MAIL_FROM=your_email@example.com
 MAIL_TO=target_email@example.com
 GITEE_REMOTE=https://username:token@gitee.com/username/starlink_intel_weekly.git
 LLM_ENABLED=false
+LLM_PROVIDER=deepseek
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=your_openai_model_here
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
 LLM_MAX_ITEMS=10
 LLM_STRICT_SOURCE=true
 ```
 
 `.env` 已加入 `.gitignore`，不要把邮箱授权码、Token 或密码提交到仓库。
 
-LLM 配置是可选项。`LLM_ENABLED` 默认应保持 `false`。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；如需 GitHub Actions 自动调用大模型，必须单独配置 OpenAI API Key。
+LLM 配置是可选项，`LLM_ENABLED` 默认必须保持 `false`。DeepSeek API Key 需要单独在 DeepSeek 平台获取；本地真实 key 只写入 `.env`，API Key 不得提交。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。
 
 注意 `.env` 中每一行只能有一个等号，例如：
 
@@ -541,7 +561,7 @@ sources:
 
 `data/weekly_manifest.json` 记录每周 summary、details、兼容索引和关键统计。`data/run_history.jsonl` 记录每次自动化运行摘要，不保存 Secrets，不记录完整 Gitee Remote。
 
-`data/llm_audit.json` 记录阶段 3A 可选 LLM 摘要的状态，包括是否启用、是否跳过、输入记录数、校验状态和 guardrails。`data/llm_summaries.json` 仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；它不覆盖原始采集数据。
+`data/llm_audit.json` 记录阶段 3B 可选 LLM 摘要的 provider、模型、脱敏 base URL 类型、启用状态、输入记录数、校验状态和 guardrails。`data/llm_summaries.json` 仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；它与原始采集数据分离，不覆盖 `data/items.jsonl`。
 
 ## 配置 GitHub Secrets
 
@@ -556,8 +576,12 @@ MAIL_FROM
 MAIL_TO
 GITEE_REMOTE
 LLM_ENABLED
+LLM_PROVIDER
 OPENAI_API_KEY
 OPENAI_MODEL
+DEEPSEEK_API_KEY
+DEEPSEEK_MODEL
+DEEPSEEK_BASE_URL
 ```
 
 其中 `GITEE_REMOTE` 可以暂时不配置。未配置时，GitHub Actions 会跳过 Gitee 同步。
@@ -566,11 +590,12 @@ LLM 相关 Secrets 也是可选项。当前默认不启用 LLM；后续如需启
 
 ```text
 LLM_ENABLED=true
-OPENAI_API_KEY=...
-OPENAI_MODEL=...
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
-不要把真实 API Key 写入代码、README、workflow 或命令行。
+`DEEPSEEK_BASE_URL` 可不配置，默认使用 `https://api.deepseek.com`。不要把真实 API Key 写入代码、README、workflow、命令行或提交历史；GitHub Actions 中只使用 GitHub Secrets。
 
 ## 配置 GitHub Actions
 
@@ -581,12 +606,13 @@ OPENAI_MODEL=...
 - 使用 Python 3.11 安装依赖并运行 `python scripts/run_weekly.py`；
 - 运行 `python scripts/validate_env.py` 做 Secrets 格式检查；
 - 默认运行 `python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20` 执行真实来源采集和双文档输出；
-- 仅当 `LLM_ENABLED=true` 且 `OPENAI_API_KEY` 已配置时，才运行带 `--enable-llm` 的可选 LLM 摘要流程；
+- 只有 `LLM_ENABLED=true` 时才运行带 `--enable-llm` 的可选 LLM 摘要流程；`LLM_PROVIDER=deepseek` 使用 `DEEPSEEK_API_KEY`，`LLM_PROVIDER=openai` 使用 `OPENAI_API_KEY`；
+- 启用 provider 但缺少对应 API Key 时记录 `skipped_no_api_key`，不阻断主流程；
 - 运行 `python scripts/check_outputs.py --strict` 检查本周输出质量；
 - 运行 `python scripts/audit_project.py --strict` 执行稳定性与配置审计；
 - 自动提交 `docs/`、`weekly/`、`data/items.jsonl`、`data/source_status.json`、`data/extraction_quality.json`、`data/weekly_manifest.json`、`data/run_history.jsonl` 和 `outputs/logs/.gitkeep` 的变化到 GitHub；
 - 写入 GitHub Actions 运行摘要，展示分支、触发方式、Python 版本、更新路径和 Gitee 配置状态；
-- Summary 中展示阶段 3A、三个周报输出路径、周报归档、输出质量检查状态、稳定性与配置审计状态、LLM 摘要状态、所有来源的健康状态、页面变化状态和解析质量表；
+- Summary 中展示阶段 3B、三个周报输出路径、周报归档、输出质量检查状态、稳定性与配置审计状态、LLM provider/模型/状态、所有来源的健康状态、页面变化状态和解析质量表；
 - 使用 `concurrency` 避免同一分支上多个 weekly workflow 同时运行。
 
 ## GitHub Actions 手动运行
@@ -748,5 +774,5 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 
 - 在新的受控阶段评估 FCC、CelesTrak、arXiv、技术博客和微信公众号白名单等信息来源；
 - 增加数据去重、来源标注和结构化归档；
-- 阶段 3A 再考虑增加大模型总结、趋势分析和长期知识库自动沉淀；
+- 后续阶段再考虑趋势分析和长期知识库自动沉淀；
 - 增加失败告警、运行日志归档和更细粒度的测试。

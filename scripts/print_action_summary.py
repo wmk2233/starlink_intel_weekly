@@ -73,7 +73,10 @@ def _llm_audit() -> dict[str, object]:
     if not LLM_AUDIT_FILE.exists():
         return {
             "llm_enabled": "unknown",
+            "llm_provider": "unknown",
             "llm_status": "unknown",
+            "model": "unknown",
+            "base_url_label": "unknown",
             "summary_generated": "unknown",
         }
     try:
@@ -81,7 +84,10 @@ def _llm_audit() -> dict[str, object]:
     except json.JSONDecodeError:
         return {
             "llm_enabled": "unknown",
+            "llm_provider": "unknown",
             "llm_status": "invalid_json",
+            "model": "unknown",
+            "base_url_label": "unknown",
             "summary_generated": "unknown",
         }
     return data if isinstance(data, dict) else {}
@@ -106,7 +112,7 @@ def main() -> int:
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：3A",
+        "- 阶段：3B",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -162,6 +168,9 @@ def main() -> int:
         "| 字段 | 状态 |",
         "|---|---|",
         f"| LLM 是否启用 | {_escape_table_cell(llm_audit.get('llm_enabled', 'unknown'))} |",
+        f"| LLM Provider | {_escape_table_cell(llm_audit.get('llm_provider', 'unknown'))} |",
+        f"| 模型 | {_escape_table_cell(llm_audit.get('model', 'unknown'))} |",
+        f"| Base URL 类型 | {_escape_table_cell(llm_audit.get('base_url_label', 'unknown'))} |",
         f"| LLM 状态 | {_escape_table_cell(llm_audit.get('llm_status', 'unknown'))} |",
         f"| 摘要是否生成 | {_escape_table_cell(llm_audit.get('summary_generated', 'unknown'))} |",
         "| 审计文件 | data/llm_audit.json |",

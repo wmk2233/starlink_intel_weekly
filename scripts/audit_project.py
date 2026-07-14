@@ -13,7 +13,7 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "3A"
+CURRENT_STAGE = "3B"
 
 REQUIRED_FILES = [
     "README.md",
@@ -74,6 +74,8 @@ ALLOWED_PLACEHOLDERS = [
     "OPENAI_API_KEY=your_openai_api_key_here",
     "OPENAI_API_KEY=...",
     "OPENAI_MODEL=your_openai_model_here",
+    "DEEPSEEK_API_KEY=your_deepseek_api_key_here",
+    "DEEPSEEK_API_KEY=...",
 ]
 
 FORBIDDEN_SOURCE_HINTS = [
@@ -156,6 +158,11 @@ def check_gitignore(report: dict[str, Any]) -> None:
             return
         if ignored is None:
             add_warning(report, "无法执行 git check-ignore，已完成 .gitignore 静态规则检查。")
+    for tracked_output in ["data/llm_audit.json", "data/llm_summaries.json"]:
+        ignored = run_git_check_ignore(tracked_output)
+        if ignored is True:
+            add_issue(report, section, f"{tracked_output} 不应被忽略")
+            return
     mark_passed_if_clean(report, section)
 
 
@@ -185,9 +192,16 @@ def check_workflow(report: dict[str, Any]) -> None:
         "python scripts/audit_project.py --strict",
         "if: always()",
         "LLM_ENABLED",
+        "LLM_PROVIDER",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
-        'if [ "${LLM_ENABLED}" = "true" ] && [ -n "${OPENAI_API_KEY}" ]; then',
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_MODEL",
+        "DEEPSEEK_BASE_URL",
+        'if [ "${LLM_ENABLED}" = "true" ]; then',
+        '--enable-llm --llm-provider deepseek',
+        '--enable-llm --llm-provider openai',
+        "skipped_no_api_key",
         "--enable-llm",
         "data/llm_audit.json",
     ]
@@ -206,6 +220,9 @@ def check_workflow(report: dict[str, Any]) -> None:
         return
     if 'echo "$OPENAI_API_KEY"' in text or "echo $OPENAI_API_KEY" in text:
         add_issue(report, section, "workflow 可能打印 OPENAI_API_KEY")
+        return
+    if 'echo "$DEEPSEEK_API_KEY"' in text or "echo $DEEPSEEK_API_KEY" in text:
+        add_issue(report, section, "workflow 可能打印 DEEPSEEK_API_KEY")
         return
     if "exit 0" not in text or "GITEE_SYNC_STATUS=failed" not in text:
         add_issue(report, section, "Gitee 同步非阻塞状态不明确")
@@ -259,8 +276,12 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
     env_example = read_text(".env.example") if (PROJECT_ROOT / ".env.example").exists() else ""
     required_env = [
         "LLM_ENABLED=false",
+        "LLM_PROVIDER=deepseek",
         "OPENAI_API_KEY=your_openai_api_key_here",
         "OPENAI_MODEL=your_openai_model_here",
+        "DEEPSEEK_API_KEY=your_deepseek_api_key_here",
+        "DEEPSEEK_BASE_URL=https://api.deepseek.com",
+        "DEEPSEEK_MODEL=deepseek-v4-flash",
         "LLM_MAX_ITEMS=10",
         "LLM_STRICT_SOURCE=true",
     ]
@@ -273,6 +294,11 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
     required_readme = [
         "ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用",
         "LLM 默认关闭",
+        "支持 DeepSeek provider",
+        "DeepSeek API Key 需要单独",
+        "API Key 不得提交",
+        "LLM_PROVIDER",
+        "DEEPSEEK_API_KEY",
         "OPENAI_API_KEY",
         "无来源不写结论",
         "页面级记录不扩展成具体事实",
@@ -282,6 +308,22 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
     missing_readme = [item for item in required_readme if item not in readme]
     if missing_readme:
         add_issue(report, section, "README 缺少 LLM 说明：" + "、".join(missing_readme))
+        return
+
+    deployment = read_text("docs/deployment_checklist.md") if (PROJECT_ROOT / "docs/deployment_checklist.md").exists() else ""
+    required_deployment = ["LLM_ENABLED", "LLM_PROVIDER", "DEEPSEEK_API_KEY", "DEEPSEEK_MODEL"]
+    missing_deployment = [item for item in required_deployment if item not in deployment]
+    if missing_deployment:
+        add_issue(report, section, "部署清单缺少 DeepSeek Secrets：" + "、".join(missing_deployment))
+        return
+
+    llm_script = read_text("scripts/llm_summarize.py")
+    legacy_default_patterns = [
+        r'DEFAULT_DEEPSEEK_MODEL\s*=\s*["\']deepseek-chat["\']',
+        r'DEFAULT_DEEPSEEK_MODEL\s*=\s*["\']deepseek-reasoner["\']',
+    ]
+    if any(re.search(pattern, llm_script) for pattern in legacy_default_patterns):
+        add_issue(report, section, "旧 DeepSeek 模型名不应作为默认模型")
         return
     mark_passed_if_clean(report, section)
 
@@ -342,6 +384,15 @@ def check_data_files(report: dict[str, Any]) -> None:
             status = data.get("llm_status") if isinstance(data, dict) else None
             if not status:
                 add_issue(report, section, "llm_audit.json 缺少 llm_status")
+                return
+            if not data.get("llm_provider"):
+                add_issue(report, section, "llm_audit.json 缺少 llm_provider")
+                return
+            if "model" not in data:
+                add_issue(report, section, "llm_audit.json 缺少 model 字段")
+                return
+            if not data.get("base_url_label"):
+                add_issue(report, section, "llm_audit.json 缺少 base_url_label")
                 return
             if status == "generated":
                 summary_valid, _summary_data, summary_error = json_file(PROJECT_ROOT / "data/llm_summaries.json")
@@ -460,6 +511,7 @@ def check_secret_scan(report: dict[str, Any]) -> None:
             (r"github_pat_[A-Za-z0-9_]{20,}", "github_pat"),
             (r"sk-[A-Za-z0-9_\-]{20,}", "openai_api_key"),
             (r"OPENAI_API_KEY\s*=\s*(?!your_openai_api_key_here|\.\.\.)[^\s$#][^\n\r]*", "openai_api_key_value"),
+            (r"DEEPSEEK_API_KEY\s*=\s*(?!your_deepseek_api_key_here|\.\.\.)[^\s$#][^\n\r]*", "deepseek_api_key_value"),
             (r"(?i)(private\s*token|私人令牌)\s*[:=]\s*[A-Za-z0-9_\-]{16,}", "private_token"),
             (r"(?i)(authorization[_ -]?code|授权码)\s*[:=]\s*[A-Za-z0-9_\-]{16,}", "smtp_auth_code"),
         ]

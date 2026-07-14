@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13T03:57:41+00:00",
+  "generated_at": "2026-07-14T10:58:29+08:00",
   "weeks": {
     "2026-W25": {
       "changed_items": 0,
@@ -91,12 +91,15 @@
       "details_path": "weekly/2026-W29-details.md",
       "dominant_extracted_level": "page_level",
       "dominant_quality": "low",
-      "generated_at": "2026-07-13T03:57:41+00:00",
+      "generated_at": "2026-07-14T10:58:27+08:00",
       "index_exists": true,
       "index_path": "weekly/2026-W29.md",
       "llm_audit_path": "data/llm_audit.json",
-      "llm_enabled": false,
-      "llm_status": "skipped",
+      "llm_base_url_label": "deepseek_default",
+      "llm_enabled": true,
+      "llm_model": "deepseek-v4-flash",
+      "llm_provider": "deepseek",
+      "llm_status": "skipped_no_api_key",
       "llm_summary_path": "data/llm_summaries.json",
       "new_items": 0,
       "reachable_sources": 2,

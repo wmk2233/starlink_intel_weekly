@@ -51,11 +51,29 @@ jobs:
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           LLM_ENABLED: ${{ secrets.LLM_ENABLED }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
         run: |
-          if [ "${LLM_ENABLED}" = "true" ] && [ -n "${OPENAI_API_KEY}" ]; then
-            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm
+          llm_provider="${LLM_PROVIDER:-deepseek}"
+          if [ "${LLM_ENABLED}" = "true" ]; then
+            if [ "${llm_provider}" = "deepseek" ]; then
+              if [ -z "${DEEPSEEK_API_KEY}" ]; then
+                echo "::warning::LLM 已启用，但 DEEPSEEK_API_KEY 未配置；本次将记录 skipped_no_api_key。"
+              fi
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider deepseek
+            elif [ "${llm_provider}" = "openai" ]; then
+              if [ -z "${OPENAI_API_KEY}" ]; then
+                echo "::warning::LLM 已启用，但 OPENAI_API_KEY 未配置；本次将记录 skipped_no_api_key。"
+              fi
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider openai
+            else
+              echo "::warning::LLM_PROVIDER 无效；本次将记录 skipped_invalid_provider。"
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider "${llm_provider}"
+            fi
           else
             python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20
           fi
@@ -79,7 +97,7 @@ jobs:
             git add data/llm_summaries.json
           fi
           if git diff --cached --quiet; then
-            echo "阶段 3A 自动化输出没有变化，跳过提交。"
+            echo "阶段 3B 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

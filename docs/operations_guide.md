@@ -25,7 +25,7 @@ cron: "17 0 * * 1"
 - 来源健康状态、页面变化状态和条目统计；
 - 解析质量状态。
 
-阶段 3A 默认不启用 LLM。未配置 `OPENAI_API_KEY` 时，LLM 状态显示为 `skipped` 或 `skipped_no_api_key` 是正常现象，主流程仍应成功。
+阶段 3B 支持 DeepSeek provider，但默认不启用 LLM。未配置当前 provider 对应的 API Key 时，LLM 状态显示为 `skipped` 或 `skipped_no_api_key` 是正常现象，主流程仍应成功。
 
 ## 3. 如何确认邮件是否正常
 
@@ -176,26 +176,29 @@ python scripts/validate_env.py
 
 本地 `.env` 只用于本机测试，不提交、不截图、不复制到公开文档。
 
-## 13. 后续接入大模型前的注意事项
+## 13. DeepSeek Provider 运维注意事项
 
-阶段 3A 已提供可选 LLM 摘要，但默认关闭。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；GitHub Actions 自动调用大模型需要单独配置 OpenAI API Key。
+阶段 3B 已支持 `deepseek` 与 `openai` provider，但 LLM 默认关闭。只有显式设置 `LLM_ENABLED=true` 或传入 `--enable-llm` 才启用。DeepSeek API Key 需要单独在 DeepSeek 平台获取；ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。
 
 无 API Key 场景本地测试：
 
 ```powershell
 cd E:\starlink_intel_weekly
 python scripts/llm_summarize.py
-python scripts/llm_summarize.py --enabled
-python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --max-source-items 10 --max-history-records 20 --max-run-history 200
+python scripts/llm_summarize.py --enabled --provider deepseek
+python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --llm-provider deepseek --max-source-items 10 --max-history-records 20 --max-run-history 200
 ```
 
 后续如需启用 API Key 场景，只在本地 `.env` 或 GitHub Secrets 中配置占位项对应的真实值，不要写入代码：
 
 ```text
 LLM_ENABLED=true
-OPENAI_API_KEY=...
-OPENAI_MODEL=...
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
+
+本地真实 key 只写入被忽略的 `.env`，GitHub Actions 只写入 GitHub Secrets，API Key 不得提交。DeepSeek 推荐默认模型为 `deepseek-v4-flash`，可选 `deepseek-v4-pro`；旧名称 `deepseek-chat`、`deepseek-reasoner` 不应再作为默认值。
 
 启用前需要确认：
 
@@ -207,4 +210,4 @@ OPENAI_MODEL=...
 - 不允许把 hash 变化解释成事实变化；
 - 新增来源必须先更新 `sources.yml`、审计脚本和安全边界说明。
 
-阶段 3A 的 LLM 摘要只基于本地结构化来源数据。无来源不写结论，页面级记录不扩展成具体事实，LLM 输出保存在 `data/llm_summaries.json`，审计结果保存在 `data/llm_audit.json`，两者均不覆盖原始采集数据。
+阶段 3B 的 LLM 摘要只基于本地结构化来源数据。无来源不写结论，页面级记录不得扩展成具体事实。通过校验的 LLM 输出保存在 `data/llm_summaries.json`，provider、模型、脱敏 base URL 类型与校验结果保存在 `data/llm_audit.json`，两者均不覆盖原始采集数据。本阶段不新增来源、不编造事实。
