@@ -37,14 +37,14 @@
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-14T12:26:25+08:00 | 5b5ebad77766c25d |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-14T12:26:26+08:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-14T04:42:57+00:00 | 8bd63075bf4b5453 |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-14T04:42:57+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 1 | changed | 2026-07-14T12:26:25+08:00 |
+| Starlink Official Updates | 0 | 0 | 1 | changed | 2026-07-14T04:42:57+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
 
 ## 5. 解析质量诊断
@@ -72,7 +72,7 @@
 | content_hash | 92ef70086ead388b |
 | previous_content_hash | 92ef70086ead388b |
 | first_seen_at | 2026-06-29T04:58:34+00:00 |
-| last_seen_at | 2026-07-14T12:26:25+08:00 |
+| last_seen_at | 2026-07-14T04:42:57+00:00 |
 | last_changed_at | 2026-06-29T04:58:34+00:00 |
 | matched_keywords | ["starlink", "update", "updates"] |
 | candidate_links | [] |
@@ -94,7 +94,7 @@
 | content_hash | 48928194391143dc |
 | previous_content_hash | 48928194391143dc |
 | first_seen_at | 2026-06-17T18:23:48+08:00 |
-| last_seen_at | 2026-07-14T12:26:26+08:00 |
+| last_seen_at | 2026-07-14T04:42:57+00:00 |
 | last_changed_at | 2026-06-17T18:23:48+08:00 |
 | matched_keywords | ["launch", "launches"] |
 | candidate_links | [] |
@@ -163,6 +163,16 @@
   - Python 版本：3.11.9
   - 输出模式：dual
   - 是否发送邮件：否
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-14 04:42:57 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged

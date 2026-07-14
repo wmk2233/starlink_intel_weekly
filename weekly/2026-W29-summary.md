@@ -35,13 +35,13 @@ LLM Provider：deepseek
 
 ### 总体摘要
 
-本周未检测到新增或内容变化条目。所有来源均为页面级低质量记录，未生成具体发射任务、时间或技术细节。
+本周未检测到新增或内容变化条目
 
 ### 来源约束要点
 
 | 要点 | 来源记录 | 来源链接 | 限制说明 |
 |---|---|---|---|
-| 本周未检测到新增或内容变化条目。 | 42a0ea622e13944d、8abfee15687a5064、e7e9456a75b0c4db | https://www.starlink.com/updates<br>https://www.starlink.com/updates<br>https://www.spacex.com/launches | 所有记录均为页面级低质量，未生成具体事实。 |
+| 本周未检测到新增或内容变化条目 | 42a0ea622e13944d、e7e9456a75b0c4db、8abfee15687a5064 | https://www.starlink.com/updates<br>https://www.spacex.com/launches<br>https://www.starlink.com/updates | 所有记录均为页面级低质量，无法确认具体事件 |
 
 
 ## 3. 来源状态概览
@@ -86,10 +86,10 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-14 12:26:25 中国标准时间+0800
+- 运行时间：2026-07-14 04:42:57 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：否
+- 是否发送邮件：是
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2

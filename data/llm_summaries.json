@@ -1,6 +1,6 @@
 {
   "base_url_label": "deepseek_default",
-  "generated_at": "2026-07-14T12:26:40+08:00",
+  "generated_at": "2026-07-14T04:43:16+00:00",
   "input_records": 3,
   "llm_enabled": true,
   "llm_provider": "deepseek",
@@ -9,17 +9,17 @@
   "summary": {
     "key_points": [
       {
-        "caveat": "所有记录均为页面级低质量，未生成具体事实。",
-        "point": "本周未检测到新增或内容变化条目。",
+        "caveat": "所有记录均为页面级低质量，无法确认具体事件",
+        "point": "本周未检测到新增或内容变化条目",
         "source_record_ids": [
           "42a0ea622e13944d",
-          "8abfee15687a5064",
-          "e7e9456a75b0c4db"
+          "e7e9456a75b0c4db",
+          "8abfee15687a5064"
         ],
         "source_urls": [
           "https://www.starlink.com/updates",
-          "https://www.starlink.com/updates",
-          "https://www.spacex.com/launches"
+          "https://www.spacex.com/launches",
+          "https://www.starlink.com/updates"
         ]
       }
     ],
@@ -30,14 +30,26 @@
       "未生成载荷数量",
       "未生成未在来源中出现的技术判断"
     ],
-    "overall_summary_cn": "本周未检测到新增或内容变化条目。所有来源均为页面级低质量记录，未生成具体发射任务、时间或技术细节。",
+    "overall_summary_cn": "本周未检测到新增或内容变化条目",
     "risk_warnings": [
-      "所有记录均属页面级低质量，不可用于事实性陈述，必须引用原始URL。"
+      "页面级低质量监测结果，不可作为具体事件引用"
     ],
     "source_based_notes": [
       {
         "extracted_level": "page_level",
-        "note": "页面可达，但静态规则未识别到独立条目，仅保留页面级记录。",
+        "note": "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。",
+        "source_name": "SpaceX Official Launches",
+        "source_quality": "low",
+        "source_record_ids": [
+          "e7e9456a75b0c4db"
+        ],
+        "source_urls": [
+          "https://www.spacex.com/launches"
+        ]
+      },
+      {
+        "extracted_level": "page_level",
+        "note": "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。",
         "source_name": "Starlink Official Updates",
         "source_quality": "low",
         "source_record_ids": [
@@ -47,18 +59,6 @@
         "source_urls": [
           "https://www.starlink.com/updates",
           "https://www.starlink.com/updates"
-        ]
-      },
-      {
-        "extracted_level": "page_level",
-        "note": "页面可达，但静态规则未识别到独立条目，仅保留页面级记录。",
-        "source_name": "SpaceX Official Launches",
-        "source_quality": "low",
-        "source_record_ids": [
-          "e7e9456a75b0c4db"
-        ],
-        "source_urls": [
-          "https://www.spacex.com/launches"
         ]
       }
     ]
