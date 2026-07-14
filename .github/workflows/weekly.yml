@@ -19,12 +19,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -50,13 +50,13 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-          LLM_ENABLED: ${{ secrets.LLM_ENABLED }}
-          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_ENABLED: ${{ vars.LLM_ENABLED || 'false' }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'deepseek' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || '' }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
-          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
+          DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-flash' }}
+          DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL || 'https://api.deepseek.com' }}
         run: |
           llm_provider="${LLM_PROVIDER:-deepseek}"
           if [ "${LLM_ENABLED}" = "true" ]; then
@@ -64,18 +64,18 @@ jobs:
               if [ -z "${DEEPSEEK_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 DEEPSEEK_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider deepseek
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider deepseek
             elif [ "${llm_provider}" = "openai" ]; then
               if [ -z "${OPENAI_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 OPENAI_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider openai
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider openai
             else
               echo "::warning::LLM_PROVIDER 无效；本次将记录 skipped_invalid_provider。"
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --enable-llm --llm-provider "${llm_provider}"
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider "${llm_provider}"
             fi
           else
-            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20
+            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200
           fi
 
       - name: Check weekly outputs
@@ -96,8 +96,11 @@ jobs:
           if [ -f data/llm_summaries.json ]; then
             git add data/llm_summaries.json
           fi
+          if [ -f data/llm_usage.jsonl ]; then
+            git add data/llm_usage.jsonl
+          fi
           if git diff --cached --quiet; then
-            echo "阶段 3B 自动化输出没有变化，跳过提交。"
+            echo "阶段 3C 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +61,24 @@ def valid_jsonl_file(path: Path) -> tuple[bool, str | None]:
     return True, None
 
 
+def load_jsonl_records(path: Path) -> tuple[bool, list[dict[str, Any]], str | None]:
+    if not path.exists():
+        return False, [], "文件不存在"
+    records: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            for line_number, line in enumerate(file, start=1):
+                if not line.strip():
+                    continue
+                value = json.loads(line)
+                if not isinstance(value, dict):
+                    return False, records, f"JSONL 第 {line_number} 行不是 object"
+                records.append(value)
+    except json.JSONDecodeError as exc:
+        return False, records, f"JSONL 第 {line_number} 行解析失败：{exc.msg}"
+    return True, records, None
+
+
 def add_check(report: dict[str, Any], name: str, passed: bool, error: str | None = None) -> None:
     report["checks"][name] = passed
     if not passed:
@@ -79,6 +98,7 @@ def build_report(week_id: str) -> dict[str, Any]:
     run_history_path = DATA_DIR / "run_history.jsonl"
     llm_audit_path = DATA_DIR / "llm_audit.json"
     llm_summary_path = DATA_DIR / "llm_summaries.json"
+    llm_usage_path = DATA_DIR / "llm_usage.jsonl"
 
     report: dict[str, Any] = {"week_id": week_id, "status": "unknown", "checks": {}, "errors": []}
 
@@ -105,6 +125,71 @@ def build_report(week_id: str) -> dict[str, Any]:
         valid and bool(str(llm_audit.get("llm_provider") or "").strip()),
         "llm_audit.json 缺少 llm_provider",
     )
+    valid_usage, usage_records, usage_error = load_jsonl_records(llm_usage_path)
+    add_check(report, "llm_usage_valid", valid_usage, usage_error)
+    add_check(report, "llm_usage_bounded", valid_usage and len(usage_records) <= 200, "llm_usage.jsonl 超过 200 行")
+    required_usage_fields = {
+        "generated_at",
+        "week_id",
+        "llm_enabled",
+        "api_called",
+        "provider",
+        "model",
+        "status",
+        "validation_status",
+        "input_records_before_dedup",
+        "input_records_after_dedup",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "latency_ms",
+        "error_type",
+    }
+    add_check(
+        report,
+        "llm_usage_fields_complete",
+        valid_usage and all(required_usage_fields <= set(record) for record in usage_records),
+        "llm_usage.jsonl 存在缺失字段",
+    )
+    serialized_usage = json.dumps(usage_records, ensure_ascii=False)
+    forbidden_usage_fields = {"api_key", "openai_api_key", "deepseek_api_key", "smtp_password", "gitee_remote", "prompt", "response", "cost"}
+    usage_fields = {str(key).lower() for record in usage_records for key in record}
+    usage_has_secret_shape = bool(
+        re.search(r"sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}", serialized_usage)
+    )
+    add_check(
+        report,
+        "llm_usage_has_no_secrets",
+        valid_usage and not (usage_fields & forbidden_usage_fields) and not usage_has_secret_shape,
+        "llm_usage.jsonl 包含禁止的敏感字段或值线索",
+    )
+    before_dedup = llm_audit.get("input_records_before_dedup") if valid else None
+    after_dedup = llm_audit.get("input_records_after_dedup") if valid else None
+    removed = llm_audit.get("duplicate_records_removed") if valid else None
+    dedup_valid = (
+        isinstance(before_dedup, int)
+        and isinstance(after_dedup, int)
+        and isinstance(removed, int)
+        and 0 <= after_dedup <= before_dedup
+        and removed >= 0
+        and removed == before_dedup - after_dedup
+    )
+    add_check(report, "llm_dedup_counts_valid", dedup_valid, "LLM 输入去重计数不一致")
+    usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
+    total_tokens = usage.get("total_tokens")
+    latency_ms = usage.get("latency_ms")
+    add_check(
+        report,
+        "llm_total_tokens_valid",
+        total_tokens is None or (isinstance(total_tokens, int) and not isinstance(total_tokens, bool) and total_tokens >= 0),
+        "total_tokens 必须为 null 或非负整数",
+    )
+    add_check(
+        report,
+        "llm_latency_valid",
+        latency_ms is None or (isinstance(latency_ms, (int, float)) and not isinstance(latency_ms, bool) and latency_ms >= 0),
+        "latency_ms 必须为 null 或非负数",
+    )
     add_check(
         report,
         "llm_status_present",
@@ -119,8 +204,27 @@ def build_report(week_id: str) -> dict[str, Any]:
     )
     llm_status = str(llm_audit.get("llm_status") or "unknown") if valid else "unknown"
     if llm_status == "generated":
-        valid_summary, error = valid_json_file(llm_summary_path)
+        valid_summary, summary_data, error = load_json_file(llm_summary_path)
         add_check(report, "llm_summary_valid_when_generated", valid_summary, error)
+        add_check(
+            report,
+            "llm_validation_passed_when_generated",
+            llm_audit.get("validation_status") == "passed",
+            "generated 状态下 validation_status 不是 passed",
+        )
+        summary = summary_data.get("summary", {}) if isinstance(summary_data.get("summary"), dict) else {}
+        references_valid = True
+        for section_name in ["key_points", "source_based_notes"]:
+            section = summary.get(section_name, [])
+            for point in section if isinstance(section, list) else []:
+                if not isinstance(point, dict):
+                    references_valid = False
+                    continue
+                ids = [str(value) for value in point.get("source_record_ids", []) if value]
+                urls = [str(value) for value in point.get("source_urls", []) if value]
+                if not ids or not urls or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
+                    references_valid = False
+        add_check(report, "llm_generated_references_valid", references_valid, "生成摘要存在缺失或重复来源引用")
     elif llm_summary_path.exists():
         valid_summary, error = valid_json_file(llm_summary_path)
         add_check(report, "llm_summary_valid_if_present", valid_summary, error)
@@ -133,6 +237,8 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_quality_overview", "解析质量概览" in summary_text, "summary 缺少“解析质量概览”")
     add_check(report, "summary_has_llm_section", "大模型辅助摘要" in summary_text, "summary 缺少“大模型辅助摘要”")
     add_check(report, "summary_has_llm_provider", "LLM Provider" in summary_text, "summary 缺少 LLM Provider")
+    add_check(report, "summary_has_page_monitoring", "页面级监测解释" in summary_text, "summary 缺少页面级监测解释")
+    add_check(report, "summary_has_input_dedup", "去重前输入记录" in summary_text, "summary 缺少输入去重统计")
 
     details_text = read_text(details_path)
     add_check(report, "details_has_source_status", "来源状态诊断" in details_text, "details 缺少“来源状态诊断”")
@@ -140,6 +246,8 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "details_has_items", "采集条目明细" in details_text, "details 缺少“采集条目明细”")
     add_check(report, "details_has_llm_audit", "大模型摘要审计" in details_text, "details 缺少“大模型摘要审计”")
     add_check(report, "details_has_llm_provider", "LLM Provider" in details_text, "details 缺少 LLM Provider")
+    add_check(report, "details_has_page_monitoring", "页面级监测解释" in details_text, "details 缺少页面级监测解释")
+    add_check(report, "details_has_input_dedup", "去重前输入记录" in details_text, "details 缺少输入去重统计")
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")
@@ -166,6 +274,7 @@ def print_text_report(report: dict[str, Any]) -> None:
     print(f"weekly_manifest.json：{'合法' if checks.get('weekly_manifest_valid') else '异常'}")
     print(f"run_history.jsonl：{'合法' if checks.get('run_history_valid') else '异常'}")
     print(f"llm_audit.json：{'合法' if checks.get('llm_audit_valid') else '异常'}")
+    print(f"llm_usage.jsonl：{'合法' if checks.get('llm_usage_valid') else '异常'}")
     print(
         "llm_summaries.json："
         + ("合法或可选" if checks.get("llm_summary_valid_when_generated") or checks.get("llm_summary_valid_if_present") or checks.get("llm_summary_optional") else "异常")

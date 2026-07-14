@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化部署检查清单
 
-本清单用于阶段 3B 部署前复查。当前系统仍只使用两个官方来源，可选 LLM 摘要默认关闭；本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
+本清单用于阶段 3C 部署前复查。当前系统仍只使用两个官方来源，可选 LLM 摘要默认关闭；本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
 ## 1. 部署目标
 
@@ -40,9 +40,21 @@ python -m pip install -r requirements.txt
 git pull --rebase origin main
 ```
 
-## 4. GitHub Actions Secrets
+## 4. GitHub Variables 与 GitHub Secrets
 
-在 GitHub 仓库 `Settings` -> `Secrets and variables` -> `Actions` 中配置：
+在 GitHub 仓库 `Settings` -> `Secrets and variables` -> `Actions` 中分级配置。
+
+GitHub Variables：
+
+```text
+LLM_ENABLED=true
+LLM_PROVIDER=deepseek
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=
+```
+
+GitHub Secrets：
 
 ```text
 SMTP_HOST
@@ -52,20 +64,13 @@ SMTP_PASSWORD
 MAIL_FROM
 MAIL_TO
 GITEE_REMOTE
+DEEPSEEK_API_KEY
+OPENAI_API_KEY
 ```
 
 `GITEE_REMOTE` 可以暂时不配置。未配置时，workflow 会跳过 Gitee 同步。
 
-阶段 3B 的 LLM 摘要为可选项，默认不启用。若要在 GitHub Actions 中启用 DeepSeek，需要额外配置：
-
-```text
-LLM_ENABLED=true
-LLM_PROVIDER=deepseek
-DEEPSEEK_API_KEY=...
-DEEPSEEK_MODEL=deepseek-v4-flash
-```
-
-可选 Secret `DEEPSEEK_BASE_URL` 默认无需配置，系统默认使用 `https://api.deepseek.com`。OpenAI provider 仍可使用 `OPENAI_API_KEY` 与 `OPENAI_MODEL`。DeepSeek API Key 需要单独在 DeepSeek 平台获取，只能保存到 GitHub Secrets；API Key 不得提交。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。启用 provider 但缺少对应 API Key 时，摘要状态为 `skipped_no_api_key`，不影响周报主流程。
+Provider、model、base URL 和开关不是秘密，放入 Variables；API Key、SMTP 密码和 `GITEE_REMOTE` 是敏感值，放入 Secrets。非敏感配置迁移完成后，Summary 可正常显示 provider/model。代码不能自动修改仓库配置；创建 Variables 后，应由用户手动删除旧的 `LLM_ENABLED`、`LLM_PROVIDER`、`DEEPSEEK_MODEL`、`DEEPSEEK_BASE_URL` Secrets。ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用。
 
 ## 5. 邮件 SMTP 配置
 
@@ -164,7 +169,7 @@ GitHub Actions 定时规则为：
 ## 13. 阶段 3B DeepSeek 与 LLM 来源约束确认清单
 
 - LLM 默认关闭；
-- GitHub Secrets 已明确区分 `LLM_ENABLED`、`LLM_PROVIDER`、`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL`；
+- GitHub Variables 保存 `LLM_ENABLED`、`LLM_PROVIDER` 和 `DEEPSEEK_MODEL`，GitHub Secrets 只保存对应 API Key；
 - 无 `DEEPSEEK_API_KEY` 时不阻断采集、周报、邮件、GitHub 提交和 Gitee 同步；
 - DeepSeek 推荐默认模型为 `deepseek-v4-flash`，可选模型为 `deepseek-v4-pro`；
 - 不再使用 `deepseek-chat` 或 `deepseek-reasoner` 作为默认模型；
@@ -175,3 +180,13 @@ GitHub Actions 定时规则为：
 - LLM 输出与原始采集数据分离；
 - `data/llm_audit.json` 可以提交；
 - `data/llm_summaries.json` 只有生成并通过校验后才提交。
+
+## 14. 阶段 3C 去重、用量与 Actions 确认清单
+
+- `items.jsonl` 保留历史，LLM 输入按 `source_id + normalized_url` 去重并选择每组最新记录；
+- 输出 record IDs 和 URLs 再次去重，去重不等于删除来源历史；
+- 页面 changed 与条目 changed 分属页面 hash 和结构化条目两个检测层级；
+- `data/llm_usage.jsonl` 最多保留 200 条，只记录 provider、model、状态、去重数量、token 与耗时；
+- 用量记录不保存 API Key、完整 prompt、完整 response 或费用；
+- Workflow 使用 `actions/checkout@v5` 与 `actions/setup-python@v6`，对应 Node.js 24；
+- GitHub Variables 与 GitHub Secrets 已按非敏感配置和真实凭据分级。

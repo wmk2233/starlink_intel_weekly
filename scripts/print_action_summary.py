@@ -15,6 +15,7 @@ WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
 RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 LLM_AUDIT_FILE = PROJECT_ROOT / "data" / "llm_audit.json"
 LLM_SUMMARY_FILE = PROJECT_ROOT / "data" / "llm_summaries.json"
+LLM_USAGE_FILE = PROJECT_ROOT / "data" / "llm_usage.jsonl"
 
 
 def _yes_no(value: bool) -> str:
@@ -23,6 +24,10 @@ def _yes_no(value: bool) -> str:
 
 def _escape_table_cell(value: object) -> str:
     return str(value if value is not None else "").replace("\n", " ").replace("\r", " ").replace("|", "\\|")
+
+
+def _usage_metric(value: object) -> object:
+    return "unknown" if value is None else value
 
 
 def _source_statuses() -> tuple[bool, dict[str, dict[str, object]]]:
@@ -107,12 +112,13 @@ def main() -> int:
     output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
     project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
     llm_audit = _llm_audit()
+    usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：3B",
+        "- 阶段：3C",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -131,6 +137,7 @@ def main() -> int:
         f"- weekly_manifest.json 是否存在：{_yes_no(WEEKLY_MANIFEST_FILE.exists())}",
         f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
         f"- llm_audit.json 是否存在：{_yes_no(LLM_AUDIT_FILE.exists())}",
+        f"- llm_usage.jsonl 是否存在：{_yes_no(LLM_USAGE_FILE.exists())}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
         "",
@@ -173,8 +180,17 @@ def main() -> int:
         f"| Base URL 类型 | {_escape_table_cell(llm_audit.get('base_url_label', 'unknown'))} |",
         f"| LLM 状态 | {_escape_table_cell(llm_audit.get('llm_status', 'unknown'))} |",
         f"| 摘要是否生成 | {_escape_table_cell(llm_audit.get('summary_generated', 'unknown'))} |",
+        f"| 去重前输入记录 | {_escape_table_cell(llm_audit.get('input_records_before_dedup', 'unknown'))} |",
+        f"| 去重后输入记录 | {_escape_table_cell(llm_audit.get('input_records_after_dedup', 'unknown'))} |",
+        f"| 删除重复记录 | {_escape_table_cell(llm_audit.get('duplicate_records_removed', 'unknown'))} |",
+        f"| 唯一来源 URL | {_escape_table_cell(llm_audit.get('unique_source_urls', 'unknown'))} |",
+        f"| Prompt tokens | {_escape_table_cell(_usage_metric(usage.get('prompt_tokens')))} |",
+        f"| Completion tokens | {_escape_table_cell(_usage_metric(usage.get('completion_tokens')))} |",
+        f"| Total tokens | {_escape_table_cell(_usage_metric(usage.get('total_tokens')))} |",
+        f"| API 调用耗时 | {_escape_table_cell(_usage_metric(usage.get('latency_ms')))} ms |",
         "| 审计文件 | data/llm_audit.json |",
         "| 摘要文件 | data/llm_summaries.json |",
+        "| 用量记录 | data/llm_usage.jsonl |",
         f"| 摘要文件是否存在 | {_yes_no(LLM_SUMMARY_FILE.exists())} |",
         "",
         "### 来源状态",

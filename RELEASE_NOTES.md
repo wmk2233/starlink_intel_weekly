@@ -150,3 +150,25 @@
 - LLM 摘要只基于本地结构化来源数据，无来源不写结论，页面级记录不得扩展成具体事实；
 - 校验失败不覆盖旧 `data/llm_summaries.json`；
 - 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
+
+## v0.3C-llm-dedup-actions24：LLM 去重与 Actions 现代化
+
+阶段 3C 聚焦输入质量、变化语义、配置分级和可观测性，不新增来源，也不改变事实边界。
+
+### 核心能力
+
+- LLM 输入按 `source_id + normalized_url` 去重并选择每组最新记录，原始 `items.jsonl` 历史保持不变；
+- 模型输出的 record IDs 与 URLs 再次稳定去重，未知引用继续由来源护栏拒绝；
+- 页面 changed 与条目 changed 分开解释，页面 hash 变化不再被表述为可确认事件变化；
+- 新增 `data/llm_usage.jsonl`，最多保留 200 条 provider、model、状态、去重计数、token 与耗时记录；
+- 用量与审计不保存费用、API Key、完整 prompt、完整 response 或异常堆栈；
+- 非敏感 LLM 配置迁移到 GitHub Variables，API Key 继续只从 GitHub Secrets 读取；
+- Workflow 升级为 `actions/checkout@v5` 与 `actions/setup-python@v6`，使用 Node.js 24 对应 action 版本；
+- 新增标准库 `unittest` 覆盖 URL 规范化、输入/引用去重、来源护栏和不覆盖旧摘要行为。
+
+### 兼容与安全
+
+- LLM 默认关闭，无 API Key 时记录 `skipped_no_api_key` 且不阻断主流程；
+- 不调用真实 API 也可完成默认关闭、无 Key、dry-run 和完整周报测试；
+- 不新增 Starlink 或 SpaceX 来源，不编造发射、服务或技术事实；
+- 用户需在创建 Variables 后手动删除旧的非敏感 Secrets，代码不会自动修改 GitHub 仓库设置。

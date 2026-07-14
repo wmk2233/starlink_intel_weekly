@@ -189,13 +189,17 @@ python scripts/llm_summarize.py --enabled --provider deepseek
 python scripts/run_weekly.py --no-email --output-mode dual --enable-llm --llm-provider deepseek --max-source-items 10 --max-history-records 20 --max-run-history 200
 ```
 
-后续如需启用 API Key 场景，只在本地 `.env` 或 GitHub Secrets 中配置占位项对应的真实值，不要写入代码：
+后续如需启用 API Key 场景，本地真实值只放入未提交的 `.env`，GitHub Actions 按 GitHub Variables 与 GitHub Secrets 分级配置，不要写入代码：
 
 ```text
+GitHub Variables:
 LLM_ENABLED=true
 LLM_PROVIDER=deepseek
-DEEPSEEK_API_KEY=...
 DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+GitHub Secrets:
+DEEPSEEK_API_KEY=<真实 API Key>
 ```
 
 本地真实 key 只写入被忽略的 `.env`，GitHub Actions 只写入 GitHub Secrets，API Key 不得提交。DeepSeek 推荐默认模型为 `deepseek-v4-flash`，可选 `deepseek-v4-pro`；旧名称 `deepseek-chat`、`deepseek-reasoner` 不应再作为默认值。
@@ -211,3 +215,13 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 - 新增来源必须先更新 `sources.yml`、审计脚本和安全边界说明。
 
 阶段 3B 的 LLM 摘要只基于本地结构化来源数据。无来源不写结论，页面级记录不得扩展成具体事实。通过校验的 LLM 输出保存在 `data/llm_summaries.json`，provider、模型、脱敏 base URL 类型与校验结果保存在 `data/llm_audit.json`，两者均不覆盖原始采集数据。本阶段不新增来源、不编造事实。
+
+## 14. 阶段 3C 去重、用量与 Actions 运维
+
+`items.jsonl` 继续保留历史。LLM 输入按 `source_id + normalized_url` 去重并选择每组最新记录；模型输出的 record IDs 和 URLs 再次去重。去重不等于删除来源历史。
+
+页面 changed 只表示页面 hash 或页面内容变化；条目 changed 表示规则抽取出的结构化情报条目发生可确认变化。页面 changed 且新增/变化条目均为 0 时，只能说明页面级变化，不能扩展为事件事实。
+
+`data/llm_usage.jsonl` 最多保留 200 条，只记录 provider、model、状态、输入去重数量、token 数量和调用耗时；不记录 API Key、完整 prompt、完整 response 或费用。token 缺失时显示 `unknown`，这是兼容不同 provider 响应格式的正常状态。
+
+Workflow 使用 `actions/checkout@v5` 与 `actions/setup-python@v6`，对应 Node.js 24 运行时。非敏感配置放 GitHub Variables，API Key 放 GitHub Secrets。创建 Variables 后，旧的 `LLM_ENABLED`、`LLM_PROVIDER`、`DEEPSEEK_MODEL`、`DEEPSEEK_BASE_URL` Secrets 需要用户在 GitHub 网页手动删除，代码不能自动代办。

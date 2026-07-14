@@ -13,7 +13,7 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "3B"
+CURRENT_STAGE = "3C"
 
 REQUIRED_FILES = [
     "README.md",
@@ -31,6 +31,8 @@ REQUIRED_FILES = [
     "scripts/check_outputs.py",
     "scripts/audit_project.py",
     "scripts/llm_summarize.py",
+    "tests/test_llm_dedup.py",
+    "tests/test_llm_guardrails.py",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
@@ -42,6 +44,7 @@ REQUIRED_FILES = [
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
+    "data/llm_usage.jsonl",
 ]
 
 GITIGNORE_RULES = [".env", "prompts/", "outputs/logs/*.log", "data/raw/", "data/cache/"]
@@ -63,6 +66,8 @@ SENSITIVE_SCAN_TARGETS = [
     "data/run_history.jsonl",
     "data/llm_audit.json",
     "data/llm_summaries.json",
+    "data/llm_usage.jsonl",
+    "tests",
 ]
 
 ALLOWED_PLACEHOLDERS = [
@@ -76,6 +81,7 @@ ALLOWED_PLACEHOLDERS = [
     "OPENAI_MODEL=your_openai_model_here",
     "DEEPSEEK_API_KEY=your_deepseek_api_key_here",
     "DEEPSEEK_API_KEY=...",
+    "DEEPSEEK_API_KEY=<真实 API Key>",
 ]
 
 FORBIDDEN_SOURCE_HINTS = [
@@ -158,7 +164,7 @@ def check_gitignore(report: dict[str, Any]) -> None:
             return
         if ignored is None:
             add_warning(report, "无法执行 git check-ignore，已完成 .gitignore 静态规则检查。")
-    for tracked_output in ["data/llm_audit.json", "data/llm_summaries.json"]:
+    for tracked_output in ["data/llm_audit.json", "data/llm_summaries.json", "data/llm_usage.jsonl"]:
         ignored = run_git_check_ignore(tracked_output)
         if ignored is True:
             add_issue(report, section, f"{tracked_output} 不应被忽略")
@@ -204,6 +210,14 @@ def check_workflow(report: dict[str, Any]) -> None:
         "skipped_no_api_key",
         "--enable-llm",
         "data/llm_audit.json",
+        "data/llm_usage.jsonl",
+        "actions/checkout@v5",
+        "actions/setup-python@v6",
+        "LLM_ENABLED: ${{ vars.LLM_ENABLED || 'false' }}",
+        "LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'deepseek' }}",
+        "DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-flash' }}",
+        "DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL || 'https://api.deepseek.com' }}",
+        "DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in text]
     if missing:
@@ -215,6 +229,13 @@ def check_workflow(report: dict[str, Any]) -> None:
     if re.search(r"(?m)^\s+pull_request:\s*$", text):
         add_issue(report, section, "workflow 不应包含 pull_request 触发")
         return
+    if "actions/checkout@v4" in text or "actions/setup-python@v5" in text:
+        add_issue(report, section, "workflow 仍使用旧版 checkout@v4 或 setup-python@v5")
+        return
+    for variable in ["LLM_ENABLED", "LLM_PROVIDER", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL", "OPENAI_MODEL"]:
+        if f"secrets.{variable}" in text:
+            add_issue(report, section, f"非敏感配置 {variable} 不应从 Secrets 读取")
+            return
     if 'echo "$GITEE_REMOTE"' in text or "echo $GITEE_REMOTE" in text:
         add_issue(report, section, "workflow 可能打印完整 GITEE_REMOTE")
         return
@@ -284,6 +305,7 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
         "DEEPSEEK_MODEL=deepseek-v4-flash",
         "LLM_MAX_ITEMS=10",
         "LLM_STRICT_SOURCE=true",
+        "LLM_MAX_USAGE_RECORDS=200",
     ]
     missing_env = [item for item in required_env if item not in env_example]
     if missing_env:
@@ -304,6 +326,14 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
         "页面级记录不扩展成具体事实",
         "data/llm_audit.json",
         "data/llm_summaries.json",
+        "data/llm_usage.jsonl",
+        "GitHub Variables",
+        "GitHub Secrets",
+        "source_id + normalized_url",
+        "页面 changed",
+        "条目 changed",
+        "actions/checkout@v5",
+        "actions/setup-python@v6",
     ]
     missing_readme = [item for item in required_readme if item not in readme]
     if missing_readme:
@@ -311,7 +341,16 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
         return
 
     deployment = read_text("docs/deployment_checklist.md") if (PROJECT_ROOT / "docs/deployment_checklist.md").exists() else ""
-    required_deployment = ["LLM_ENABLED", "LLM_PROVIDER", "DEEPSEEK_API_KEY", "DEEPSEEK_MODEL"]
+    required_deployment = [
+        "LLM_ENABLED",
+        "LLM_PROVIDER",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_MODEL",
+        "GitHub Variables",
+        "GitHub Secrets",
+        "actions/checkout@v5",
+        "actions/setup-python@v6",
+    ]
     missing_deployment = [item for item in required_deployment if item not in deployment]
     if missing_deployment:
         add_issue(report, section, "部署清单缺少 DeepSeek Secrets：" + "、".join(missing_deployment))
@@ -325,6 +364,10 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
     if any(re.search(pattern, llm_script) for pattern in legacy_default_patterns):
         add_issue(report, section, "旧 DeepSeek 模型名不应作为默认模型")
         return
+    for required_function in ["deduplicate_llm_input_records", "normalize_and_deduplicate_llm_references"]:
+        if f"def {required_function}" not in llm_script:
+            add_issue(report, section, f"llm_summarize.py 缺少 {required_function}")
+            return
     mark_passed_if_clean(report, section)
 
 
@@ -357,7 +400,7 @@ def jsonl_file(path: Path) -> tuple[bool, list[dict[str, Any]], str | None]:
 
 def check_data_files(report: dict[str, Any]) -> None:
     section = "data_files"
-    for relative in ["data/items.jsonl", "data/run_history.jsonl"]:
+    for relative in ["data/items.jsonl", "data/run_history.jsonl", "data/llm_usage.jsonl"]:
         valid, records, error = jsonl_file(PROJECT_ROOT / relative)
         if not valid:
             add_issue(report, section, f"{relative} 异常：{error}")
@@ -365,6 +408,39 @@ def check_data_files(report: dict[str, Any]) -> None:
         if relative.endswith("run_history.jsonl") and len(records) > 200:
             add_issue(report, section, "run_history.jsonl 超过 200 行")
             return
+        if relative.endswith("llm_usage.jsonl"):
+            if len(records) > 200:
+                add_issue(report, section, "llm_usage.jsonl 超过 200 行")
+                return
+            for record in records:
+                required_fields = {
+                    "generated_at",
+                    "week_id",
+                    "llm_enabled",
+                    "api_called",
+                    "provider",
+                    "model",
+                    "status",
+                    "validation_status",
+                    "input_records_before_dedup",
+                    "input_records_after_dedup",
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "total_tokens",
+                    "latency_ms",
+                    "error_type",
+                }
+                if not required_fields <= set(record):
+                    add_issue(report, section, "llm_usage.jsonl 存在缺失字段")
+                    return
+                total_tokens = record.get("total_tokens")
+                latency_ms = record.get("latency_ms")
+                if total_tokens is not None and (not isinstance(total_tokens, int) or isinstance(total_tokens, bool) or total_tokens < 0):
+                    add_issue(report, section, "llm_usage.jsonl 的 total_tokens 必须为 null 或非负整数")
+                    return
+                if latency_ms is not None and (not isinstance(latency_ms, (int, float)) or isinstance(latency_ms, bool) or latency_ms < 0):
+                    add_issue(report, section, "llm_usage.jsonl 的 latency_ms 必须为 null 或非负数")
+                    return
 
     for relative in ["data/source_status.json", "data/extraction_quality.json", "data/weekly_manifest.json", "data/llm_audit.json"]:
         valid, data, error = json_file(PROJECT_ROOT / relative)
@@ -393,6 +469,15 @@ def check_data_files(report: dict[str, Any]) -> None:
                 return
             if not data.get("base_url_label"):
                 add_issue(report, section, "llm_audit.json 缺少 base_url_label")
+                return
+            before = data.get("input_records_before_dedup")
+            after = data.get("input_records_after_dedup")
+            removed = data.get("duplicate_records_removed")
+            if not all(isinstance(value, int) and not isinstance(value, bool) for value in [before, after, removed]):
+                add_issue(report, section, "llm_audit.json 缺少有效去重计数")
+                return
+            if not (0 <= after <= before and removed == before - after):
+                add_issue(report, section, "llm_audit.json 去重计数不一致")
                 return
             if status == "generated":
                 summary_valid, _summary_data, summary_error = json_file(PROJECT_ROOT / "data/llm_summaries.json")
@@ -425,14 +510,14 @@ def check_weekly_outputs(report: dict[str, Any]) -> None:
     details = paths["details"].read_text(encoding="utf-8")
     index = paths["index"].read_text(encoding="utf-8")
     weekly_index = paths["weekly_index"].read_text(encoding="utf-8")
-    for required in ["本周核心结论", "来源状态概览", "解析质量概览"]:
+    for required in ["本周核心结论", "来源状态概览", "解析质量概览", "页面级监测解释", "去重前输入记录"]:
         if required not in summary:
             add_issue(report, section, f"summary 缺少：{required}")
             return
     if "大模型辅助摘要" not in summary:
         add_issue(report, section, "summary 缺少：大模型辅助摘要")
         return
-    for required in ["来源状态诊断", "解析质量诊断", "采集条目明细"]:
+    for required in ["来源状态诊断", "解析质量诊断", "采集条目明细", "页面级监测解释", "去重前输入记录"]:
         if required not in details:
             add_issue(report, section, f"details 缺少：{required}")
             return

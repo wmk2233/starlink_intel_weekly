@@ -6,7 +6,7 @@
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3B：支持 DeepSeek provider，并继续强制来源约束。
+当前阶段为阶段 3C：完成 LLM 输入与引用去重、变化层级解释和用量审计。
 
 ## 2. 本周核心结论
 
@@ -18,13 +18,13 @@
 - 未变化条目数量：2
 - 当前解析质量总体判断：low（以当前规则解析完整度为准）
 
-说明：本节仅基于规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。
+说明：本节统计结论由结构化采集结果确定性生成，不依赖大模型；后续“大模型辅助摘要”小节为单独的来源约束型摘要。
 
 ## 大模型辅助摘要
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：generated
+状态：skipped
 
 说明：
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
@@ -33,23 +33,42 @@ LLM Provider：deepseek
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实。
 
-### 总体摘要
+### 输入与引用去重
 
-本周未检测到新增或内容变化条目
+| 指标 | 数量 |
+|---|---:|
+| 去重前输入记录 | 3 |
+| 去重后输入记录 | 2 |
+| 删除重复记录 | 1 |
+| 唯一来源 URL | 2 |
+| 输出 record ID 引用（前 / 后） | 0 / 0 |
+| 输出 URL 引用（前 / 后） | 0 / 0 |
 
-### 来源约束要点
+### 页面级监测解释
 
-| 要点 | 来源记录 | 来源链接 | 限制说明 |
-|---|---|---|---|
-| 本周未检测到新增或内容变化条目 | 42a0ea622e13944d、e7e9456a75b0c4db、8abfee15687a5064 | https://www.starlink.com/updates<br>https://www.spacex.com/launches<br>https://www.starlink.com/updates | 所有记录均为页面级低质量，无法确认具体事件 |
+- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
+- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
+
+### LLM 调用统计
+
+| 指标 | 数值 |
+|---|---:|
+| Prompt tokens | unknown |
+| Completion tokens | unknown |
+| Total tokens | unknown |
+| API 调用耗时 | unknown ms |
+
+跳过原因：LLM is disabled.
+
+当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
 
 
 ## 3. 来源状态概览
 
 | 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 | 主导解析层级 | 主导质量 |
 |---|---|---|---:|---:|---:|---|---|
-| Starlink Official Updates | reachable | changed | 0 | 0 | 1 | page_level | low |
 | SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | page_level | low |
+| Starlink Official Updates | reachable | changed | 0 | 0 | 1 | page_level | low |
 
 ## 4. 本周值得关注的信息
 
@@ -59,16 +78,16 @@ LLM Provider：deepseek
 
 ### 4.2 页面级变化说明
 
-- Starlink Official Updates：页面变化状态为 changed。
-- SpaceX Official Launches：页面变化状态为 unchanged。
-以上仅为页面 hash 或采集状态检测结果，不做事实推断。
+- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
+- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
+页面变化状态与条目变化状态是两个检测层级，不能相互替代。
 
 ## 5. 解析质量概览
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |
 |---|---|---|---:|---:|
-| Starlink Official Updates | page_level | low | 0.35 | 0 |
 | SpaceX Official Launches | page_level | low | 0.35 | 0 |
+| Starlink Official Updates | page_level | low | 0.35 | 0 |
 
 说明：解析质量只表示规则化抽取完整度，不表示事实重要性或事实可信度。
 
@@ -86,15 +105,15 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-14 04:42:57 UTC+0000
+- 运行时间：2026-07-14 13:17:17 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：是
-- 是否执行真实来源采集：是
+- 是否发送邮件：否
+- 是否执行真实来源采集：否
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0
 - 内容变化条目数：0
 - 未变化条目数：2
 - LLM Provider：deepseek
-- LLM 摘要状态：generated
+- LLM 摘要状态：skipped

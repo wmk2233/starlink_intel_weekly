@@ -1,7 +1,9 @@
 {
   "base_url_label": "deepseek_default",
   "generated_at": "2026-07-14T04:43:16+00:00",
-  "input_records": 3,
+  "input_records": 2,
+  "input_records_after_dedup": 2,
+  "input_records_before_dedup": 3,
   "llm_enabled": true,
   "llm_provider": "deepseek",
   "llm_status": "generated",
@@ -12,14 +14,12 @@
         "caveat": "所有记录均为页面级低质量，无法确认具体事件",
         "point": "本周未检测到新增或内容变化条目",
         "source_record_ids": [
-          "42a0ea622e13944d",
-          "e7e9456a75b0c4db",
-          "8abfee15687a5064"
+          "8abfee15687a5064",
+          "e7e9456a75b0c4db"
         ],
         "source_urls": [
           "https://www.starlink.com/updates",
-          "https://www.spacex.com/launches",
-          "https://www.starlink.com/updates"
+          "https://www.spacex.com/launches"
         ]
       }
     ],
@@ -53,14 +53,13 @@
         "source_name": "Starlink Official Updates",
         "source_quality": "low",
         "source_record_ids": [
-          "42a0ea622e13944d",
           "8abfee15687a5064"
         ],
         "source_urls": [
-          "https://www.starlink.com/updates",
           "https://www.starlink.com/updates"
         ]
       }
     ]
-  }
+  },
+  "unique_source_urls": 2
 }

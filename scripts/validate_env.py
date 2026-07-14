@@ -56,8 +56,11 @@ def main() -> int:
     print("开始检查环境变量配置。")
 
     if ENV_FILE.exists():
-        print(".env: 已存在，将读取本地配置。")
-        load_dotenv(ENV_FILE)
+        if os.getenv("PYTHON_DOTENV_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+            print(".env: 已存在，本次按 PYTHON_DOTENV_DISABLED 配置不读取文件内容。")
+        else:
+            print(".env: 已存在，将读取本地配置。")
+            load_dotenv(ENV_FILE)
     else:
         print(".env: 未找到。这在当前阶段是正常情况，可使用 .env.example 创建本地配置。")
 

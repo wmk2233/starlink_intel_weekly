@@ -21,11 +21,13 @@ from collect_sources import (
     load_source_status,
 )
 from llm_summarize import (
+    DEFAULT_MAX_USAGE_RECORDS,
     DEFAULT_DEEPSEEK_BASE_URL,
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_PROVIDER,
     LLM_AUDIT_FILE,
     LLM_SUMMARY_FILE,
+    LLM_USAGE_FILE,
     run_llm_summary,
 )
 from send_email import send_weekly_email
@@ -51,8 +53,9 @@ SOURCE_CHANGE_HEADING = "## 来源状态与变化检测"
 QUALITY_HEADING = "## 来源解析质量诊断"
 OUTPUT_STRUCTURE_HEADING = "## 周报输出结构"
 ARCHIVE_HEADING = "## 周报归档与历史索引"
-LLM_HEADING = "## 阶段 3B DeepSeek Provider 与大模型摘要边界"
+LLM_HEADING = "## 阶段 3C LLM 去重、变化分层与用量审计"
 LEGACY_LLM_HEADING = "## 阶段 3A 大模型摘要边界"
+LEGACY_LLM_HEADING_3B = "## 阶段 3B DeepSeek Provider 与大模型摘要边界"
 
 
 def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mode: str) -> dict[str, str]:
@@ -101,10 +104,24 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "llm_model": DEFAULT_DEEPSEEK_MODEL,
         "llm_base_url_label": "deepseek_default",
         "llm_input_records": "0",
+        "llm_input_records_before_dedup": "0",
+        "llm_input_records_after_dedup": "0",
+        "llm_duplicate_records_removed": "0",
+        "llm_unique_source_urls": "0",
+        "llm_output_record_references_before_dedup": "0",
+        "llm_output_record_references_after_dedup": "0",
+        "llm_output_url_references_before_dedup": "0",
+        "llm_output_url_references_after_dedup": "0",
+        "llm_prompt_tokens": "unknown",
+        "llm_completion_tokens": "unknown",
+        "llm_total_tokens": "unknown",
+        "llm_latency_ms": "unknown",
+        "llm_monitoring_overview": "暂无页面级监测解释。",
         "llm_validation_status": "skipped",
         "llm_reason": "LLM is disabled.",
         "llm_audit_path": "data/llm_audit.json",
         "llm_summary_path": "data/llm_summaries.json",
+        "llm_usage_path": "data/llm_usage.jsonl",
         "llm_strict_source": "true",
         "llm_page_level_no_fact_expansion": "true",
         "llm_errors": "",
@@ -126,6 +143,20 @@ def now_iso() -> str:
 
 def relative_project_path(path: Path) -> str:
     return path.relative_to(PROJECT_ROOT).as_posix()
+
+
+def optional_number(value: object) -> int | float | None:
+    if value in (None, "", "unknown", "未知"):
+        return None
+    try:
+        number = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def display_metric(value: object) -> str:
+    return "unknown" if value is None else str(value)
 
 
 def escape_table_cell(value: object) -> str:
@@ -388,11 +419,22 @@ def render_changed_items_summary(source_items: list[dict[str, object]]) -> str:
 def render_page_change_notes(source_statuses: dict[str, dict[str, object]]) -> str:
     if not source_statuses:
         return "本次没有页面级变化检测记录。"
-    rows = [
-        f"- {status.get('source_name', source_id)}：页面变化状态为 {status.get('change_status', 'unknown')}。"
-        for source_id, status in source_statuses.items()
-    ]
-    rows.append("以上仅为页面 hash 或采集状态检测结果，不做事实推断。")
+    rows: list[str] = []
+    for source_id, status in source_statuses.items():
+        source_name = status.get("source_name", source_id)
+        page_change = status.get("change_status", "unknown")
+        new_items = int(status.get("new_items") or 0)
+        changed_items = int(status.get("changed_items") or 0)
+        if new_items or changed_items:
+            explanation = "当前规则检测到新增或内容变化条目，仍需结合来源链接人工复核。"
+        elif page_change == "changed":
+            explanation = "页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。"
+        elif page_change == "unchanged":
+            explanation = "页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。"
+        else:
+            explanation = "页面级变化状态暂不明确，当前规则未检测到可确认的新增或内容变化条目。"
+        rows.append(f"- {source_name}：{explanation}")
+    rows.append("页面变化状态与条目变化状态是两个检测层级，不能相互替代。")
     return "\n".join(rows)
 
 
@@ -410,6 +452,8 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     guardrails = audit.get("guardrails", {}) if isinstance(audit.get("guardrails"), dict) else {}
     errors = audit.get("errors", [])
     warnings = audit.get("warnings", [])
+    usage = audit.get("usage", {}) if isinstance(audit.get("usage"), dict) else {}
+    monitoring_context = audit.get("monitoring_context", [])
     meta["llm_enabled"] = str(bool(audit.get("llm_enabled"))).lower()
     meta["llm_provider"] = str(audit.get("llm_provider") or "unknown")
     meta["llm_status"] = str(audit.get("llm_status") or "unknown")
@@ -417,14 +461,33 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     meta["llm_model"] = str(audit.get("model") or "未配置")
     meta["llm_base_url_label"] = str(audit.get("base_url_label") or "unknown")
     meta["llm_input_records"] = str(audit.get("input_records") or 0)
+    meta["llm_input_records_before_dedup"] = str(audit.get("input_records_before_dedup") or 0)
+    meta["llm_input_records_after_dedup"] = str(audit.get("input_records_after_dedup") or 0)
+    meta["llm_duplicate_records_removed"] = str(audit.get("duplicate_records_removed") or 0)
+    meta["llm_unique_source_urls"] = str(audit.get("unique_source_urls") or 0)
+    meta["llm_output_record_references_before_dedup"] = str(audit.get("output_record_references_before_dedup") or 0)
+    meta["llm_output_record_references_after_dedup"] = str(audit.get("output_record_references_after_dedup") or 0)
+    meta["llm_output_url_references_before_dedup"] = str(audit.get("output_url_references_before_dedup") or 0)
+    meta["llm_output_url_references_after_dedup"] = str(audit.get("output_url_references_after_dedup") or 0)
+    meta["llm_prompt_tokens"] = display_metric(usage.get("prompt_tokens"))
+    meta["llm_completion_tokens"] = display_metric(usage.get("completion_tokens"))
+    meta["llm_total_tokens"] = display_metric(usage.get("total_tokens"))
+    meta["llm_latency_ms"] = display_metric(usage.get("latency_ms"))
     meta["llm_validation_status"] = str(audit.get("validation_status") or "unknown")
     meta["llm_reason"] = str(audit.get("reason") or "")
     meta["llm_audit_path"] = "data/llm_audit.json"
     meta["llm_summary_path"] = "data/llm_summaries.json"
+    meta["llm_usage_path"] = "data/llm_usage.jsonl"
     meta["llm_strict_source"] = str(bool(guardrails.get("strict_source"))).lower()
     meta["llm_page_level_no_fact_expansion"] = str(bool(guardrails.get("page_level_no_fact_expansion"))).lower()
     meta["llm_errors"] = "；".join(str(error) for error in errors) if isinstance(errors, list) else ""
     meta["llm_warnings"] = "；".join(str(warning) for warning in warnings) if isinstance(warnings, list) else ""
+    if isinstance(monitoring_context, list) and monitoring_context:
+        meta["llm_monitoring_overview"] = "\n".join(
+            f"- {entry.get('source_name') or entry.get('source_id') or 'unknown'}：{entry.get('interpretation') or '暂无解释。'}"
+            for entry in monitoring_context
+            if isinstance(entry, dict)
+        )
 
 
 def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str, object]) -> str:
@@ -441,6 +504,30 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
         "- 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；",
         "- 无来源不写结论；",
         "- 页面级记录不扩展成具体事实。",
+        "",
+        "### 输入与引用去重",
+        "",
+        "| 指标 | 数量 |",
+        "|---|---:|",
+        f"| 去重前输入记录 | {meta.get('llm_input_records_before_dedup', '0')} |",
+        f"| 去重后输入记录 | {meta.get('llm_input_records_after_dedup', '0')} |",
+        f"| 删除重复记录 | {meta.get('llm_duplicate_records_removed', '0')} |",
+        f"| 唯一来源 URL | {meta.get('llm_unique_source_urls', '0')} |",
+        f"| 输出 record ID 引用（前 / 后） | {meta.get('llm_output_record_references_before_dedup', '0')} / {meta.get('llm_output_record_references_after_dedup', '0')} |",
+        f"| 输出 URL 引用（前 / 后） | {meta.get('llm_output_url_references_before_dedup', '0')} / {meta.get('llm_output_url_references_after_dedup', '0')} |",
+        "",
+        "### 页面级监测解释",
+        "",
+        meta.get("llm_monitoring_overview", "暂无页面级监测解释。"),
+        "",
+        "### LLM 调用统计",
+        "",
+        "| 指标 | 数值 |",
+        "|---|---:|",
+        f"| Prompt tokens | {meta.get('llm_prompt_tokens', 'unknown')} |",
+        f"| Completion tokens | {meta.get('llm_completion_tokens', 'unknown')} |",
+        f"| Total tokens | {meta.get('llm_total_tokens', 'unknown')} |",
+        f"| API 调用耗时 | {meta.get('llm_latency_ms', 'unknown')} ms |",
         "",
     ]
     if meta.get("llm_status") != "generated":
@@ -491,11 +578,24 @@ def render_llm_audit_section(meta: dict[str, str]) -> str:
         ("模型", meta.get("llm_model", "未配置")),
         ("Base URL 类型", meta.get("llm_base_url_label", "unknown")),
         ("输入记录数", meta.get("llm_input_records", "0")),
+        ("去重前输入记录", meta.get("llm_input_records_before_dedup", "0")),
+        ("去重后输入记录", meta.get("llm_input_records_after_dedup", "0")),
+        ("删除重复记录", meta.get("llm_duplicate_records_removed", "0")),
+        ("唯一来源 URL", meta.get("llm_unique_source_urls", "0")),
+        ("输出 record ID 去重前数量", meta.get("llm_output_record_references_before_dedup", "0")),
+        ("输出 record ID 去重后数量", meta.get("llm_output_record_references_after_dedup", "0")),
+        ("输出 URL 去重前数量", meta.get("llm_output_url_references_before_dedup", "0")),
+        ("输出 URL 去重后数量", meta.get("llm_output_url_references_after_dedup", "0")),
+        ("Prompt tokens", meta.get("llm_prompt_tokens", "unknown")),
+        ("Completion tokens", meta.get("llm_completion_tokens", "unknown")),
+        ("Total tokens", meta.get("llm_total_tokens", "unknown")),
+        ("API 调用耗时", f"{meta.get('llm_latency_ms', 'unknown')} ms"),
         ("校验状态", meta.get("llm_validation_status", "unknown")),
         ("严格来源约束", meta.get("llm_strict_source", "unknown")),
         ("页面级记录禁止事实扩展", meta.get("llm_page_level_no_fact_expansion", "unknown")),
         ("审计文件", meta.get("llm_audit_path", "data/llm_audit.json")),
         ("摘要文件", meta.get("llm_summary_path", "data/llm_summaries.json")),
+        ("用量记录", meta.get("llm_usage_path", "data/llm_usage.jsonl")),
     ]
     lines = [
         "## 大模型摘要审计",
@@ -505,6 +605,7 @@ def render_llm_audit_section(meta: dict[str, str]) -> str:
     ]
     for label, value in rows:
         lines.append(f"| {escape_table_cell(label)} | {escape_table_cell(value)} |")
+    lines.extend(["", "### 页面级监测解释", "", meta.get("llm_monitoring_overview", "暂无页面级监测解释。")])
     if meta.get("llm_reason"):
         lines.extend(["", f"- 原因：{meta['llm_reason']}"])
     if meta.get("llm_errors"):
@@ -726,7 +827,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 3B：支持 DeepSeek provider，并继续强制来源约束。
+当前阶段为阶段 3C：完成 LLM 输入与引用去重、变化层级解释和用量审计。
 
 ## 2. 本周核心结论
 
@@ -738,7 +839,7 @@ def build_weekly_summary_markdown(
 - 未变化条目数量：{meta["unchanged_items"]}
 - 当前解析质量总体判断：{meta["overall_quality"]}
 
-说明：本节仅基于规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。
+说明：本节统计结论由结构化采集结果确定性生成，不依赖大模型；后续“大模型辅助摘要”小节为单独的来源约束型摘要。
 
 {render_llm_summary_section(meta, llm_summary_data)}
 
@@ -797,7 +898,7 @@ def build_weekly_details_markdown(
 
 ## 1. 文档说明
 
-本明细版用于来源复查、结构化数据核验和知识库维护。内容来自规则化网页采集、hash 变化检测和解析质量诊断，不包含大模型事实推理。{error_note}
+本明细版用于来源复查、结构化数据核验和知识库维护。页面级 hash 变化与条目级结构化变化分别展示；大模型辅助摘要独立受来源约束，不能替代确定性统计。{error_note}
 
 ## 2. 数据文件
 
@@ -808,6 +909,7 @@ def build_weekly_details_markdown(
 | `data/extraction_quality.json` | 解析质量诊断 |
 | `data/llm_audit.json` | 可选 LLM 摘要审计 |
 | `data/llm_summaries.json` | 可选 LLM 摘要输出 |
+| `data/llm_usage.jsonl` | 限长的 LLM 状态、token 与耗时记录 |
 
 {render_llm_audit_section(meta)}
 
@@ -1007,6 +1109,12 @@ def summarize_current_week_outputs(
         "llm_base_url_label": meta.get("llm_base_url_label", "unknown"),
         "llm_summary_path": meta.get("llm_summary_path", "data/llm_summaries.json"),
         "llm_audit_path": meta.get("llm_audit_path", "data/llm_audit.json"),
+        "llm_usage_path": meta.get("llm_usage_path", "data/llm_usage.jsonl"),
+        "llm_input_records_before_dedup": int(meta.get("llm_input_records_before_dedup") or 0),
+        "llm_input_records_after_dedup": int(meta.get("llm_input_records_after_dedup") or 0),
+        "llm_unique_source_urls": int(meta.get("llm_unique_source_urls") or 0),
+        "llm_total_tokens": optional_number(meta.get("llm_total_tokens")),
+        "llm_latency_ms": optional_number(meta.get("llm_latency_ms")),
         "summary_exists": paths["summary"].exists(),
         "details_exists": paths["details"].exists(),
         "index_exists": paths["index"].exists(),
@@ -1164,6 +1272,10 @@ def append_run_history(
         "llm_model": meta.get("llm_model", "未配置"),
         "llm_base_url_label": meta.get("llm_base_url_label", "unknown"),
         "llm_summary_generated": meta.get("llm_summary_generated") == "true",
+        "llm_input_records_before_dedup": int(meta.get("llm_input_records_before_dedup") or 0),
+        "llm_input_records_after_dedup": int(meta.get("llm_input_records_after_dedup") or 0),
+        "llm_total_tokens": optional_number(meta.get("llm_total_tokens")),
+        "llm_latency_ms": optional_number(meta.get("llm_latency_ms")),
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
     records = load_run_history()
@@ -1340,24 +1452,29 @@ def update_archive_section_text(existing: str) -> str:
 
 def update_llm_section_text(existing: str) -> str:
     existing = existing.replace(LEGACY_LLM_HEADING, LLM_HEADING)
+    existing = existing.replace(LEGACY_LLM_HEADING_3B, LLM_HEADING)
     section = f"""{LLM_HEADING}
 
-阶段 3B 在来源约束护栏不变的前提下支持 `openai` 与 `deepseek` provider，默认 provider 为 `deepseek`，默认模型为 `deepseek-v4-flash`。LLM 仍默认关闭；只有显式启用后才会尝试调用 API，缺少当前 provider 对应的 API Key 时会写入跳过审计且不阻断主流程。
+阶段 3C 保留 `openai` 与 `deepseek` provider，并新增 LLM 输入与输出引用去重、页面级与条目级变化分层解释，以及限长用量记录。LLM 仍默认关闭；缺少当前 provider 对应的 API Key 时会写入跳过审计且不阻断主流程。
 
 | 文件 | 用途 |
 |---|---|
 | `scripts/llm_summarize.py` | 基于本地结构化数据生成受来源约束的可选 LLM 摘要 |
 | `data/llm_audit.json` | 记录 LLM 是否启用、是否跳过、校验状态和 guardrails |
 | `data/llm_summaries.json` | 仅在 LLM 启用且校验通过后保存摘要 |
+| `data/llm_usage.jsonl` | 仅记录 provider、model、状态、去重计数、token 与调用耗时 |
 
 约束：
 
 - ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
-- DeepSeek API Key 需要单独在 DeepSeek 平台获取，本地只写入 `.env`，GitHub Actions 只写入 GitHub Secrets；
+- provider、model、base URL 等非敏感配置使用 GitHub Variables；API Key 只使用 GitHub Secrets；
 - 不得把任何 API Key 写入代码、文档或提交记录；
 - LLM 摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实；
+- 页面 changed 仅代表页面 hash 或内容变化，不能等同于条目 changed；
+- `items.jsonl` 保留历史，LLM 输入才按 `source_id + normalized_url` 选择每组最新记录；
+- 用量记录不保存费用、完整 prompt、完整 response 或 API Key；
 - LLM 输出与原始采集数据分离。
 - 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 """
@@ -1440,6 +1557,10 @@ def update_knowledge_base_text(
 - LLM Provider：{meta["llm_provider"]}
 - LLM 模型：{meta["llm_model"]}
 - LLM 摘要状态：{meta["llm_status"]}
+- LLM 输入记录（去重前 / 后）：{meta["llm_input_records_before_dedup"]} / {meta["llm_input_records_after_dedup"]}
+- LLM 唯一来源 URL：{meta["llm_unique_source_urls"]}
+- LLM Total tokens：{meta["llm_total_tokens"]}
+- LLM API 调用耗时：{meta["llm_latency_ms"]} ms
 """
 
     if heading not in existing:
@@ -1521,6 +1642,12 @@ def main() -> int:
         help="DeepSeek OpenAI-compatible API base URL。",
     )
     parser.add_argument("--llm-max-items", type=int, default=10, help="LLM 摘要最多处理的来源记录数，默认 10。")
+    parser.add_argument(
+        "--max-llm-usage-records",
+        type=int,
+        default=int(os.getenv("LLM_MAX_USAGE_RECORDS") or DEFAULT_MAX_USAGE_RECORDS),
+        help="data/llm_usage.jsonl 最多保留的记录条数，默认 200。",
+    )
     parser.add_argument("--fail-on-llm-error", action="store_true", help="LLM 调用或校验失败时阻断主流程。")
     args = parser.parse_args()
 
@@ -1535,6 +1662,9 @@ def main() -> int:
         return 2
     if args.llm_max_items < 1:
         print("--llm-max-items 必须是大于等于 1 的整数。")
+        return 2
+    if args.max_llm_usage_records < 1:
+        print("--max-llm-usage-records 必须是大于等于 1 的整数。")
         return 2
 
     send_email_enabled = not args.no_email and not args.dry_run
@@ -1557,7 +1687,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：3B 支持 DeepSeek provider，并保持来源约束。")
+    print("当前阶段：3C LLM 去重、变化分层、配置分级与用量审计。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -1596,6 +1726,7 @@ def main() -> int:
         enabled=args.enable_llm,
         dry_run=args.dry_run,
         max_items=args.llm_max_items,
+        max_usage_records=args.max_llm_usage_records,
         model=args.llm_model,
         provider=args.llm_provider,
         deepseek_model=args.deepseek_model,
@@ -1637,6 +1768,7 @@ def main() -> int:
     print(f"运行历史：{meta['run_history_path']}")
     print(f"LLM 审计文件：{meta['llm_audit_path']}")
     print(f"LLM 摘要文件：{meta['llm_summary_path']}")
+    print(f"LLM 用量记录：{meta['llm_usage_path']}")
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
@@ -1648,7 +1780,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "3B",
+        "stage": "3C",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -1672,6 +1804,15 @@ def main() -> int:
         "llm_status": meta["llm_status"],
         "llm_reason": meta["llm_reason"],
         "llm_summary_generated": meta["llm_summary_generated"],
+        "llm_input_records_before_dedup": meta["llm_input_records_before_dedup"],
+        "llm_input_records_after_dedup": meta["llm_input_records_after_dedup"],
+        "llm_duplicate_records_removed": meta["llm_duplicate_records_removed"],
+        "llm_unique_source_urls": meta["llm_unique_source_urls"],
+        "llm_prompt_tokens": meta["llm_prompt_tokens"],
+        "llm_completion_tokens": meta["llm_completion_tokens"],
+        "llm_total_tokens": meta["llm_total_tokens"],
+        "llm_latency_ms": meta["llm_latency_ms"],
+        "llm_monitoring_overview": meta["llm_monitoring_overview"],
     }
     if not send_weekly_email(
         paths["summary"],

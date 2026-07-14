@@ -15,15 +15,15 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-07-14T04:42:57+00:00 | reachable | changed | 2026-07-14T04:42:57+00:00 | 正常 |
-| SpaceX Official Launches | 2026-07-14T04:42:57+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| SpaceX Official Launches | 2026-07-14T13:13:56+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-14T13:13:55+08:00 | reachable | changed | 2026-07-14T13:13:55+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |
 |---|---|---|---:|---:|
-| Starlink Official Updates | page_level | low | 0.35 | 0 |
 | SpaceX Official Launches | page_level | low | 0.35 | 0 |
+| Starlink Official Updates | page_level | low | 0.35 | 0 |
 
 ## 周报输出结构
 
@@ -57,36 +57,40 @@
 | `RELEASE_NOTES.md` | 稳定版发布说明 |
 | `scripts/audit_project.py` | 项目配置与稳定性审计脚本 |
 
-## 阶段 3B DeepSeek Provider 与大模型摘要边界
+## 阶段 3C LLM 去重、变化分层与用量审计
 
-阶段 3B 在来源约束护栏不变的前提下支持 `openai` 与 `deepseek` provider，默认 provider 为 `deepseek`，默认模型为 `deepseek-v4-flash`。LLM 仍默认关闭；只有显式启用后才会尝试调用 API，缺少当前 provider 对应的 API Key 时会写入跳过审计且不阻断主流程。
+阶段 3C 保留 `openai` 与 `deepseek` provider，并新增 LLM 输入与输出引用去重、页面级与条目级变化分层解释，以及限长用量记录。LLM 仍默认关闭；缺少当前 provider 对应的 API Key 时会写入跳过审计且不阻断主流程。
 
 | 文件 | 用途 |
 |---|---|
 | `scripts/llm_summarize.py` | 基于本地结构化数据生成受来源约束的可选 LLM 摘要 |
 | `data/llm_audit.json` | 记录 LLM 是否启用、是否跳过、校验状态和 guardrails |
 | `data/llm_summaries.json` | 仅在 LLM 启用且校验通过后保存摘要 |
+| `data/llm_usage.jsonl` | 仅记录 provider、model、状态、去重计数、token 与调用耗时 |
 
 约束：
 
 - ChatGPT Plus 订阅不能直接作为 GitHub Actions 中的 OpenAI API 调用额度使用；
-- DeepSeek API Key 需要单独在 DeepSeek 平台获取，本地只写入 `.env`，GitHub Actions 只写入 GitHub Secrets；
+- provider、model、base URL 等非敏感配置使用 GitHub Variables；API Key 只使用 GitHub Secrets；
 - 不得把任何 API Key 写入代码、文档或提交记录；
 - LLM 摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
 - 无来源不写结论；
 - 页面级记录不扩展成具体事实；
+- 页面 changed 仅代表页面 hash 或内容变化，不能等同于条目 changed；
+- `items.jsonl` 保留历史，LLM 输入才按 `source_id + normalized_url` 选择每组最新记录；
+- 用量记录不保存费用、完整 prompt、完整 response 或 API Key；
 - LLM 输出与原始采集数据分离。
 - 本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-14 04:42:57 UTC+0000
+- 运行时间：2026-07-14 13:17:17 中国标准时间+0800
 - ISO 周编号：2026-W29
-- 执行环境：Linux 6.17.0-1018-azure
-- Python 版本：3.11.15
+- 执行环境：Windows 10
+- Python 版本：3.11.9
 - 输出模式：dual
-- 是否发送邮件：是
-- 是否执行真实来源采集：是
+- 是否发送邮件：否
+- 是否执行真实来源采集：否
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W29-summary.md
 - 明细版文档：weekly/2026-W29-details.md
@@ -94,15 +98,19 @@
 - 周报总索引：weekly/index.md
 - 周报 manifest：data/weekly_manifest.json
 - 运行历史：data/run_history.jsonl
-- 本次采集来源名称：Starlink Official Updates、SpaceX Official Launches
-- 本次采集条目数量：2
+- 本次采集来源名称：SpaceX Official Launches、Starlink Official Updates
+- 本次采集条目数量：3
 - 已接入来源数量：2
-- 来源可达性概览：Starlink Official Updates=reachable；SpaceX Official Launches=reachable
-- 页面变化状态概览：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+- 来源可达性概览：SpaceX Official Launches=reachable；Starlink Official Updates=reachable
+- 页面变化状态概览：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
 - 新增条目数：0
 - 内容变化条目数：0
 - 未变化条目数：2
 - LLM Provider：deepseek
 - LLM 模型：deepseek-v4-flash
-- LLM 摘要状态：generated
+- LLM 摘要状态：skipped
+- LLM 输入记录（去重前 / 后）：3 / 2
+- LLM 唯一来源 URL：2
+- LLM Total tokens：unknown
+- LLM API 调用耗时：unknown ms
 
