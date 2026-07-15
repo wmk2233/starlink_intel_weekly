@@ -14,7 +14,11 @@ class RunHealthTests(unittest.TestCase):
             lifecycle_report={"totals": {"new": 0, "changed": 0, "detail_fetch_failed": 0}, "attention_items": []},
             llm_audit=llm or {"llm_status": "skipped_disabled", "validation_status": "not_run"},
             alert_report={"totals": alert_totals or {}},
-            run_context=context("run", "2026-01-01T00:00:00+00:00", **statuses),
+            run_context=context(
+                "run",
+                "2026-01-01T00:00:00+00:00",
+                **{"core_run_status": "success", **statuses},
+            ),
             previous_history=[],
             policy=policy(),
         )

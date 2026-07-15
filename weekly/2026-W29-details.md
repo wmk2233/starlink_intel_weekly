@@ -307,11 +307,13 @@
 
 ## 长期运行趋势
 
-| 运行时间 | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |
-|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|
-| 2026-07-15T20:45:02+08:00 | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | disabled | skipped |
-| 2026-07-15T12:57:08+00:00 | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | unknown | unknown |
-| 2026-07-15T13:01:21+00:00 | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | generated | unknown | unknown |
+本表只保存 final health；历史 Phase 4D 记录中无法还原的 step outcome 保留为 unknown，不把它推断成成功或失败。
+
+| 运行时间 | Phase | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|
+| 2026-07-15T20:45:02+08:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | disabled | skipped |
+| 2026-07-15T12:57:08+00:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | unknown | unknown |
+| 2026-07-15T21:34:26+08:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | generated | success | success |
 
 ## 离线生命周期回放验收
 

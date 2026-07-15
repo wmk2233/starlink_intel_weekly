@@ -713,7 +713,11 @@ def system_prompt() -> str:
         "如果 current_run_data_reused=true，本轮未重新确认详情正文。只能说明该记录来自最近一次成功解析，"
         "不得描述为本轮新确认内容。\n"
         "change_status=new 表示系统本轮首次发现该 URL，不一定表示官方本周发布；只有输入中存在明确官方发布日期证据时才能写本周发布。\n"
-        "change_status=changed 仅表示本轮检测到结构化官方内容变化。\n"
+        "change_status=unchanged 表示历史条目本轮未发生语义变化；相关要点不得使用“发布、推出、上线、新增、宣布、新近上线”等容易被理解为本轮发生的动词，"
+        "应使用“现有官方条目介绍”“已有官方记录显示”或“当前监测到的历史条目包含”等无本轮时点暗示的表达。\n"
+        "change_status=changed 仅表示本轮检测到结构化官方内容变化，只能写“本轮检测到内容变化”，不能自动写成官方本周发布。\n"
+        "只有 change_status=new 且输入存在明确官方发布日期证据时，才允许写“本周发布”。\n"
+        "如果 overall_summary 已说明没有新增或变化，任何 key point 都不得使用与该结论冲突的本周发布、推出、上线或新增表达。\n"
         "extraction_change_status=improved 只表示解析完整度提升，不代表官方事实变化，也不得写成内容更新。\n"
         "lifecycle_state=temporarily_missing 表示成功解析索引时未发现历史条目，不代表官方删除。\n"
         "lifecycle_state=long_absent 表示连续多次未在索引中发现，不代表官方删除或下线。\n"
@@ -1040,6 +1044,8 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
     valid_pair_set = {(pair["record_id"], pair["canonical_url"]) for pair in allowed_pairs}
     valid_ids = {pair["record_id"] for pair in allowed_pairs}
     valid_urls = {pair["canonical_url"] for pair in allowed_pairs}
+    record_by_id = {str(item.get("id") or ""): item for item in input_records if item.get("id")}
+    temporal_phrases = ["本周发布", "本周推出", "本周上线", "本周新增", "本周宣布", "新近上线"]
 
     key_points = summary.get("key_points", [])
     if not isinstance(key_points, list):
@@ -1073,6 +1079,18 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
             errors.append(f"key_points[{index}] 的 record id 与 URL 数量不一致。")
         elif any(pair not in valid_pair_set for pair in zip(ids, normalized_urls)):
             errors.append(f"key_points[{index}] 的 record id 与 URL 不属于同一允许记录。")
+        point_text = str(point.get("point") or "")
+        referenced = [record_by_id[item] for item in ids if item in record_by_id]
+        statuses = {str(item.get("change_status") or "").lower() for item in referenced}
+        if referenced and statuses == {"unchanged"} and any(phrase in point_text for phrase in temporal_phrases):
+            errors.append(f"key_points[{index}] 将 unchanged 历史条目描述为本轮发布、推出或上线。")
+        if referenced and statuses == {"changed"} and any(phrase in point_text for phrase in temporal_phrases):
+            errors.append(f"key_points[{index}] 将 changed 检测结果误写成官方本周发布。")
+        if any(
+            str(item.get("change_status") or "").lower() == "new" and not item.get("published_at")
+            for item in referenced
+        ) and any(phrase in point_text for phrase in temporal_phrases):
+            errors.append(f"key_points[{index}] 的 new 条目缺少明确日期证据，不得写成本周发布。")
 
     unexpected_urls = sorted(
         url for url in extract_urls(summary) if normalize_source_url(url) not in valid_urls
@@ -1096,8 +1114,13 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
         str(item.get("change_status") or "").lower() == "new" and not item.get("published_at")
         for item in input_records
     )
-    if new_without_date and any(phrase in generated_text for phrase in ["本周发布", "本周首次发布"]):
+    if new_without_date and any(phrase in generated_text for phrase in [*temporal_phrases, "本周首次发布"]):
         errors.append("new 条目缺少明确发布日期证据，不得描述为本周发布。")
+    no_current_changes = input_records and not any(
+        str(item.get("change_status") or "").lower() in {"new", "changed"} for item in input_records
+    )
+    if no_current_changes and any(phrase in generated_text for phrase in temporal_phrases):
+        errors.append("摘要已无 new/changed 条目，不得使用与之冲突的本周时点表达。")
     improved_only = any(
         str(item.get("extraction_change_status") or "").lower() == "improved"
         and str(item.get("change_status") or "").lower() != "changed"

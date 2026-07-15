@@ -16,7 +16,7 @@ from operational_health import ALERT_ACTIONS, ALERT_SEVERITIES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "4D"
+CURRENT_STAGE = "4D.1"
 
 REQUIRED_FILES = [
     "README.md",
@@ -78,6 +78,13 @@ REQUIRED_FILES = [
     "tests/test_history_retention.py",
     "tests/test_phase4d_reporting.py",
     "tests/test_phase4d_llm_guardrails.py",
+    "tests/test_final_health_workflow.py",
+    "tests/test_health_phase_transition.py",
+    "tests/test_health_history_upsert.py",
+    "tests/test_final_alert_evaluation.py",
+    "tests/test_pending_distribution_status.py",
+    "tests/test_phase4d1_reporting.py",
+    "tests/test_unchanged_llm_temporal_wording.py",
     "tests/fixtures/lifecycle_replay/items.json",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
@@ -266,8 +273,9 @@ def check_workflow(report: dict[str, Any]) -> None:
         "permissions:",
         "contents: write",
         "concurrency:",
-        "python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20",
-        "python scripts/check_outputs.py --strict",
+        "python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20",
+        "python scripts/check_outputs.py --pre-finalize --strict",
+        "python scripts/check_outputs.py --final-health-only --strict",
         "python scripts/audit_project.py --strict",
         "if: always()",
         "LLM_ENABLED",
@@ -759,6 +767,91 @@ def check_phase4d_reliability(report: dict[str, Any]) -> None:
     mark_passed_if_clean(report, section)
 
 
+def check_phase4d1_consistency(report: dict[str, Any]) -> None:
+    section = "phase4d1_consistency"
+    operations = read_text("scripts/operational_health.py")
+    health_cli = read_text("scripts/build_run_health.py")
+    weekly = read_text("scripts/run_weekly.py")
+    email = read_text("scripts/send_email.py")
+    summary = read_text("scripts/print_action_summary.py")
+    checks = read_text("scripts/check_outputs.py")
+    llm = read_text("scripts/llm_summarize.py")
+    workflow = read_text(".github/workflows/weekly.yml")
+    required = {
+        "operations": [
+            "HEALTH_PHASES", "component_status_source", "pending_at_render_time",
+            "workflow_step_outcome", "upsert_run_health_history", "finalized_at",
+        ],
+        "health_cli": ["--phase", "OUTPUT_CHECK_OUTCOME", "PROJECT_AUDIT_OUTCOME", "EMAIL_OUTCOME", "GITEE_OUTCOME", "CORE_RUN_OUTCOME"],
+        "weekly": ["health_phase", "pending_at_render_time", "运行结束后的最终状态以 GitHub Actions Summary"],
+        "email": ["当前邮件投递状态：发送完成后由最终运行健康报告记录", "pending_at_render_time"],
+        "summary": ["Final health", "final health unavailable", "Finalized at", "workflow_core"],
+        "checks": ["--pre-finalize", "--final-health-only", "final_health_history_current_upserted"],
+        "llm": ["change_status=unchanged", "本周推出", "新近上线", "历史条目"],
+        "workflow": [
+            "id: core_run", "id: output_check", "id: project_audit", "id: send_email",
+            "id: github_commit", "id: gitee_sync", "id: finalize_health",
+            "id: final_health_validation", "id: print_summary", "if: always()",
+            "OUTPUT_CHECK_OUTCOME", "PROJECT_AUDIT_OUTCOME", "EMAIL_OUTCOME",
+            "GITEE_OUTCOME", "CORE_RUN_OUTCOME",
+        ],
+    }
+    texts = {
+        "operations": operations,
+        "health_cli": health_cli,
+        "weekly": weekly,
+        "email": email,
+        "summary": summary,
+        "checks": checks,
+        "llm": llm,
+        "workflow": workflow,
+    }
+    missing = [f"{name}:{snippet}" for name, snippets in required.items() for snippet in snippets if snippet not in texts[name]]
+    if missing:
+        add_issue(report, section, "阶段 4D.1 实现线索缺失：" + "、".join(missing))
+        return
+    ordered = [
+        "id: core_run",
+        "id: output_check",
+        "id: project_audit",
+        "id: send_email",
+        "id: github_commit",
+        "id: gitee_sync",
+        "id: finalize_health",
+        "id: final_health_validation",
+        "id: print_summary",
+    ]
+    positions = [workflow.find(value) for value in ordered]
+    if any(value < 0 for value in positions) or positions != sorted(positions):
+        add_issue(report, section, "workflow finalization 步骤顺序不一致")
+        return
+    if "git add ." in workflow:
+        add_issue(report, section, "workflow 不得使用 git add .")
+        return
+    valid_health, health, error = json_file(PROJECT_ROOT / "data/run_health.json")
+    valid_history, history, history_error = jsonl_file(PROJECT_ROOT / "data/run_health_history.jsonl")
+    if not valid_health or not valid_history:
+        add_issue(report, section, f"Phase 4D.1 健康文件异常：{error or history_error}")
+        return
+    phase = health.get("health_phase")
+    if phase not in {None, "provisional", "final"}:
+        add_issue(report, section, "run_health health_phase 非法")
+        return
+    run_ids = [str(row.get("run_id") or "") for row in history]
+    if not all(run_ids) or len(run_ids) != len(set(run_ids)):
+        add_issue(report, section, "run health history 未按 run_id 唯一保存")
+        return
+    docs = "\n".join(
+        read_text(path)
+        for path in ["README.md", "RELEASE_NOTES.md", "docs/deployment_checklist.md", "docs/operations_guide.md", "docs/starlink_knowledge_base.md"]
+    )
+    for phrase in ["provisional", "final health", "pending_at_render_time", "Actions Summary", "unchanged"]:
+        if phrase not in docs:
+            add_issue(report, section, f"阶段 4D.1 文档缺少：{phrase}")
+            return
+    mark_passed_if_clean(report, section)
+
+
 def check_llm_config_docs(report: dict[str, Any]) -> None:
     section = "llm_config"
     env_example = read_text(".env.example") if (PROJECT_ROOT / ".env.example").exists() else ""
@@ -1186,6 +1279,7 @@ def build_report() -> dict[str, Any]:
     check_phase4b_detail_extraction(report)
     check_phase4c_lifecycle(report)
     check_phase4d_reliability(report)
+    check_phase4d1_consistency(report)
     check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)
@@ -1205,6 +1299,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         ("phase4b_detail_extraction", "Phase 4B 详情解析与失败恢复"),
         ("phase4c_lifecycle", "Phase 4C 增量变化与生命周期"),
         ("phase4d_reliability", "Phase 4D 回放、告警与运行健康"),
+        ("phase4d1_consistency", "Phase 4D.1 最终健康与报告一致性"),
         ("llm_config", "LLM 配置与文档"),
         ("data_files", "数据文件"),
         ("weekly_outputs", "weekly 输出"),

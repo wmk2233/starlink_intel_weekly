@@ -247,3 +247,17 @@ GitHub Actions 定时规则为：
 - 修复后无来源的要点被删除，无法安全修复时保持 `validation_failed`；
 - 校验失败不得覆盖旧摘要，不保存完整 prompt 或完整原始 response；
 - 本地测试保持 `PYTHON_DOTENV_DISABLED=1`、`LLM_ENABLED=false`。
+
+## 18. 阶段 4D.1 最终健康部署清单
+
+- 核心生成步骤使用 `--no-email`，邮件在 pre-finalize 输出检查和项目审计通过后单独发送；
+- `core_run / output_check / project_audit / send_email / github_commit / gitee_sync / finalize_health / final_health_validation / print_summary` 均有稳定 step ID；
+- finalization 和 Actions Summary 使用 `if: always()`，核心输出检查或审计失败仍使 workflow 最终失败；
+- 只传递 `OUTPUT_CHECK_OUTCOME / PROJECT_AUDIT_OUTCOME / EMAIL_OUTCOME / GITEE_OUTCOME / CORE_RUN_OUTCOME`，不输出 github、secrets 或 env context；
+- `run_health.json` 最终为 `health_phase=final`、`is_final=true` 且包含 `finalized_at`；
+- `run_health_history.jsonl` 只保存 final health，同一 `run_id` 唯一；
+- 周报和邮件中的邮件/Gitee 显示 `pending_at_render_time`，并说明最终状态以 Actions Summary 和 final health 为准；
+- output/audit 失败为 critical，email/Gitee 失败为 warning；Gitee warning 非阻塞；
+- `check_outputs.py --pre-finalize --strict` 与 `--final-health-only --strict` 均通过；
+- unchanged LLM 要点不使用“本周发布、推出、上线、新增、宣布、新近上线”等本轮时点表达；
+- 不提交 `.env` 或 `prompts/`，不使用 `git add .`，不新增来源。

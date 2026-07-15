@@ -106,7 +106,10 @@ def evaluate(
     history: list[dict] | None = None,
     statuses: dict | None = None,
     config: dict | None = None,
+    phase: str = "final",
 ):
+    run_context = context(run_id, started_at, **(statuses or {}))
+    run_context["health_phase"] = phase
     return evaluate_alerts_data(
         lifecycle_events=deepcopy(events or []),
         lifecycle_state=deepcopy(state or lifecycle_state()),
@@ -114,7 +117,7 @@ def evaluate(
         source_status=deepcopy(sources or source_status()),
         item_extraction_report=deepcopy(details or item_report()),
         llm_audit=deepcopy(llm or {"llm_status": "skipped_disabled", "validation_status": "not_run"}),
-        run_context=context(run_id, started_at, **(statuses or {})),
+        run_context=run_context,
         previous_state=deepcopy(previous_alert_state or default_alert_state()),
         existing_alert_events=deepcopy(alert_events or []),
         health_history=deepcopy(history or []),

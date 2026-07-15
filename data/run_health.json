@@ -4,56 +4,87 @@
     "open_high": 0,
     "open_warning": 0
   },
+  "component_status_source": {
+    "candidate_discovery": "internal_result",
+    "detail_extraction": "internal_result",
+    "email": "workflow_step_outcome",
+    "gitee_sync": "workflow_step_outcome",
+    "lifecycle": "internal_result",
+    "llm": "internal_result",
+    "output_validation": "workflow_step_outcome",
+    "project_audit": "workflow_step_outcome",
+    "source_collection": "internal_result",
+    "workflow_core": "workflow_step_outcome"
+  },
   "components": {
     "candidate_discovery": {
       "complete_sources": 2,
+      "component_status_source": "internal_result",
       "status": "healthy",
       "total_sources": 2
     },
     "detail_extraction": {
+      "component_status_source": "internal_result",
       "failed": 0,
       "status": "healthy",
       "success": 5,
       "success_rate": 1.0
     },
     "email": {
-      "result": "unknown",
-      "status": "unknown"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "gitee_sync": {
-      "result": "unknown",
-      "status": "unknown"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "lifecycle": {
+      "component_status_source": "internal_result",
       "status": "healthy"
     },
     "llm": {
+      "component_status_source": "internal_result",
       "enabled": true,
       "result": "generated",
       "status": "healthy"
     },
     "output_validation": {
-      "status": "unknown"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "project_audit": {
-      "status": "unknown"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "source_collection": {
+      "component_status_source": "internal_result",
       "reachable_sources": 2,
       "status": "healthy",
       "total_sources": 2
+    },
+    "workflow_core": {
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     }
   },
   "duration_seconds": 8.0,
-  "finished_at": "2026-07-15T13:01:21+00:00",
-  "generated_at": "2026-07-15T13:01:21+00:00",
+  "finalized_at": "2026-07-15T21:34:26+08:00",
+  "finished_at": "2026-07-15T21:34:26+08:00",
+  "generated_at": "2026-07-15T21:34:26+08:00",
+  "health_phase": "final",
+  "is_final": true,
   "last_applied_run_id": "29417380898",
   "last_applied_started_at": "2026-07-15T13:01:13+00:00",
   "overall_health": "healthy",
   "run_id": "29417380898",
   "severity_safety_note": "告警等级只表示自动化系统中的人工复查优先级，不表示 Starlink、SpaceX 或相关事件的战略重要性、影响程度或安全等级。",
-  "stage": "4D",
+  "stage": "4D.1",
   "started_at": "2026-07-15T13:01:13+00:00",
-  "version": 1,
+  "version": 2,
   "warnings": []
 }

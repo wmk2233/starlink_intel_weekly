@@ -46,6 +46,7 @@ def main() -> int:
     parser.add_argument("--item-extraction-report", default=str(DATA_DIR / "item_extraction_report.json"))
     parser.add_argument("--llm-audit", default=str(DATA_DIR / "llm_audit.json"))
     parser.add_argument("--run-context", help="只含有限运行状态的 JSON 文件。")
+    parser.add_argument("--phase", choices=("provisional", "final"), default="final")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--no-write", action="store_true")
     parser.add_argument("--strict", action="store_true")
@@ -57,6 +58,7 @@ def main() -> int:
     run_context = load_json(Path(args.run_context), {}) if args.run_context else {}
     run_context.setdefault("run_id", lifecycle_report.get("run_id") or f"alert-{now_iso()}")
     run_context.setdefault("started_at", lifecycle_report.get("generated_at") or now_iso())
+    run_context["health_phase"] = args.phase
     policy, config_warnings = policy_from_env()
     evaluation = evaluate_alerts_data(
         lifecycle_events=lifecycle_events,
@@ -72,7 +74,7 @@ def main() -> int:
         policy=policy,
     )
     evaluation.report.setdefault("warnings", []).extend(config_warnings)
-    if not args.no_write:
+    if args.phase == "final" and not args.no_write:
         write_alert_evaluation(evaluation)
     if args.json:
         print(json.dumps(evaluation.report, ensure_ascii=False, indent=2, sort_keys=True))

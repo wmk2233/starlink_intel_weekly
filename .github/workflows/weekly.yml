@@ -48,6 +48,7 @@ jobs:
         run: python scripts/validate_env.py
 
       - name: Run weekly automation
+        id: core_run
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -86,6 +87,10 @@ jobs:
           LLM_VALIDATION_HIGH_THRESHOLD: ${{ vars.LLM_VALIDATION_HIGH_THRESHOLD || '3' }}
           RUNTIME_WARNING_SECONDS: ${{ vars.RUNTIME_WARNING_SECONDS || '900' }}
         run: |
+          run_started_at="$(date -u +'%Y-%m-%dT%H:%M:%S+00:00')"
+          echo "AUTOMATION_RUN_STARTED_AT=${run_started_at}" >> "$GITHUB_ENV"
+          export RUN_ID="${GITHUB_RUN_ID}"
+          export RUN_STARTED_AT="${run_started_at}"
           llm_provider="${LLM_PROVIDER:-deepseek}"
           detail_args="--detail-render-mode ${DETAIL_RENDER_MODE} --max-rendered-details-per-source ${MAX_RENDERED_DETAILS_PER_SOURCE} --detail-timeout-ms ${DETAIL_TIMEOUT_MS} --detail-wait-ms ${DETAIL_WAIT_MS} --detail-max-scrolls ${DETAIL_MAX_SCROLLS} --detail-concurrency ${DETAIL_CONCURRENCY}"
           lifecycle_args="--long-absence-observation-threshold ${LONG_ABSENCE_OBSERVATION_THRESHOLD} --long-absence-min-days ${LONG_ABSENCE_MIN_DAYS} --detail-failure-attention-threshold ${DETAIL_FAILURE_ATTENTION_THRESHOLD} --max-item-versions-per-record ${MAX_ITEM_VERSIONS_PER_RECORD} --max-lifecycle-events ${MAX_LIFECYCLE_EVENTS}"
@@ -94,31 +99,49 @@ jobs:
               if [ -z "${DEEPSEEK_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 DEEPSEEK_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider deepseek ${detail_args} ${lifecycle_args}
+              python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider deepseek ${detail_args} ${lifecycle_args}
             elif [ "${llm_provider}" = "openai" ]; then
               if [ -z "${OPENAI_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 OPENAI_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider openai ${detail_args} ${lifecycle_args}
+              python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider openai ${detail_args} ${lifecycle_args}
             else
               echo "::warning::LLM_PROVIDER 无效；本次将记录 skipped_invalid_provider。"
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider "${llm_provider}" ${detail_args} ${lifecycle_args}
+              python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider "${llm_provider}" ${detail_args} ${lifecycle_args}
             fi
           else
-            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 ${detail_args} ${lifecycle_args}
+            python scripts/run_weekly.py --no-email --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 ${detail_args} ${lifecycle_args}
           fi
 
       - name: Check weekly outputs
-        run: |
-          python scripts/check_outputs.py --strict
-          echo "OUTPUT_CHECK_STATUS=passed" >> "$GITHUB_ENV"
+        id: output_check
+        run: python scripts/check_outputs.py --pre-finalize --strict
 
       - name: Audit project stability
+        id: project_audit
+        if: always()
+        run: python scripts/audit_project.py --strict
+
+      - name: Send weekly email
+        id: send_email
+        if: always() && steps.core_run.outcome == 'success' && steps.output_check.outcome == 'success' && steps.project_audit.outcome == 'success'
+        continue-on-error: true
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          OUTPUT_CHECK_OUTCOME: ${{ steps.output_check.outcome }}
+          PROJECT_AUDIT_OUTCOME: ${{ steps.project_audit.outcome }}
         run: |
-          python scripts/audit_project.py --strict
-          echo "PROJECT_AUDIT_STATUS=passed" >> "$GITHUB_ENV"
+          week_id="$(date -u +'%G-W%V')"
+          python scripts/send_email.py "weekly/${week_id}-summary.md" --week-id "${week_id}" --attachment "weekly/${week_id}-summary.md" --attachment "weekly/${week_id}-details.md"
 
       - name: Commit generated weekly files
+        id: github_commit
+        if: always() && steps.core_run.outcome == 'success' && steps.output_check.outcome == 'success' && steps.project_audit.outcome == 'success'
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
@@ -137,12 +160,15 @@ jobs:
           fi
 
       - name: Sync to Gitee
+        id: gitee_sync
+        if: always() && steps.github_commit.outcome == 'success'
         env:
           GITEE_REMOTE: ${{ secrets.GITEE_REMOTE }}
         run: |
           if [ -z "$GITEE_REMOTE" ]; then
             echo "GITEE_REMOTE 未配置，跳过 Gitee 同步。"
             echo "GITEE_SYNC_STATUS=skipped" >> "$GITHUB_ENV"
+            echo "result=skipped" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -150,6 +176,7 @@ jobs:
           if ! git remote add gitee "$GITEE_REMOTE" 2>/dev/null; then
             echo "::warning::Gitee remote 添加失败，已跳过，不阻断 GitHub 周报主流程。请检查 GITEE_REMOTE。"
             echo "GITEE_SYNC_STATUS=failed" >> "$GITHUB_ENV"
+            echo "result=failure" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -160,6 +187,7 @@ jobs:
             if git push gitee main >"$push_log" 2>&1; then
               echo "Gitee 同步成功。"
               echo "GITEE_SYNC_STATUS=success" >> "$GITHUB_ENV"
+              echo "result=success" >> "$GITHUB_OUTPUT"
               success=1
               break
             else
@@ -171,15 +199,50 @@ jobs:
           if [ "$success" -ne 1 ]; then
             echo "::warning::Gitee 同步失败，已跳过，不阻断 GitHub 周报主流程。请稍后手动重新运行 workflow 或检查 GITEE_REMOTE。"
             echo "GITEE_SYNC_STATUS=failed" >> "$GITHUB_ENV"
+            echo "result=failure" >> "$GITHUB_OUTPUT"
           fi
           rm -f "$push_log"
 
           exit 0
 
+      - name: Finalize run health
+        id: finalize_health
+        if: always()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_STARTED_AT: ${{ env.AUTOMATION_RUN_STARTED_AT }}
+          OUTPUT_CHECK_OUTCOME: ${{ steps.output_check.outcome }}
+          PROJECT_AUDIT_OUTCOME: ${{ steps.project_audit.outcome }}
+          EMAIL_OUTCOME: ${{ steps.send_email.outcome }}
+          GITEE_OUTCOME: ${{ steps.gitee_sync.outputs.result || steps.gitee_sync.outcome }}
+          CORE_RUN_OUTCOME: ${{ steps.core_run.outcome }}
+        run: python scripts/build_run_health.py --phase final
+
+      - name: Validate final health
+        id: final_health_validation
+        if: always()
+        run: python scripts/check_outputs.py --final-health-only --strict
+
+      - name: Commit finalized health files
+        id: commit_final_health
+        if: always() && steps.finalize_health.outcome == 'success' && steps.final_health_validation.outcome == 'success'
+        run: |
+          git config user.name "starlink-intel-bot"
+          git config user.email "starlink-intel-bot@example.com"
+          git add data/alert_state.json data/alert_events.jsonl data/alert_report.json data/run_health.json data/run_health_history.jsonl
+          if git diff --cached --quiet; then
+            echo "最终健康文件没有变化，跳过 finalization 提交。"
+          else
+            git commit -m "chore: finalize weekly automation health"
+            git push origin main
+          fi
+
       - name: Write run summary
+        id: print_summary
         if: always()
         env:
           GITEE_REMOTE: ${{ secrets.GITEE_REMOTE }}
+          GITEE_SYNC_STATUS: ${{ steps.gitee_sync.outputs.result || steps.gitee_sync.outcome }}
           ACTION_RUN_STATUS: ${{ job.status }}
         run: |
           python scripts/print_action_summary.py >> "$GITHUB_STEP_SUMMARY"

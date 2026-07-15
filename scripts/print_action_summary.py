@@ -200,21 +200,35 @@ def main() -> int:
         )
     if not lifecycle_rows:
         lifecycle_rows.append("| unknown | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |")
-    run_health = _json_file(RUN_HEALTH_FILE)
-    alert_report = _json_file(ALERT_REPORT_FILE)
+    raw_run_health = _json_file(RUN_HEALTH_FILE)
+    final_health_available = raw_run_health.get("health_phase") == "final" and raw_run_health.get("is_final") is True
+    run_health = raw_run_health if final_health_available else {}
+    raw_alert_report = _json_file(ALERT_REPORT_FILE)
+    alert_report = (
+        raw_alert_report
+        if final_health_available and str(raw_alert_report.get("run_id") or "") == str(run_health.get("run_id") or "")
+        else {}
+    )
     alert_totals = alert_report.get("totals", {}) if isinstance(alert_report.get("totals"), dict) else {}
     components = run_health.get("components", {}) if isinstance(run_health.get("components"), dict) else {}
+    if final_health_available:
+        gitee_component = components.get("gitee_sync", {}) if isinstance(components.get("gitee_sync"), dict) else {}
+        gitee_sync_status = str(gitee_component.get("result") or gitee_sync_status)
     health_rows = []
     for component_name in (
         "source_collection", "candidate_discovery", "detail_extraction", "lifecycle", "llm",
-        "output_validation", "project_audit", "email", "gitee_sync",
+        "output_validation", "project_audit", "email", "gitee_sync", "workflow_core",
     ):
         component = components.get(component_name, {}) if isinstance(components.get(component_name), dict) else {}
         health_rows.append(
             f"| {_escape_table_cell(component_name)} | {_escape_table_cell(component.get('status', 'unknown'))} | "
-            f"{_escape_table_cell(component.get('result', ''))} |"
+            f"{_escape_table_cell(component.get('result', ''))} | {_escape_table_cell(component.get('component_status_source', 'unknown'))} |"
         )
-    health_history = _jsonl_file(RUN_HEALTH_HISTORY_FILE)
+    health_history = [
+        row
+        for row in _jsonl_file(RUN_HEALTH_HISTORY_FILE)
+        if row.get("health_phase") == "final" and row.get("is_final") is True
+    ]
     recent_health = ", ".join(str(row.get("overall_health", "unknown")) for row in health_history[-4:]) or "unknown"
     replay_report = _json_file(LIFECYCLE_REPLAY_REPORT_FILE)
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
@@ -223,7 +237,7 @@ def main() -> int:
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：4D",
+        "- 阶段：4D.1",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -279,14 +293,18 @@ def main() -> int:
         "",
         "### 运行健康",
         "",
-        f"- 整体健康状态：{_escape_table_cell(run_health.get('overall_health', 'unknown'))}",
+        f"- Final health：{'available' if final_health_available else 'unavailable'}",
+        f"- Health phase：{_escape_table_cell(run_health.get('health_phase', 'final health unavailable'))}",
+        f"- Finalized at：{_escape_table_cell(run_health.get('finalized_at', 'final health unavailable'))}",
+        f"- 整体健康状态：{_escape_table_cell(run_health.get('overall_health', 'final health unavailable'))}",
         "",
-        "| 组件 | 状态 | 说明 |",
-        "|---|---|---|",
+        "| 组件 | 状态 | Step outcome | 状态来源 |",
+        "|---|---|---|---|",
         *health_rows,
         "",
         "### 运维告警",
         "",
+        f"- Final alert evaluation：{'available' if alert_report else 'unavailable'}",
         f"- 整体告警状态：{_escape_table_cell(alert_report.get('overall_alert_status', 'unknown'))}",
         f"- Open conditions：{_escape_table_cell(alert_totals.get('open_conditions', 'unknown'))}",
         f"- Resolved：{_escape_table_cell(alert_totals.get('resolved', 'unknown'))}",

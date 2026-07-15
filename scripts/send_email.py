@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import socket
 import smtplib
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
 
 
 def load_project_env() -> None:
@@ -44,6 +46,126 @@ def _get_config() -> tuple[dict[str, str], list[str]]:
     required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "MAIL_TO"]
     missing = [name for name in required if not config[name]]
     return config, missing
+
+
+def _read_json(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _step_health(value: object, *, critical: bool) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"success", "passed", "healthy"}:
+        return "healthy"
+    if normalized in {"failure", "failed", "cancelled", "canceled"}:
+        return "unhealthy" if critical else "degraded"
+    if normalized in {"skipped", "disabled", "not_applicable"}:
+        return "not_applicable"
+    return "pending_at_render_time"
+
+
+def build_context_from_outputs(markdown_path: Path, week_id: str, details_path: Path | None = None) -> dict[str, str]:
+    source_status = _read_json(DATA_DIR / "source_status.json")
+    item_report = _read_json(DATA_DIR / "item_extraction_report.json")
+    lifecycle = _read_json(DATA_DIR / "lifecycle_report.json")
+    llm_audit = _read_json(DATA_DIR / "llm_audit.json")
+    health = _read_json(DATA_DIR / "run_health.json")
+    raw_alerts = _read_json(DATA_DIR / "alert_report.json")
+    alerts = (
+        raw_alerts
+        if str(raw_alerts.get("run_id") or "") == str(health.get("run_id") or "")
+        else {}
+    )
+    sources = source_status.get("sources", {}) if isinstance(source_status.get("sources"), dict) else {}
+    lifecycle_totals = lifecycle.get("totals", {}) if isinstance(lifecycle.get("totals"), dict) else {}
+    alert_totals = alerts.get("totals", {}) if isinstance(alerts.get("totals"), dict) else {}
+    llm_usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
+    components = health.get("components", {}) if isinstance(health.get("components"), dict) else {}
+    item_sources = item_report.get("sources", {}) if isinstance(item_report.get("sources"), dict) else {}
+
+    def component_status(name: str) -> str:
+        component = components.get(name, {}) if isinstance(components.get(name), dict) else {}
+        return str(component.get("status") or "unknown")
+
+    source_lines = [
+        f"- {source_id}: reachable={status.get('reachable', 'unknown')}"
+        for source_id, status in sorted(sources.items())
+        if isinstance(status, dict)
+    ]
+    detail_success = sum(int(value.get("final_detail_success") or 0) for value in item_sources.values() if isinstance(value, dict))
+    detail_failed = sum(int(value.get("final_detail_failed") or 0) for value in item_sources.values() if isinstance(value, dict))
+    context = {
+        "stage": "4D.1",
+        "collected": "是",
+        "connected_source_count": str(len(sources)),
+        "source_overview": "\n".join(source_lines) or "无",
+        "quality_overview": f"详情成功 {detail_success}，失败 {detail_failed}",
+        "quality_generated": "是" if item_report else "否",
+        "health_status": f"{sum(1 for value in sources.values() if isinstance(value, dict) and value.get('reachable') is True)}/{len(sources)} 来源可达",
+        "page_change_status": "由 source_status.json 记录",
+        "item_count": str(sum(int(value.get("candidate_count") or 0) for value in sources.values() if isinstance(value, dict))),
+        "new_items": str(lifecycle_totals.get("new") or 0),
+        "changed_items": str(lifecycle_totals.get("changed") or 0),
+        "unchanged_items": str(lifecycle_totals.get("unchanged") or 0),
+        "baseline_items": str(lifecycle_totals.get("baseline") or 0),
+        "item_level_items": str(sum(int(value.get("item_level_items") or 0) for value in item_sources.values() if isinstance(value, dict))),
+        "page_level_items": str(sum(int(value.get("page_level_items") or 0) for value in item_sources.values() if isinstance(value, dict))),
+        "lifecycle_new_items": str(lifecycle_totals.get("new") or 0),
+        "lifecycle_changed_items": str(lifecycle_totals.get("changed") or 0),
+        "lifecycle_extraction_improved": str(lifecycle_totals.get("extraction_improved") or 0),
+        "lifecycle_temporarily_missing": str(lifecycle_totals.get("temporarily_missing") or 0),
+        "lifecycle_long_absent": str(lifecycle_totals.get("long_absent") or 0),
+        "lifecycle_fetch_failed": str(lifecycle_totals.get("detail_fetch_failed") or 0),
+        "lifecycle_recovered": str(lifecycle_totals.get("recovered") or 0),
+        "lifecycle_reappeared": str(lifecycle_totals.get("reappeared") or 0),
+        "lifecycle_attention_items": str(len(lifecycle.get("attention_items", []) or [])),
+        "overall_health": str(health.get("overall_health") or "unknown"),
+        "overall_alert_status": str(alerts.get("overall_alert_status") or "pending_at_render_time"),
+        "health_phase": str(health.get("health_phase") or "provisional"),
+        "health_is_final": str(bool(health.get("is_final"))).lower(),
+        "health_finalized_at": str(health.get("finalized_at") or "pending_at_render_time"),
+        "health_timing_note": "运行结束后的最终状态以 GitHub Actions Summary 和 data/run_health.json 为准。",
+        "health_source_collection": component_status("source_collection"),
+        "health_detail_extraction": component_status("detail_extraction"),
+        "health_lifecycle": component_status("lifecycle"),
+        "health_llm": component_status("llm"),
+        "health_output_validation": _step_health(os.getenv("OUTPUT_CHECK_OUTCOME"), critical=True),
+        "health_project_audit": _step_health(os.getenv("PROJECT_AUDIT_OUTCOME"), critical=True),
+        "health_email": "pending_at_render_time",
+        "health_gitee_sync": "pending_at_render_time",
+        "alert_info": str(alert_totals.get("info") or 0),
+        "alert_warning": str(alert_totals.get("warning") or 0),
+        "alert_high": str(alert_totals.get("high") or 0),
+        "alert_critical": str(alert_totals.get("critical") or 0),
+        "alert_open_conditions": str(alert_totals.get("open_conditions") or 0),
+        "resolved_alerts": str(alert_totals.get("resolved") or 0),
+        "summary_file": markdown_path.name,
+        "details_file": details_path.name if details_path else "未提供",
+        "index_file": f"{week_id}.md",
+        "weekly_archive_index": "weekly/index.md",
+        "llm_enabled": str(bool(llm_audit.get("llm_enabled"))).lower(),
+        "llm_provider": str(llm_audit.get("llm_provider") or llm_audit.get("provider") or "unknown"),
+        "llm_model": str(llm_audit.get("model") or "未配置"),
+        "llm_status": str(llm_audit.get("llm_status") or "unknown"),
+        "llm_reason": str(llm_audit.get("reason") or "未知"),
+        "llm_summary_generated": str(bool(llm_audit.get("summary_generated"))).lower(),
+        "llm_current_status_text": "LLM 输出只基于允许的结构化官方记录。",
+        "llm_raw_candidate_records": str(llm_audit.get("raw_candidate_records") or 0),
+        "llm_records_after_url_dedup": str(llm_audit.get("records_after_url_dedup") or 0),
+        "llm_final_core_input_records": str(llm_audit.get("final_core_input_records") or 0),
+        "llm_final_core_unique_urls": str(llm_audit.get("final_core_unique_urls") or 0),
+        "llm_reused_historical_records": str(llm_audit.get("reused_historical_records") or 0),
+        "llm_prompt_tokens": str(llm_usage.get("prompt_tokens") or llm_audit.get("prompt_tokens") or "unknown"),
+        "llm_completion_tokens": str(llm_usage.get("completion_tokens") or llm_audit.get("completion_tokens") or "unknown"),
+        "llm_total_tokens": str(llm_usage.get("total_tokens") or llm_audit.get("total_tokens") or "unknown"),
+        "llm_latency_ms": str(llm_usage.get("latency_ms") or llm_audit.get("latency_ms") or "unknown"),
+        "llm_monitoring_overview": "运维健康不是官方事实来源。",
+    }
+    context["alert_empty_note"] = "本轮未产生需要人工处理的运维告警。" if not any(int(alert_totals.get(key) or 0) for key in ("warning", "high", "critical", "open_conditions")) else ""
+    return context
 
 
 def build_message(
@@ -78,7 +200,7 @@ def build_message(
         historical_reuse_note = f"{historical_reuse_note}\n"
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 4D：在确定性生命周期之上增加完全离线回放、运维告警与长期运行健康。\n"
+        "当前阶段为阶段 4D.1：区分报告生成时点的 provisional 健康与工作流结束后的 final 健康。\n"
         "原始事实与状态数据来自规则化网页采集、hash 变化检测和解析质量诊断。大模型仅对本地结构化来源数据进行受约束摘要，不使用外部知识，也不生成无来源事实。\n\n"
         "LLM 摘要状态：\n"
         f"- Provider：{collection_context.get('llm_provider', 'unknown')}\n"
@@ -143,7 +265,9 @@ def build_message(
         f"- 抓取恢复：{collection_context.get('lifecycle_recovered', '0')}（采集链路恢复，不代表官方服务恢复）\n"
         f"- 重新出现：{collection_context.get('lifecycle_reappeared', '0')}（不代表重新发布）\n"
         f"- 需要关注：{collection_context.get('lifecycle_attention_items', '0')}\n\n"
-        "运行健康状态：\n"
+        "运行健康状态（报告生成时点快照）：\n"
+        f"- Health phase：{collection_context.get('health_phase', 'provisional')}\n"
+        f"- Is final：{collection_context.get('health_is_final', 'false')}\n"
         f"- 整体：{collection_context.get('overall_health', 'unknown')}\n"
         f"- 来源采集：{collection_context.get('health_source_collection', 'unknown')}\n"
         f"- 详情解析：{collection_context.get('health_detail_extraction', 'unknown')}\n"
@@ -151,8 +275,10 @@ def build_message(
         f"- LLM：{collection_context.get('health_llm', 'unknown')}\n"
         f"- 输出检查：{collection_context.get('health_output_validation', 'unknown')}\n"
         f"- 项目审计：{collection_context.get('health_project_audit', 'unknown')}\n"
-        f"- 邮件：{collection_context.get('health_email', 'unknown')}\n"
-        f"- Gitee：{collection_context.get('health_gitee_sync', 'unknown')}\n\n"
+        "- 当前邮件投递状态：发送完成后由最终运行健康报告记录。\n"
+        "- Gitee 同步状态：同步完成后由最终运行健康报告记录。\n"
+        "- pending_at_render_time 不是失败。\n"
+        f"- {collection_context.get('health_timing_note', '运行结束后的最终状态以 GitHub Actions Summary 和 data/run_health.json 为准。')}\n\n"
         "本轮告警：\n"
         f"- Info：{collection_context.get('alert_info', '0')}\n"
         f"- Warning：{collection_context.get('alert_warning', '0')}\n"
@@ -260,11 +386,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="发送 Starlink 情报周报自动化测试邮件。")
     parser.add_argument("markdown_file", help="要发送的 Markdown 文件路径。")
     parser.add_argument("--week-id", help="周报编号，例如 2026-W25；默认使用文件名。")
+    parser.add_argument("--attachment", action="append", default=[], help="可重复提供 Markdown 附件路径。")
     args = parser.parse_args()
 
     markdown_path = Path(args.markdown_file)
     week_id = args.week_id or markdown_path.stem
-    return 0 if send_weekly_email(markdown_path, week_id) else 1
+    attachment_paths = [Path(value) for value in args.attachment] or [markdown_path]
+    details_path = next((path for path in attachment_paths if path.name.endswith("-details.md")), None)
+    context = build_context_from_outputs(markdown_path, week_id, details_path)
+    return 0 if send_weekly_email(markdown_path, week_id, collection_context=context, attachment_paths=attachment_paths) else 1
 
 
 if __name__ == "__main__":

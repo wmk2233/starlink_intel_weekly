@@ -134,6 +134,17 @@
 - 不从 slug、HTTP Last-Modified 或采集时间推断官方日期、任务状态或载荷事实；
 - Playwright 详情 fallback 会增加运行时间，但详情失败不会阻断周报、邮件、GitHub 提交或 Gitee 同步。
 
+## 阶段 4D.1 最终健康与时间语义知识
+
+- `provisional` 是周报渲染时点快照，只评估已经完成的内部组件；`pending_at_render_time` 不是失败。
+- `final health` 在输出检查、项目审计、邮件和主要 Gitee 同步尝试完成后生成，Actions Summary 优先使用 `is_final=true` 的结果。
+- `component_status_source` 区分 `internal_result`、`workflow_step_outcome`、`pending_at_render_time`、`not_applicable` 和 `unknown`。
+- output validation/project audit 失败属于 critical 系统完整性问题；email/Gitee 失败属于 warning 分发问题，不能写成官方服务故障。
+- `run_health_history.jsonl` 以 `run_id` 唯一，只保存 final 记录；同 run final 重试原位更新，不追加重复历史。
+- final 阶段才持久化告警 open、update、escalate 或 resolve；provisional 只做内存预览，不推进计数或 watermark。
+- 邮件无法报告自身尚未完成的投递结果，主要 Gitee 推送也不包含其后产生的 finalization commit；下一次正常同步可补齐。
+- unchanged 是历史条目本轮无语义变化，必须使用历史记录语气；changed 只表示检测到内容变化；new 无明确官方日期证据不得写“本周发布”。
+
 ## 最近一次自动化运行记录
 
 - 运行时间：2026-07-15 13:00:25 UTC+0000

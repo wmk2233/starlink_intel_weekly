@@ -302,3 +302,23 @@ LLM 运行统计依次显示原始候选记录、URL 去重后记录和最终核
 模型 schema 不包含 `source_based_notes`，只生成 `overall_summary` 与 `key_points`。每个 key point 必须包含安全配对的 record ID 和 canonical URL。对齐器可以补齐单侧缺失引用，但不会把属于不同记录的合法 ID/URL 强行配对，也不会改写 claim 文本；修复后无合法来源的要点会删除，严格校验仍失败时保留旧摘要。
 
 排障优先查看 `data/llm_audit.json` 中的 `invalid_record_ids_removed`、`invalid_urls_removed`、`missing_record_ids_repaired`、`missing_urls_repaired`、`key_points_removed_without_sources` 和 `reference_alignment_status`。审计不保存完整 prompt 或完整原始 response。
+
+## 18. 阶段 4D.1 final health 运维
+
+周报生成时的 `data/run_health.json` 是 `health_phase=provisional` 快照，仅评估已完成的内部组件。`output_validation / project_audit / email / gitee_sync / workflow_core` 在此时使用 `pending_at_render_time`，不得解释为 unknown、degraded 或失败。邮件正文同样不能宣称当前邮件已经发送成功；它只说明投递完成后由 final health 记录。
+
+Workflow 的正式顺序为：核心生成、`check_outputs.py --pre-finalize --strict`、项目审计、邮件、GitHub 提交、主要 Gitee 同步尝试、final health、`check_outputs.py --final-health-only --strict`、finalization commit 和 Actions Summary。final health 通过 `OUTPUT_CHECK_OUTCOME / PROJECT_AUDIT_OUTCOME / EMAIL_OUTCOME / GITEE_OUTCOME / CORE_RUN_OUTCOME` 读取有限 step outcome，不打印 contexts 或 Secrets。
+
+输出检查和项目审计失败会打开 critical 告警并令整体健康为 unhealthy；邮件和 Gitee 失败会打开 warning 并令整体健康为 degraded。Gitee warning 非阻塞。下一轮成功会 resolve 对应条件。相同 `run_id` 重试只更新同一条 final health history；provisional 不永久进入趋势历史。
+
+排障命令：
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED="1"
+$env:LLM_ENABLED="false"
+python scripts/check_outputs.py --pre-finalize --strict
+python scripts/build_run_health.py --phase final --no-write --json
+python scripts/check_outputs.py --final-health-only --strict
+```
+
+Actions Summary 是运行结束状态；周报和邮件是较早的报告时点快照。主要 Gitee 推送发生在 finalization 之前，因此本轮最终健康提交允许由下一次正常同步补齐，不能通过递归推送报告自身。LLM 对 unchanged 历史条目必须使用“现有官方条目介绍”或“已有官方记录显示”等表达，不能写成本轮发布。

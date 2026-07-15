@@ -34,6 +34,14 @@ DEFAULT_RUNTIME_WARNING_SECONDS = 900
 
 ALERT_SEVERITIES = ("info", "warning", "high", "critical")
 ALERT_ACTIONS = ("notify", "open", "update", "escalate", "resolve", "suppress")
+HEALTH_PHASES = ("provisional", "final")
+COMPONENT_STATUS_SOURCES = (
+    "internal_result",
+    "workflow_step_outcome",
+    "pending_at_render_time",
+    "not_applicable",
+    "unknown",
+)
 SEVERITY_RANK = {name: index for index, name in enumerate(ALERT_SEVERITIES)}
 EVENT_NOTIFICATION_RULES = {
     "item_discovered": ("info", "collection"),
@@ -166,8 +174,8 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def default_alert_state() -> dict[str, Any]:
     return {
-        "version": 1,
-        "stage": "4D",
+        "version": 2,
+        "stage": "4D.1",
         "generated_at": None,
         "bootstrap": {},
         "open_conditions": {},
@@ -208,6 +216,46 @@ def _detail_totals(item_report: dict[str, Any] | None) -> tuple[int, int]:
         success += int(source.get("final_detail_success") or source.get("detail_fetch_success") or 0)
         failed += int(source.get("final_detail_failed") or source.get("detail_fetch_failed") or 0)
     return success, failed
+
+
+def normalize_step_outcome(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"success", "passed", "healthy"}:
+        return "success"
+    if normalized in {"failure", "failed", "error", "unhealthy"}:
+        return "failure"
+    if normalized in {"cancelled", "canceled"}:
+        return "cancelled"
+    if normalized in {"skipped", "disabled", "not_applicable"}:
+        return "skipped"
+    if normalized in {"pending", "pending_at_render_time"}:
+        return "pending_at_render_time"
+    return "unknown"
+
+
+def _workflow_component(outcome: object, *, critical: bool) -> dict[str, Any]:
+    normalized = normalize_step_outcome(outcome)
+    if normalized == "success":
+        status = "healthy"
+    elif normalized in {"failure", "cancelled"}:
+        status = "unhealthy" if critical else "degraded"
+    elif normalized == "skipped":
+        status = "not_applicable"
+    else:
+        status = "unknown"
+    return {
+        "status": status,
+        "result": normalized,
+        "component_status_source": "workflow_step_outcome" if normalized != "unknown" else "unknown",
+    }
+
+
+def _pending_component() -> dict[str, Any]:
+    return {
+        "status": "pending_at_render_time",
+        "result": "pending_at_render_time",
+        "component_status_source": "pending_at_render_time",
+    }
 
 
 def _condition_spec(
@@ -300,11 +348,24 @@ def evaluate_alerts_data(
     policy: dict[str, Any] | None = None,
 ) -> AlertEvaluation:
     policy = {**policy_from_env()[0], **(policy or {})}
-    state = deepcopy(previous_state or default_alert_state())
+    phase = str(run_context.get("health_phase") or "final").strip().lower()
+    if phase not in HEALTH_PHASES:
+        warning = f"不支持的告警评估阶段：{phase or 'empty'}。"
+        return AlertEvaluation(
+            deepcopy(previous_state or default_alert_state()),
+            deepcopy(existing_alert_events or []),
+            {"stage": "4D.1", "evaluation_phase": phase or "unknown", "overall_alert_status": "critical", "warnings": [warning]},
+            [],
+            [warning],
+            False,
+        )
+    persisted_state = deepcopy(previous_state or default_alert_state())
+    persisted_events = deepcopy(existing_alert_events or [])
+    state = deepcopy(persisted_state)
     state.setdefault("open_conditions", {})
     state.setdefault("condition_counters", {})
     state.setdefault("processed_event_ids", [])
-    all_existing = deepcopy(existing_alert_events or [])
+    all_existing = deepcopy(persisted_events)
     history = health_history or []
     run_id = str(run_context.get("run_id") or "")
     started_at = str(run_context.get("started_at") or run_context.get("generated_at") or "")
@@ -312,7 +373,7 @@ def evaluate_alerts_data(
     previous_started = parse_datetime(state.get("last_applied_started_at"))
     if not run_id or parsed_started is None:
         warning = "运行上下文缺少有效 run_id 或 started_at，告警状态未写入。"
-        return AlertEvaluation(state, all_existing, {"stage": "4D", "overall_alert_status": "critical", "warnings": [warning]}, [], [warning], False)
+        return AlertEvaluation(state, all_existing, {"stage": "4D.1", "evaluation_phase": phase, "overall_alert_status": "critical", "warnings": [warning]}, [], [warning], False)
     if str(state.get("last_applied_run_id") or "") != run_id and previous_started is not None and parsed_started < previous_started:
         spec = _condition_spec("stale_run_ignored", severity="warning", reason="older_run_did_not_overwrite_alert_state")
         transient: list[dict[str, Any]] = []
@@ -321,6 +382,7 @@ def evaluate_alerts_data(
         report["stale_run_ignored"] = True
         return AlertEvaluation(state, all_existing, report, transient, ["stale_run_ignored"], False)
 
+    same_final_run = phase == "final" and str(state.get("last_applied_run_id") or "") == run_id
     processed = [str(value) for value in state.get("processed_event_ids", []) if value]
     processed_set = set(processed)
     new_events: list[dict[str, Any]] = []
@@ -407,7 +469,7 @@ def evaluate_alerts_data(
                 and median(historical) > 0
                 and current_count < median(historical) * float(policy["candidate_collapse_ratio"])
             )
-            count = int(state["condition_counters"].get(key, 0)) + 1 if collapsed else 0
+            count = int(state["condition_counters"].get(key, 0)) + (0 if same_final_run else 1) if collapsed else 0
             state["condition_counters"][key] = count
             if count >= int(policy["candidate_collapse_consecutive_runs"]):
                 spec = _condition_spec("candidate_discovery_degraded", source_id=source_id, severity="warning", category="candidate_discovery", consecutive=count, reason="candidate_count_below_rolling_median_not_official_deletion")
@@ -419,7 +481,7 @@ def evaluate_alerts_data(
         rate = success / (success + failed)
         key = build_alert_key("detail_success_rate_degraded", None, None)
         low = rate < float(policy["detail_success_rate_warning_threshold"])
-        count = int(state["condition_counters"].get(key, 0)) + 1 if low else 0
+        count = int(state["condition_counters"].get(key, 0)) + (0 if same_final_run else 1) if low else 0
         state["condition_counters"][key] = count
         if count >= int(policy["detail_success_rate_consecutive_runs"]):
             severity = "high" if count >= 3 and rate == 0 else "warning"
@@ -447,11 +509,11 @@ def evaluate_alerts_data(
         ("stable_id_collision", "stable_id_status", "integrity", "stable_id_collision"),
     )
     for alert_type, context_key, category, reason in status_rules:
-        status = str(run_context.get(context_key) or "unknown").lower()
-        if status not in {"success", "passed", "failed"}:
+        status = normalize_step_outcome(run_context.get(context_key))
+        if status not in {"success", "failure", "cancelled"}:
             continue
         observed_types.add(alert_type)
-        if status == "failed":
+        if status in {"failure", "cancelled"}:
             severity = "critical" if alert_type in INTEGRITY_ALERT_TYPES else "warning"
             spec = _condition_spec(alert_type, severity=severity, category=category, reason=reason, attention_required=severity == "critical")
             current_conditions[str(spec["alert_key"])] = spec
@@ -529,8 +591,8 @@ def evaluate_alerts_data(
     processed = processed[-int(policy["max_processed_alert_event_ids"]):]
     state.update(
         {
-            "version": 1,
-            "stage": "4D",
+            "version": 2,
+            "stage": "4D.1",
             "generated_at": started_at,
             "processed_event_ids": processed,
             "last_processed_lifecycle_event_at": max((str(item.get("occurred_at") or "") for item in lifecycle_events), default=state.get("last_processed_lifecycle_event_at")),
@@ -542,6 +604,11 @@ def evaluate_alerts_data(
     report = _build_alert_report(run_id, started_at, new_events, open_conditions, [])
     report["bootstrap_performed"] = bootstrap.get("initialized_at") == started_at
     report["severity_safety_note"] = SEVERITY_SAFETY_NOTE
+    report["evaluation_phase"] = phase
+    report["is_final"] = phase == "final"
+    if phase == "provisional":
+        report["provisional_preview"] = True
+        return AlertEvaluation(persisted_state, persisted_events, report, new_events, [], False)
     return AlertEvaluation(state, all_events, report, new_events)
 
 
@@ -560,8 +627,8 @@ def _build_alert_report(
     warning = open_severity["warning"] + run_severity["warning"]
     status = "critical" if critical else "high_attention" if high else "attention" if warning else "normal"
     return {
-        "version": 1,
-        "stage": "4D",
+        "version": 2,
+        "stage": "4D.1",
         "generated_at": generated_at,
         "run_id": run_id,
         "overall_alert_status": status,
@@ -583,6 +650,48 @@ def _build_alert_report(
     }
 
 
+def _migrate_history_record(record: dict[str, Any]) -> dict[str, Any]:
+    migrated = deepcopy(record)
+    if str(migrated.get("health_phase") or "") not in HEALTH_PHASES:
+        migrated["health_phase"] = "final"
+        migrated["is_final"] = True
+        migrated["finalized_at"] = migrated.get("generated_at")
+    else:
+        migrated["is_final"] = migrated.get("health_phase") == "final"
+        if migrated["is_final"] and not migrated.get("finalized_at"):
+            migrated["finalized_at"] = migrated.get("generated_at")
+    return migrated
+
+
+def upsert_run_health_history(
+    records: list[dict[str, Any]],
+    record: dict[str, Any] | None,
+    *,
+    max_records: int,
+) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    positions: dict[str, int] = {}
+    for value in records:
+        migrated = _migrate_history_record(value)
+        run_id = str(migrated.get("run_id") or "")
+        if not run_id:
+            continue
+        if run_id in positions:
+            unique[positions[run_id]] = migrated
+        else:
+            positions[run_id] = len(unique)
+            unique.append(migrated)
+    if record is not None and record.get("health_phase") == "final" and record.get("is_final") is True:
+        final_record = _migrate_history_record(record)
+        run_id = str(final_record.get("run_id") or "")
+        if run_id:
+            if run_id in positions:
+                unique[positions[run_id]] = final_record
+            else:
+                unique.append(final_record)
+    return unique[-max_records:]
+
+
 def build_run_health_data(
     *,
     source_status: dict[str, Any],
@@ -595,18 +704,26 @@ def build_run_health_data(
     policy: dict[str, Any] | None = None,
 ) -> HealthEvaluation:
     policy = {**policy_from_env()[0], **(policy or {})}
+    health_phase = str(run_context.get("health_phase") or "final").strip().lower()
+    if health_phase not in HEALTH_PHASES:
+        return HealthEvaluation(
+            {"stage": "4D.1", "health_phase": health_phase or "unknown", "is_final": False, "overall_health": "unhealthy", "warnings": ["运行健康阶段无效。"]},
+            upsert_run_health_history(deepcopy(previous_history or []), None, max_records=int(policy["max_run_health_records"])),
+            False,
+            ["invalid_health_phase"],
+        )
     run_id = str(run_context.get("run_id") or "")
     started_at = str(run_context.get("started_at") or "")
     finished_at = str(run_context.get("finished_at") or started_at)
     start = parse_datetime(started_at)
     finish = parse_datetime(finished_at)
     if not run_id or start is None or finish is None:
-        return HealthEvaluation({"stage": "4D", "overall_health": "unhealthy", "warnings": ["运行健康上下文时间无效。"]}, deepcopy(previous_history or []), False, ["invalid_run_context"])
-    history = deepcopy(previous_history or [])
-    newer = [parse_datetime(row.get("generated_at")) for row in history if str(row.get("run_id")) != run_id]
+        return HealthEvaluation({"stage": "4D.1", "health_phase": health_phase, "is_final": False, "overall_health": "unhealthy", "warnings": ["运行健康上下文时间无效。"]}, deepcopy(previous_history or []), False, ["invalid_run_context"])
+    history = upsert_run_health_history(deepcopy(previous_history or []), None, max_records=int(policy["max_run_health_records"]))
+    newer = [parse_datetime(row.get("started_at") or row.get("generated_at")) for row in history if str(row.get("run_id")) != run_id]
     latest = max((value for value in newer if value is not None), default=None)
     if latest is not None and start < latest:
-        return HealthEvaluation({"stage": "4D", "run_id": run_id, "overall_health": "degraded", "stale_run_ignored": True, "warnings": ["旧运行未覆盖较新的健康状态。"]}, history, False, ["stale_run_ignored"])
+        return HealthEvaluation({"stage": "4D.1", "health_phase": health_phase, "is_final": health_phase == "final", "run_id": run_id, "overall_health": "degraded", "stale_run_ignored": True, "warnings": ["旧运行未覆盖较新的健康状态。"]}, history, False, ["stale_run_ignored"])
 
     sources = _source_map(source_status)
     reachable = sum(1 for source in sources.values() if source.get("reachable") is True)
@@ -619,45 +736,57 @@ def build_run_health_data(
     llm_disabled = llm_status in {"skipped_disabled", "disabled", "not_enabled"}
     totals = alert_report.get("totals", {}) if isinstance(alert_report.get("totals"), dict) else {}
 
-    def status_component(raw: object, *, disabled_ok: bool = False) -> str:
-        value = str(raw or "unknown").lower()
-        if value in {"success", "passed", "healthy"} or disabled_ok and value in {"disabled", "skipped", "skipped_disabled"}:
-            return "healthy"
-        if value in {"failed", "degraded", "warning"}:
-            return "degraded"
-        return "unknown"
-
-    output_status = status_component(run_context.get("output_check_status"))
-    audit_status = status_component(run_context.get("project_audit_status"))
-    if str(run_context.get("output_check_status") or "").lower() == "failed":
-        output_status = "unhealthy"
-    if str(run_context.get("project_audit_status") or "").lower() == "failed":
-        audit_status = "unhealthy"
     components = {
-        "source_collection": {"status": "healthy" if total_sources and reachable == total_sources else "degraded" if total_sources else "unknown", "reachable_sources": reachable, "total_sources": total_sources},
-        "candidate_discovery": {"status": "healthy" if total_sources and complete == total_sources else "degraded" if total_sources else "unknown", "complete_sources": complete, "total_sources": total_sources},
-        "detail_extraction": {"status": "healthy" if success_rate is not None and success_rate >= float(policy["detail_success_rate_warning_threshold"]) else "degraded" if success_rate is not None else "unknown", "success": success, "failed": failed, "success_rate": success_rate},
-        "lifecycle": {"status": "degraded" if lifecycle_report.get("stale_run_ignored") or (lifecycle_report.get("attention_items") or []) else "healthy"},
-        "llm": {"status": "healthy" if llm_disabled or (llm_status == "generated" and validation_status == "passed") else "degraded" if validation_status == "failed" else "unknown", "enabled": not llm_disabled, "result": llm_status},
-        "output_validation": {"status": output_status},
-        "project_audit": {"status": audit_status},
-        "email": {"status": status_component(run_context.get("email_status"), disabled_ok=True), "result": str(run_context.get("email_status") or "unknown")},
-        "gitee_sync": {"status": status_component(run_context.get("gitee_status"), disabled_ok=True), "result": str(run_context.get("gitee_status") or "unknown")},
+        "source_collection": {"status": "healthy" if total_sources and reachable == total_sources else "degraded" if total_sources else "unknown", "reachable_sources": reachable, "total_sources": total_sources, "component_status_source": "internal_result"},
+        "candidate_discovery": {"status": "healthy" if total_sources and complete == total_sources else "degraded" if total_sources else "unknown", "complete_sources": complete, "total_sources": total_sources, "component_status_source": "internal_result"},
+        "detail_extraction": {"status": "healthy" if success_rate is not None and success_rate >= float(policy["detail_success_rate_warning_threshold"]) else "degraded" if success_rate is not None else "unknown", "success": success, "failed": failed, "success_rate": success_rate, "component_status_source": "internal_result"},
+        "lifecycle": {"status": "degraded" if lifecycle_report.get("stale_run_ignored") or (lifecycle_report.get("attention_items") or []) else "healthy", "component_status_source": "internal_result"},
+        "llm": {"status": "healthy" if llm_disabled or (llm_status == "generated" and validation_status == "passed") else "degraded" if validation_status == "failed" else "unknown", "enabled": not llm_disabled, "result": llm_status, "component_status_source": "not_applicable" if llm_disabled else "internal_result"},
     }
+    if health_phase == "provisional":
+        components.update({name: _pending_component() for name in ("output_validation", "project_audit", "email", "gitee_sync", "workflow_core")})
+    else:
+        components.update(
+            {
+                "output_validation": _workflow_component(run_context.get("output_check_status"), critical=True),
+                "project_audit": _workflow_component(run_context.get("project_audit_status"), critical=True),
+                "email": _workflow_component(run_context.get("email_status"), critical=False),
+                "gitee_sync": _workflow_component(run_context.get("gitee_status"), critical=False),
+                "workflow_core": _workflow_component(run_context.get("core_run_status"), critical=True),
+            }
+        )
     open_warning = int(totals.get("open_warning") or 0)
     open_high = int(totals.get("open_high") or 0)
     open_critical = int(totals.get("open_critical") or 0)
-    overall = "unhealthy" if open_critical or output_status == "unhealthy" or audit_status == "unhealthy" else "degraded" if open_high or open_warning or any(component["status"] == "degraded" for component in components.values()) else "healthy"
+    final_has_unknown = health_phase == "final" and any(
+        component["status"] == "unknown" for component in components.values()
+    )
+    if open_critical or any(component["status"] == "unhealthy" for component in components.values()):
+        overall = "unhealthy"
+    elif open_high or open_warning or final_has_unknown or any(
+        component["status"] == "degraded" for component in components.values()
+    ):
+        overall = "degraded"
+    else:
+        overall = "healthy"
     duration = max(0.0, (finish - start).total_seconds())
+    if run_context.get("duration_seconds") not in (None, ""):
+        try:
+            duration = max(0.0, float(run_context["duration_seconds"]))
+        except (TypeError, ValueError):
+            pass
     warnings: list[str] = []
     if duration > int(policy["runtime_warning_seconds"]):
         warnings.append("运行时间超过公开配置阈值，需要检查自动化性能。")
         if overall == "healthy":
             overall = "degraded"
     health = {
-        "version": 1,
-        "stage": "4D",
+        "version": 2,
+        "stage": "4D.1",
         "generated_at": finished_at,
+        "health_phase": health_phase,
+        "is_final": health_phase == "final",
+        "finalized_at": finished_at if health_phase == "final" else None,
         "run_id": run_id,
         "last_applied_run_id": run_id,
         "last_applied_started_at": started_at,
@@ -666,6 +795,7 @@ def build_run_health_data(
         "finished_at": finished_at,
         "duration_seconds": duration,
         "components": components,
+        "component_status_source": {name: component.get("component_status_source", "unknown") for name, component in components.items()},
         "alert_summary": {"open_warning": open_warning, "open_high": open_high, "open_critical": open_critical},
         "warnings": warnings,
         "severity_safety_note": SEVERITY_SAFETY_NOTE,
@@ -676,6 +806,10 @@ def build_run_health_data(
     history_row = {
         "run_id": run_id,
         "generated_at": finished_at,
+        "started_at": started_at,
+        "health_phase": health_phase,
+        "is_final": health_phase == "final",
+        "finalized_at": finished_at if health_phase == "final" else None,
         "overall_health": overall,
         "duration_seconds": duration,
         "reachable_sources": reachable,
@@ -690,12 +824,17 @@ def build_run_health_data(
         "open_high": open_high,
         "open_critical": open_critical,
         "llm_status": llm_status,
-        "email_status": str(run_context.get("email_status") or "unknown"),
-        "gitee_status": str(run_context.get("gitee_status") or "unknown"),
+        "output_check_status": normalize_step_outcome(run_context.get("output_check_status")),
+        "project_audit_status": normalize_step_outcome(run_context.get("project_audit_status")),
+        "email_status": normalize_step_outcome(run_context.get("email_status")),
+        "gitee_status": normalize_step_outcome(run_context.get("gitee_status")),
+        "core_run_status": normalize_step_outcome(run_context.get("core_run_status")),
     }
-    history = [row for row in history if str(row.get("run_id")) != run_id]
-    history.append(history_row)
-    history = history[-int(policy["max_run_health_records"]):]
+    history = upsert_run_health_history(
+        history,
+        history_row if health_phase == "final" else None,
+        max_records=int(policy["max_run_health_records"]),
+    )
     return HealthEvaluation(health, history)
 
 
@@ -762,4 +901,7 @@ def write_health_evaluation(
 ) -> None:
     if not evaluation.write_allowed:
         return
-    atomic_write_bundle({health_path: _json_text(evaluation.health), history_path: _jsonl_text(evaluation.history)})
+    payloads = {health_path: _json_text(evaluation.health)}
+    if evaluation.health.get("health_phase") == "final" and evaluation.health.get("is_final") is True:
+        payloads[history_path] = _jsonl_text(evaluation.history)
+    atomic_write_bundle(payloads)

@@ -881,3 +881,11 @@ Phase 4D 新增数据文件：
 - `data/run_health_history.jsonl`：按 run ID 去重、受历史上限控制的趋势数据。
 
 首次 Phase 4D 运行会把已有 Phase 4C lifecycle event 设置为 watermark，不重发旧通知。生命周期、告警与健康状态均使用 `last_applied_run_id / last_applied_started_at` 防止重复或乱序运行覆盖较新状态；JSONL 历史使用公开配置限制长度，open alert 状态不会因裁剪丢失。每周 workflow 只运行包含 replay 的离线单元测试，不重复执行完整 replay。
+
+## 阶段 4D.1：运行健康最终化与报告时点
+
+阶段 4D.1 将运行健康分为 `provisional` 和 `final health`。`run_weekly.py` 在生成周报时只评估已经完成的采集、候选发现、详情解析、生命周期和 LLM；输出检查、项目审计、当前邮件和 Gitee 使用 `pending_at_render_time`，它表示步骤尚未执行，不是失败。周报和邮件是报告生成时点快照，运行结束后的最终状态以 GitHub Actions Summary 和 `data/run_health.json` 为准。
+
+Workflow 依次执行 pre-finalize 输出检查、项目审计、邮件、GitHub 提交和主要 Gitee 同步尝试，然后以 `if: always()` 读取这些步骤的有限 outcome 生成 final health。输出检查或项目审计失败为 critical，邮件或 Gitee 失败为 warning；Gitee warning 继续非阻塞。`data/run_health_history.jsonl` 只长期保存 `is_final=true` 的记录，同一 `run_id` 原位 upsert，不为 provisional 和 final 各追加一条。
+
+邮件无法报告自身尚未完成的投递结果，Gitee 推送也无法包含在其后生成的最终健康提交。因此邮件正文明确使用 pending 状态，Gitee 的主要同步尝试结果写入 final health；本次 finalization commit 可由下一次正常 Gitee 同步补齐。LLM 对 `unchanged` 条目必须使用历史记录语气，不得写成“本周发布、推出、上线、新增或宣布”；`changed` 只表示本轮检测到内容变化，`new` 只有存在明确官方日期证据时才允许写“本周发布”。

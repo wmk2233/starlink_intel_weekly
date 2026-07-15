@@ -159,16 +159,21 @@ LLM Provider：deepseek
 
 | 指标 | 状态 |
 |---|---|
+| Health phase | provisional |
+| Is final | False |
 | 整体运行健康 | healthy |
 | 来源采集 | healthy |
 | 候选发现 | healthy |
 | 详情解析 | healthy |
 | 生命周期处理 | healthy |
 | LLM | healthy |
-| 输出检查 | unknown |
-| 项目审计 | unknown |
-| 邮件 | unknown |
-| Gitee 同步 | unknown |
+| 输出检查 | pending_at_render_time |
+| 项目审计 | pending_at_render_time |
+| 邮件 | pending_at_render_time |
+| Gitee 同步 | pending_at_render_time |
+| Workflow 核心流程 | pending_at_render_time |
+
+本表是周报生成时点的 provisional 快照；pending_at_render_time 不是失败。运行结束后的最终状态以 GitHub Actions Summary 和 `data/run_health.json` 为准。
 
 ### 本轮告警摘要
 

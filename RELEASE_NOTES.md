@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.4D.1：运行健康最终化与报告一致性
+
+- 新增 `provisional / final` 两阶段健康模型、`is_final`、`finalized_at` 和组件状态来源。
+- 周报与邮件使用 `pending_at_render_time` 表示尚未执行的输出检查、审计、邮件和 Gitee；pending 不是失败。
+- Workflow 在输出检查、项目审计、邮件和主要 Gitee 同步尝试后，以稳定 step ID 和有限 outcome 最终化健康状态。
+- output validation/project audit 失败为 critical；email/Gitee 失败为 warning，Gitee 仍非阻塞。
+- 健康历史只长期保存 final health，并按 `run_id` 原位 upsert；final 重试不重复告警、健康历史或 run history。
+- Actions Summary 优先读取 final health；final 不可用时明确降级展示，不把 provisional healthy 当作最终成功。
+- 拆分 `check_outputs.py --pre-finalize` 与 `--final-health-only`，避免检查结果与 final health 循环依赖。
+- 加强 LLM 时间语义：unchanged 条目使用历史记录措辞，changed 不等于本周发布，new 无明确日期不得写本周发布。
+- 未新增来源，未改变官方事实数据，也未保存完整 HTML、截图、HAR、视频或 trace。
+
 ## v0.4D：离线生命周期回放、告警与运行健康
 
 - 新增生产与 replay 共用的确定性生命周期核心，并以 `last_applied_*` 防止重复或乱序运行覆盖较新状态。

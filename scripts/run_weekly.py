@@ -1511,8 +1511,15 @@ def render_run_health_and_alerts(
         "project_audit": "项目审计",
         "email": "邮件",
         "gitee_sync": "Gitee 同步",
+        "workflow_core": "Workflow 核心流程",
     }
-    rows = ["| 指标 | 状态 |", "|---|---|", f"| 整体运行健康 | {escape_table_cell(run_health.get('overall_health', 'unknown'))} |"]
+    rows = [
+        "| 指标 | 状态 |",
+        "|---|---|",
+        f"| Health phase | {escape_table_cell(run_health.get('health_phase', 'unknown'))} |",
+        f"| Is final | {escape_table_cell(run_health.get('is_final', False))} |",
+        f"| 整体运行健康 | {escape_table_cell(run_health.get('overall_health', 'unknown'))} |",
+    ]
     for key, label in labels.items():
         component = components.get(key, {}) if isinstance(components.get(key), dict) else {}
         status = component.get("status", "unknown")
@@ -1531,7 +1538,11 @@ def render_run_health_and_alerts(
     ]
     meaningful = any(int(totals.get(key) or 0) for key in ("warning", "high", "critical", "open_conditions"))
     note = "" if meaningful else "\n本轮未产生需要人工处理的运维告警。"
-    return "\n".join(rows) + "\n\n### 本轮告警摘要\n\n" + "\n".join(summary) + note + f"\n\n{SEVERITY_SAFETY_NOTE}"
+    timing_note = (
+        "\n\n本表是周报生成时点的 provisional 快照；pending_at_render_time 不是失败。"
+        "运行结束后的最终状态以 GitHub Actions Summary 和 data/run_health.json 为准。"
+    )
+    return "\n".join(rows) + timing_note + "\n\n### 本轮告警摘要\n\n" + "\n".join(summary) + note + f"\n\n{SEVERITY_SAFETY_NOTE}"
 
 
 def render_alert_details(alert_report: dict[str, object]) -> str:
@@ -1576,8 +1587,10 @@ def render_alert_details(alert_report: dict[str, object]) -> str:
 
 def render_health_trends(history: list[dict[str, object]]) -> str:
     rows = [
-        "| 运行时间 | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
+        "本表只展示 final health；旧记录中无法还原的 step outcome 保留为 unknown。",
+        "",
+        "| 运行时间 | Phase | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
     ]
     for record in history[-12:]:
         total = int(record.get("total_sources") or 0)
@@ -1586,6 +1599,7 @@ def render_health_trends(history: list[dict[str, object]]) -> str:
             + " | ".join(
                 [
                     escape_table_cell(record.get("generated_at", "")),
+                    escape_table_cell(record.get("health_phase", "final")),
                     escape_table_cell(record.get("overall_health", "unknown")),
                     f"{record.get('reachable_sources', 0)}/{total}",
                     display_metric(record.get("detail_success_rate")),
@@ -1601,8 +1615,8 @@ def render_health_trends(history: list[dict[str, object]]) -> str:
             )
             + " |"
         )
-    if len(rows) == 2:
-        rows.append("| 暂无 | unknown | 0/0 | unknown | 0 | 0 | 0 | 0 | 0 | unknown | unknown | unknown |")
+    if len(rows) == 4:
+        rows.append("| 暂无 | final | unknown | 0/0 | unknown | 0 | 0 | 0 | 0 | 0 | unknown | unknown | unknown |")
     return "\n".join(rows)
 
 
@@ -1643,7 +1657,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4D：在确定性生命周期管理之上增加完全离线回放、运维告警和长期运行健康；这些采集及告警状态不代表官方业务状态或事件重要程度。
+当前阶段为阶段 4D.1：周报展示生成时点的 provisional 健康快照，运行结束后的 final 状态以 GitHub Actions Summary 和 `data/run_health.json` 为准；pending_at_render_time 不是失败。这些采集及告警状态不代表官方业务状态或事件重要程度。
 
 ## 2. 本周核心结论
 
@@ -2172,6 +2186,9 @@ def write_run_history(records: list[dict[str, object]], path: Path = RUN_HISTORY
 
 
 def make_run_id(meta: dict[str, str]) -> str:
+    configured = str(os.getenv("RUN_ID") or "").strip()
+    if configured:
+        return configured
     return hashlib.sha256(f"{meta.get('iso_week')}|{meta.get('run_iso')}|{meta.get('output_mode')}".encode("utf-8")).hexdigest()[:16]
 
 
@@ -2238,10 +2255,17 @@ def append_run_history(
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
     records = load_run_history()
-    records.append(record)
+    replaced = False
+    for index, existing in enumerate(records):
+        if str(existing.get("run_id") or "") == str(record["run_id"]):
+            records[index] = record
+            replaced = True
+            break
+    if not replaced:
+        records.append(record)
     records = records[-max_run_history:]
     write_run_history(records)
-    print(f"已追加运行历史：{RUN_HISTORY_FILE}")
+    print(f"已按 run_id 更新运行历史：{RUN_HISTORY_FILE}")
 
 
 def latest_items_for_report(max_source_items: int, source_statuses: dict[str, dict[str, object]] | None = None) -> list[dict[str, object]]:
@@ -2769,7 +2793,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4D 生命周期回放、运维告警与长期运行健康。")
+    print("当前阶段：4D.1 provisional/final 运行健康与报告时点一致性。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -2857,8 +2881,8 @@ def main() -> int:
     operational_policy, operational_warnings = operational_policy_from_env()
     for warning in operational_warnings:
         print(f"warning: {warning}")
-    operational_run_id = str(lifecycle_report.get("run_id") or make_run_id(meta))
-    operational_started_at = str(lifecycle_report.get("generated_at") or meta["run_iso"])
+    operational_run_id = str(os.getenv("RUN_ID") or lifecycle_report.get("run_id") or make_run_id(meta))
+    operational_started_at = str(os.getenv("RUN_STARTED_AT") or lifecycle_report.get("generated_at") or meta["run_iso"])
     lifecycle_event_history = load_operational_jsonl(LIFECYCLE_EVENTS_FILE)
     if collection_result is not None and (args.dry_run or args.lifecycle_dry_run):
         known_event_ids = {str(event.get("event_id")) for event in lifecycle_event_history}
@@ -2871,10 +2895,12 @@ def main() -> int:
         "run_id": operational_run_id,
         "started_at": operational_started_at,
         "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "email_status": "disabled" if args.no_email or args.dry_run else os.getenv("EMAIL_STATUS") or "unknown",
-        "gitee_status": os.getenv("GITEE_SYNC_STATUS") or "unknown",
-        "output_check_status": os.getenv("OUTPUT_CHECK_STATUS") or "unknown",
-        "project_audit_status": os.getenv("PROJECT_AUDIT_STATUS") or "unknown",
+        "health_phase": "provisional",
+        "email_status": "pending_at_render_time",
+        "gitee_status": "pending_at_render_time",
+        "output_check_status": "pending_at_render_time",
+        "project_audit_status": "pending_at_render_time",
+        "core_run_status": "pending_at_render_time",
         "state_integrity_status": "passed" if lifecycle_state and lifecycle_report else "failed",
         "transaction_status": "passed",
         "stable_id_status": "passed",
@@ -2893,8 +2919,6 @@ def main() -> int:
         policy=operational_policy,
     )
     alert_report = alert_evaluation.report
-    if not args.dry_run and not args.lifecycle_dry_run:
-        write_alert_evaluation(alert_evaluation)
     health_evaluation = build_run_health_data(
         source_status={"sources": source_statuses},
         item_extraction_report=item_report,
@@ -2968,7 +2992,7 @@ def main() -> int:
     alert_totals = alert_report.get("totals", {}) if isinstance(alert_report, dict) else {}
     alert_totals = alert_totals if isinstance(alert_totals, dict) else {}
     collection_context = {
-        "stage": "4D",
+        "stage": "4D.1",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -2999,6 +3023,10 @@ def main() -> int:
         "lifecycle_attention_items": meta["lifecycle_attention_items"],
         "overall_health": meta["overall_health"],
         "overall_alert_status": meta["overall_alert_status"],
+        "health_phase": str(run_health.get("health_phase") or "provisional"),
+        "health_is_final": str(bool(run_health.get("is_final"))).lower(),
+        "health_finalized_at": str(run_health.get("finalized_at") or "pending_at_render_time"),
+        "health_timing_note": "运行结束后的最终状态以 GitHub Actions Summary 和 data/run_health.json 为准。",
         "health_source_collection": str((health_components.get("source_collection") or {}).get("status", "unknown")),
         "health_detail_extraction": str((health_components.get("detail_extraction") or {}).get("status", "unknown")),
         "health_lifecycle": str((health_components.get("lifecycle") or {}).get("status", "unknown")),

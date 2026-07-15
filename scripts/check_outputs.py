@@ -124,7 +124,7 @@ def build_report(week_id: str) -> dict[str, Any]:
     run_health_path = DATA_DIR / "run_health.json"
     run_health_history_path = DATA_DIR / "run_health_history.jsonl"
 
-    report: dict[str, Any] = {"week_id": week_id, "status": "unknown", "checks": {}, "errors": []}
+    report: dict[str, Any] = {"week_id": week_id, "mode": "pre_finalize", "status": "unknown", "checks": {}, "errors": []}
 
     add_check(report, "summary_exists", summary_path.exists(), str(summary_path))
     add_check(report, "details_exists", details_path.exists(), str(details_path))
@@ -704,6 +704,36 @@ def build_report(week_id: str) -> dict[str, Any]:
         valid_health and run_health.get("overall_health") in {"healthy", "degraded", "unhealthy"},
         "overall_health 非法",
     )
+    health_phase = run_health.get("health_phase") if valid_health else None
+    add_check(
+        report,
+        "run_health_phase_allowed",
+        valid_health and health_phase in {"provisional", "final"} and run_health.get("is_final") is (health_phase == "final"),
+        "health_phase / is_final 不一致",
+    )
+    health_components = run_health.get("components", {}) if valid_health and isinstance(run_health.get("components"), dict) else {}
+    add_check(
+        report,
+        "run_health_component_sources_valid",
+        all(
+            isinstance(component, dict)
+            and component.get("component_status_source")
+            in {"internal_result", "workflow_step_outcome", "pending_at_render_time", "not_applicable", "unknown"}
+            for component in health_components.values()
+        ),
+        "component_status_source 非法或缺失",
+    )
+    if health_phase == "provisional":
+        add_check(
+            report,
+            "provisional_distribution_pending",
+            all(
+                isinstance(health_components.get(name), dict)
+                and health_components[name].get("status") == "pending_at_render_time"
+                for name in ("output_validation", "project_audit", "email", "gitee_sync", "workflow_core")
+            ),
+            "provisional 分发组件未使用 pending_at_render_time",
+        )
     valid_health_history, health_history, error = load_jsonl_records(run_health_history_path)
     add_check(report, "run_health_history_valid", valid_health_history, error)
     health_run_ids = [str(value.get("run_id") or "") for value in health_history]
@@ -718,6 +748,12 @@ def build_report(week_id: str) -> dict[str, Any]:
         "run_health_retention_valid",
         len(health_history) <= DEFAULT_MAX_RUN_HEALTH_RECORDS,
         "run_health_history.jsonl 超过默认上限",
+    )
+    add_check(
+        report,
+        "run_health_history_only_final",
+        valid_health_history and all(value.get("health_phase") == "final" and value.get("is_final") is True for value in health_history),
+        "run health history 包含非 final 记录",
     )
     operational_text = "".join(
         read_text(path)
@@ -741,6 +777,14 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_structured_official_items", "## 结构化官方条目" in summary_text, "summary 缺少结构化官方条目")
     add_check(report, "summary_has_lifecycle_overview", "## 条目生命周期概览" in summary_text, "summary 缺少条目生命周期概览")
     add_check(report, "summary_has_run_health_alerts", "## 运行健康与告警" in summary_text, "summary 缺少运行健康与告警")
+    add_check(
+        report,
+        "summary_explains_health_timing",
+        "provisional" in summary_text
+        and "pending_at_render_time 不是失败" in summary_text
+        and "最终状态以 GitHub Actions Summary" in summary_text,
+        "summary 缺少报告时点说明",
+    )
     add_check(
         report,
         "summary_has_alert_safety_note",
@@ -807,6 +851,22 @@ def build_report(week_id: str) -> dict[str, Any]:
         "人工复查优先级" in email_source and "不表示 Starlink 或 SpaceX 事件的影响等级" in email_source,
         "邮件模板缺少告警等级安全解释",
     )
+    email_text = read_text(PROJECT_ROOT / "scripts" / "send_email.py")
+    add_check(
+        report,
+        "email_pending_distribution_wording_safe",
+        "当前邮件投递状态：发送完成后由最终运行健康报告记录" in email_text
+        and "Gitee 同步状态：同步完成后由最终运行健康报告记录" in email_text
+        and "pending_at_render_time 不是失败" in email_text,
+        "邮件缺少自引用 pending 说明",
+    )
+    llm_text = read_text(PROJECT_ROOT / "scripts" / "llm_summarize.py")
+    add_check(
+        report,
+        "llm_unchanged_temporal_guardrail",
+        all(value in llm_text for value in ("change_status=unchanged", "本周推出", "新近上线", "历史条目")),
+        "LLM unchanged 时间语义约束缺失",
+    )
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")
@@ -819,10 +879,170 @@ def build_report(week_id: str) -> dict[str, Any]:
     return report
 
 
+def build_final_health_report() -> dict[str, Any]:
+    report: dict[str, Any] = {"mode": "final_health_only", "status": "unknown", "checks": {}, "errors": []}
+    valid_health, health, error = load_json_file(DATA_DIR / "run_health.json")
+    add_check(report, "final_run_health_valid", valid_health, error)
+    add_check(
+        report,
+        "final_run_health_phase",
+        valid_health
+        and health.get("health_phase") == "final"
+        and health.get("is_final") is True
+        and bool(health.get("finalized_at")),
+        "run_health.json 不是已最终化的 final health",
+    )
+    run_id = str(health.get("run_id") or "")
+    components = health.get("components", {}) if isinstance(health.get("components"), dict) else {}
+    required_components = {
+        "source_collection",
+        "candidate_discovery",
+        "detail_extraction",
+        "lifecycle",
+        "llm",
+        "output_validation",
+        "project_audit",
+        "email",
+        "gitee_sync",
+        "workflow_core",
+    }
+    add_check(
+        report,
+        "final_components_complete",
+        required_components <= set(components),
+        "final health 缺少组件",
+    )
+    allowed_statuses = {"healthy", "degraded", "unhealthy", "not_applicable", "unknown"}
+    allowed_sources = {
+        "internal_result",
+        "workflow_step_outcome",
+        "pending_at_render_time",
+        "not_applicable",
+        "unknown",
+    }
+    add_check(
+        report,
+        "final_component_statuses_valid",
+        all(
+            isinstance(component, dict)
+            and component.get("status") in allowed_statuses
+            and component.get("component_status_source") in allowed_sources
+            for component in components.values()
+        ),
+        "final component 状态或来源非法",
+    )
+    add_check(
+        report,
+        "final_workflow_outcome_sources",
+        all(
+            isinstance(components.get(name), dict)
+            and components[name].get("component_status_source") in {"workflow_step_outcome", "unknown"}
+            for name in ("output_validation", "project_audit", "email", "gitee_sync", "workflow_core")
+        ),
+        "final workflow 组件未使用 step outcome",
+    )
+    add_check(
+        report,
+        "final_has_no_pending_components",
+        all(component.get("status") != "pending_at_render_time" for component in components.values() if isinstance(component, dict)),
+        "final health 仍包含 pending_at_render_time",
+    )
+    expected_statuses: dict[str, str] = {}
+    for name in ("output_validation", "project_audit", "email", "gitee_sync", "workflow_core"):
+        component = components.get(name, {}) if isinstance(components.get(name), dict) else {}
+        result = str(component.get("result") or "unknown")
+        if result == "success":
+            expected_statuses[name] = "healthy"
+        elif result in {"failure", "cancelled"}:
+            expected_statuses[name] = "unhealthy" if name in {"output_validation", "project_audit", "workflow_core"} else "degraded"
+        elif result == "skipped":
+            expected_statuses[name] = "not_applicable"
+        else:
+            expected_statuses[name] = "unknown"
+    add_check(
+        report,
+        "final_step_outcome_mapping_consistent",
+        all((components.get(name) or {}).get("status") == expected for name, expected in expected_statuses.items()),
+        "final component 与 step outcome 映射不一致",
+    )
+
+    valid_history, history, error = load_jsonl_records(DATA_DIR / "run_health_history.jsonl")
+    add_check(report, "final_health_history_valid", valid_history, error)
+    history_ids = [str(row.get("run_id") or "") for row in history]
+    add_check(
+        report,
+        "final_health_history_unique",
+        valid_history and all(history_ids) and len(history_ids) == len(set(history_ids)),
+        "health history 存在重复或空 run_id",
+    )
+    add_check(
+        report,
+        "final_health_history_only_final",
+        valid_history and all(row.get("health_phase") == "final" and row.get("is_final") is True for row in history),
+        "health history 包含非 final 记录",
+    )
+    current_rows = [row for row in history if str(row.get("run_id") or "") == run_id]
+    add_check(
+        report,
+        "final_health_history_current_upserted",
+        bool(run_id) and len(current_rows) == 1 and current_rows[0].get("overall_health") == health.get("overall_health"),
+        "当前 run_id 未在 health history 中唯一 upsert",
+    )
+    add_check(
+        report,
+        "final_health_history_retention",
+        len(history) <= DEFAULT_MAX_RUN_HEALTH_RECORDS,
+        "health history 超出上限",
+    )
+
+    valid_alert_state, alert_state, error = load_json_file(DATA_DIR / "alert_state.json")
+    add_check(report, "final_alert_state_valid", valid_alert_state, error)
+    valid_alert_report, alert_report, error = load_json_file(DATA_DIR / "alert_report.json")
+    add_check(report, "final_alert_report_valid", valid_alert_report, error)
+    add_check(
+        report,
+        "final_alert_report_aligned",
+        valid_alert_report
+        and alert_report.get("evaluation_phase") == "final"
+        and alert_report.get("is_final") is True
+        and str(alert_report.get("run_id") or "") == run_id,
+        "alert report 未与 final health 对齐",
+    )
+    add_check(
+        report,
+        "final_alert_state_aligned",
+        valid_alert_state and str(alert_state.get("last_applied_run_id") or "") == run_id,
+        "alert state 未与 final health 对齐",
+    )
+    valid_events, events, error = load_jsonl_records(DATA_DIR / "alert_events.jsonl")
+    add_check(report, "final_alert_events_valid", valid_events, error)
+    event_ids = [str(row.get("alert_event_id") or "") for row in events]
+    add_check(
+        report,
+        "final_alert_event_ids_unique",
+        valid_events and all(event_ids) and len(event_ids) == len(set(event_ids)),
+        "alert event ID 重复或为空",
+    )
+    report["status"] = "passed" if not report["errors"] else "failed"
+    return report
+
+
 def print_text_report(report: dict[str, Any]) -> None:
     checks = report["checks"]
     print("开始检查周报输出。")
-    print(f"检查周编号：{report['week_id']}")
+    if report.get("week_id"):
+        print(f"检查周编号：{report['week_id']}")
+    print(f"检查模式：{report.get('mode', 'pre_finalize')}")
+    if report.get("mode") == "final_health_only":
+        print(f"final run_health：{'合法' if checks.get('final_run_health_phase') else '异常'}")
+        print(f"final health history：{'合法' if checks.get('final_health_history_current_upserted') else '异常'}")
+        print(f"final alert report：{'合法' if checks.get('final_alert_report_aligned') else '异常'}")
+        if report["errors"]:
+            print("检查发现问题：")
+            for error in report["errors"]:
+                print(f"- {error}")
+        print(f"检查完成：{report['status']}")
+        return
     print(f"summary 文档：{'存在' if checks.get('summary_exists') else '缺失'}")
     print(f"details 文档：{'存在' if checks.get('details_exists') else '缺失'}")
     print(f"兼容索引文档：{'存在' if checks.get('index_exists') else '缺失'}")
@@ -851,9 +1071,12 @@ def main() -> int:
     parser.add_argument("--week-id", default=current_week_id(), help="指定 ISO 周编号，例如 2026-W25。")
     parser.add_argument("--strict", action="store_true", help="严格模式：任何关键检查失败时返回非 0。")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式检查报告。")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--pre-finalize", action="store_true", help="检查采集、生命周期和周报基础输出，不要求 final health。")
+    modes.add_argument("--final-health-only", action="store_true", help="只检查 final health、告警和历史一致性。")
     args = parser.parse_args()
 
-    report = build_report(args.week_id)
+    report = build_final_health_report() if args.final_health_only else build_report(args.week_id)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:
