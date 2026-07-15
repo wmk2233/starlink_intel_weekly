@@ -5,7 +5,7 @@
   "duplicate_records_removed": 2,
   "error_type": null,
   "errors": [],
-  "generated_at": "2026-07-14T15:05:00+08:00",
+  "generated_at": "2026-07-15T06:12:32+00:00",
   "guardrails": {
     "no_external_knowledge": true,
     "no_unsourced_claims": true,
@@ -34,17 +34,17 @@
       "unchanged_items": 0
     },
     {
-      "baseline_items": 1,
+      "baseline_items": 0,
       "changed_items": 0,
       "extracted_level": "item_level",
-      "interpretation": "首次成功条目抽取已建立 baseline；这些历史条目不属于本周新增。",
+      "interpretation": "页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。",
       "new_items": 0,
       "page_change_status": "changed",
       "page_status": "reachable",
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "source_quality": "high",
-      "unchanged_items": 0
+      "unchanged_items": 1
     }
   ],
   "output_record_references_after_dedup": 0,

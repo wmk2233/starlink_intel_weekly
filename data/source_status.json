@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-14T15:05:00+08:00",
+  "generated_at": "2026-07-15T06:12:32+00:00",
   "sources": {
     "spacex_official_launches": {
       "average_confidence": 0.35,
@@ -22,7 +22,7 @@
       "item_level_items": 0,
       "items_collected": 1,
       "last_changed_at": "2026-06-17T18:23:48+08:00",
-      "last_checked_at": "2026-07-14T15:04:45+08:00",
+      "last_checked_at": "2026-07-15T06:12:20+00:00",
       "new_items": 0,
       "page_level_fallback": true,
       "page_level_items": 1,
@@ -40,7 +40,7 @@
     },
     "starlink_official_updates": {
       "average_confidence": 0.9,
-      "baseline_items": 1,
+      "baseline_items": 0,
       "bootstrap_completed": true,
       "candidate_count": 4,
       "candidate_links_total": 0,
@@ -48,7 +48,7 @@
       "change_status": "changed",
       "changed_items": 0,
       "collector": "official_item_extraction_v1",
-      "current_page_hash": "147b3564833bdd1b",
+      "current_page_hash": "2baee38270919dc6",
       "detail_fetch_failed": 3,
       "detail_fetch_success": 1,
       "dominant_extracted_level": "item_level",
@@ -58,13 +58,13 @@
       "http_status": 200,
       "item_level_items": 1,
       "items_collected": 1,
-      "last_changed_at": "2026-07-14T15:04:29+08:00",
-      "last_checked_at": "2026-07-14T15:04:29+08:00",
+      "last_changed_at": "2026-07-15T06:12:06+00:00",
+      "last_checked_at": "2026-07-15T06:12:06+00:00",
       "new_items": 0,
       "page_level_fallback": false,
       "page_level_items": 0,
       "parser_version": "starlink_updates_item_v1",
-      "previous_page_hash": "b6b1354c6af21b04",
+      "previous_page_hash": "147b3564833bdd1b",
       "reachable": true,
       "reliability_tier": "S",
       "render_fallback_status": "success",
@@ -72,7 +72,7 @@
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "source_type": "official",
-      "unchanged_items": 0,
+      "unchanged_items": 1,
       "url": "https://www.starlink.com/updates"
     }
   }

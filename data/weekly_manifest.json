@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-14T15:05:00+08:00",
+  "generated_at": "2026-07-15T06:12:32+00:00",
   "weeks": {
     "2026-W25": {
       "changed_items": 0,
@@ -91,7 +91,7 @@
       "details_path": "weekly/2026-W29-details.md",
       "dominant_extracted_level": "page_level",
       "dominant_quality": "low",
-      "generated_at": "2026-07-14T15:04:29+08:00",
+      "generated_at": "2026-07-15T06:12:06+00:00",
       "index_exists": true,
       "index_path": "weekly/2026-W29.md",
       "llm_audit_path": "data/llm_audit.json",
@@ -112,7 +112,7 @@
       "sources_total": 2,
       "summary_exists": true,
       "summary_path": "weekly/2026-W29-summary.md",
-      "unchanged_items": 0,
+      "unchanged_items": 1,
       "week_id": "2026-W29"
     }
   }

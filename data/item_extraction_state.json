@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-07-14T15:05:00+08:00",
+  "generated_at": "2026-07-15T06:12:32+00:00",
   "sources": {
     "spacex_official_launches": {
       "bootstrap_completed": false,
       "bootstrap_completed_at": null,
       "items": {},
       "known_item_count": 0,
-      "last_attempt_at": "2026-07-14T15:05:00+08:00",
+      "last_attempt_at": "2026-07-15T06:12:32+00:00",
       "last_candidate_count": 1,
       "last_error_type": "detail_parse_insufficient_evidence",
-      "last_failure_at": "2026-07-14T15:05:00+08:00",
+      "last_failure_at": "2026-07-15T06:12:32+00:00",
       "last_item_count": 0,
       "parser_version": "spacex_launches_item_v1"
     },
@@ -21,15 +21,15 @@
           "canonical_url": "https://starlink.com/updates/stargaze",
           "content_hash": "14d1326f8705072b",
           "first_seen_at": "2026-07-14T14:54:30+08:00",
-          "last_seen_at": "2026-07-14T15:04:29+08:00"
+          "last_seen_at": "2026-07-15T06:12:06+00:00"
         }
       },
       "known_item_count": 1,
-      "last_attempt_at": "2026-07-14T15:04:45+08:00",
+      "last_attempt_at": "2026-07-15T06:12:20+00:00",
       "last_candidate_count": 4,
       "last_error_type": null,
       "last_item_count": 1,
-      "last_success_at": "2026-07-14T15:04:45+08:00",
+      "last_success_at": "2026-07-15T06:12:20+00:00",
       "parser_version": "starlink_updates_item_v1"
     }
   },

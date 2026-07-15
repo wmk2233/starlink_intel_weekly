@@ -49,7 +49,7 @@
 ### 页面级监测解释
 
 - SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
-- Starlink Official Updates：首次成功条目抽取已建立 baseline；这些历史条目不属于本周新增。
+- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
 
 - 原因：LLM is disabled.
 
@@ -58,14 +58,14 @@
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-14T15:04:29+08:00 | 147b3564833bdd1b |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-14T15:04:45+08:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T06:12:06+00:00 | 2baee38270919dc6 |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T06:12:20+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 0 | changed | 2026-07-14T15:04:29+08:00 |
+| Starlink Official Updates | 0 | 0 | 1 | changed | 2026-07-15T06:12:06+00:00 |
 | SpaceX Official Launches | 0 | 0 | 0 | unchanged | 2026-06-17T18:23:48+08:00 |
 
 ## 5. 解析质量诊断
@@ -86,14 +86,14 @@
 | url | https://starlink.com/updates/stargaze |
 | source_id | starlink_official_updates |
 | category | starlink_update |
-| change_status | baseline |
+| change_status | unchanged |
 | extracted_level | item_level |
 | source_quality | high |
 | extraction_confidence | 0.9 |
 | content_hash | 14d1326f8705072b |
 | previous_content_hash | 14d1326f8705072b |
 | first_seen_at | 2026-07-14T14:54:30+08:00 |
-| last_seen_at | 2026-07-14T15:04:29+08:00 |
+| last_seen_at | 2026-07-15T06:12:06+00:00 |
 | last_changed_at | 2026-07-14T14:54:30+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -115,10 +115,10 @@
 | content_hash | 48928194391143dc |
 | previous_content_hash | 48928194391143dc |
 | first_seen_at | 2026-07-14T14:54:51+08:00 |
-| last_seen_at | 2026-07-14T15:04:45+08:00 |
+| last_seen_at | 2026-07-15T06:12:20+00:00 |
 | last_changed_at | 2026-07-14T14:54:51+08:00 |
 | matched_keywords | ["launch", "launches"] |
-| candidate_links | [{"title": "", "url": "https://www.spacex.com/launches/sl-10-45", "matched_keywords": []}] |
+| candidate_links | [{"title": "", "url": "https://www.spacex.com/launches/sda-t1tl-e", "matched_keywords": []}] |
 | extraction_notes | 页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。 |
 
 ## 7. 原始摘要与证据片段
@@ -142,11 +142,11 @@
 | 来源 | 解析器 | 静态候选 | 浏览器候选 | 选中候选 | 详情成功/失败 | baseline/new/changed/unchanged | item/page | 层级 | 质量 | 渲染 fallback | warning |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | SpaceX Official Launches | spacex_launches_item_v1 | 0 | 1 | 1 | 0/1 | 0/0/0/0 | 0/1 | page_level | low | 是 / success | detail_parse_insufficient_evidence |
-| Starlink Official Updates | starlink_updates_item_v1 | 0 | 4 | 4 | 1/3 | 1/0/0/0 | 1/0 | item_level | high | 是 / success | detail_parse_insufficient_evidence |
+| Starlink Official Updates | starlink_updates_item_v1 | 0 | 4 | 4 | 1/3 | 0/0/0/1 | 1/0 | item_level | high | 是 / success | detail_parse_insufficient_evidence |
 
 | 状态 | 来源 | 标题 | 日期文本 | 相关性 | 层级 | 质量 | 字段证据 | 官方链接 |
 |---|---|---|---|---|---|---|---|---|
-| baseline | Starlink Official Updates | Stargaze | May 21, 2026 | direct | item_level | high/0.9 | evidence, published_at, summary, title | [链接](https://starlink.com/updates/stargaze) |
+| unchanged | Starlink Official Updates | Stargaze | May 21, 2026 | direct | item_level | high/0.9 | evidence, published_at, summary, title | [链接](https://starlink.com/updates/stargaze) |
 
 ## 8. 局限性
 
@@ -265,6 +265,16 @@
   - Python 版本：3.11.9
   - 输出模式：dual
   - 是否发送邮件：否
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 06:12:06 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
