@@ -1,0 +1,173 @@
+{
+  "failed": 0,
+  "fixture_domain": "example.invalid",
+  "generated_at": "2026-02-10T00:00:00+00:00",
+  "mode": "synthetic_offline_replay",
+  "network_accessed": false,
+  "passed": 13,
+  "production_files_modified": false,
+  "scenario_count": 13,
+  "scenarios": [
+    {
+      "actual_events": [
+        "lifecycle_initialized"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "lifecycle_initialized"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "initialization_idempotency",
+      "status": "passed",
+      "steps": 3
+    },
+    {
+      "actual_events": [
+        "item_discovered"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "item_discovered"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "new_then_unchanged",
+      "status": "passed",
+      "steps": 2
+    },
+    {
+      "actual_events": [
+        "semantic_content_changed"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "semantic_content_changed"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "semantic_changed_then_unchanged",
+      "status": "passed",
+      "steps": 3
+    },
+    {
+      "actual_events": [
+        "extraction_improved"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "extraction_improved"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "extraction_improved_then_unchanged",
+      "status": "passed",
+      "steps": 3
+    },
+    {
+      "actual_events": [
+        "temporarily_missing",
+        "long_absence_reached"
+      ],
+      "actual_final_state": "long_absent",
+      "expected_events": [
+        "temporarily_missing",
+        "long_absence_reached"
+      ],
+      "expected_final_state": "long_absent",
+      "scenario_id": "temporarily_missing_to_long_absent",
+      "status": "passed",
+      "steps": 5
+    },
+    {
+      "actual_events": [],
+      "actual_final_state": "active",
+      "expected_events": [],
+      "expected_final_state": "active",
+      "scenario_id": "index_failure_no_missing",
+      "status": "passed",
+      "steps": 2
+    },
+    {
+      "actual_events": [
+        "reappeared"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "reappeared"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "missing_then_reappeared",
+      "status": "passed",
+      "steps": 3
+    },
+    {
+      "actual_events": [
+        "detail_fetch_recovered"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "detail_fetch_recovered"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "fetch_failed_three_then_recovered",
+      "status": "passed",
+      "steps": 5
+    },
+    {
+      "actual_events": [
+        "reappeared",
+        "semantic_content_changed"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "reappeared",
+        "semantic_content_changed"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "reappeared_and_changed",
+      "status": "passed",
+      "steps": 3
+    },
+    {
+      "actual_events": [
+        "detail_fetch_recovered",
+        "semantic_content_changed"
+      ],
+      "actual_final_state": "active",
+      "expected_events": [
+        "detail_fetch_recovered",
+        "semantic_content_changed"
+      ],
+      "expected_final_state": "active",
+      "scenario_id": "recovered_and_changed",
+      "status": "passed",
+      "steps": 5
+    },
+    {
+      "actual_events": [],
+      "actual_final_state": "active",
+      "expected_events": [],
+      "expected_final_state": "active",
+      "scenario_id": "parser_version_only",
+      "status": "passed",
+      "steps": 2
+    },
+    {
+      "actual_events": [],
+      "actual_final_state": "active",
+      "expected_events": [],
+      "expected_final_state": "active",
+      "scenario_id": "stale_run_ignored",
+      "status": "passed",
+      "steps": 2
+    },
+    {
+      "actual_events": [],
+      "actual_final_state": "active",
+      "expected_events": [],
+      "expected_final_state": "active",
+      "scenario_id": "transaction_failure_rollback",
+      "status": "passed",
+      "steps": 2
+    }
+  ],
+  "stage": "4D",
+  "version": 1
+}

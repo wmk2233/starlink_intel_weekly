@@ -23,6 +23,12 @@ ITEM_LIFECYCLE_STATE_FILE = PROJECT_ROOT / "data" / "item_lifecycle_state.json"
 ITEM_VERSIONS_FILE = PROJECT_ROOT / "data" / "item_versions.jsonl"
 LIFECYCLE_EVENTS_FILE = PROJECT_ROOT / "data" / "lifecycle_events.jsonl"
 LIFECYCLE_REPORT_FILE = PROJECT_ROOT / "data" / "lifecycle_report.json"
+LIFECYCLE_REPLAY_REPORT_FILE = PROJECT_ROOT / "data" / "lifecycle_replay_report.json"
+ALERT_STATE_FILE = PROJECT_ROOT / "data" / "alert_state.json"
+ALERT_EVENTS_FILE = PROJECT_ROOT / "data" / "alert_events.jsonl"
+ALERT_REPORT_FILE = PROJECT_ROOT / "data" / "alert_report.json"
+RUN_HEALTH_FILE = PROJECT_ROOT / "data" / "run_health.json"
+RUN_HEALTH_HISTORY_FILE = PROJECT_ROOT / "data" / "run_health_history.jsonl"
 
 
 def _yes_no(value: bool) -> str:
@@ -126,6 +132,30 @@ def _lifecycle_report() -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
+def _json_file(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _jsonl_file(path: Path) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, object]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            value = json.loads(line)
+            if isinstance(value, dict):
+                rows.append(value)
+    except json.JSONDecodeError:
+        return []
+    return rows
+
+
 def _week_id() -> str:
     now = datetime.now().astimezone()
     iso = now.isocalendar()
@@ -170,13 +200,30 @@ def main() -> int:
         )
     if not lifecycle_rows:
         lifecycle_rows.append("| unknown | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |")
+    run_health = _json_file(RUN_HEALTH_FILE)
+    alert_report = _json_file(ALERT_REPORT_FILE)
+    alert_totals = alert_report.get("totals", {}) if isinstance(alert_report.get("totals"), dict) else {}
+    components = run_health.get("components", {}) if isinstance(run_health.get("components"), dict) else {}
+    health_rows = []
+    for component_name in (
+        "source_collection", "candidate_discovery", "detail_extraction", "lifecycle", "llm",
+        "output_validation", "project_audit", "email", "gitee_sync",
+    ):
+        component = components.get(component_name, {}) if isinstance(components.get(component_name), dict) else {}
+        health_rows.append(
+            f"| {_escape_table_cell(component_name)} | {_escape_table_cell(component.get('status', 'unknown'))} | "
+            f"{_escape_table_cell(component.get('result', ''))} |"
+        )
+    health_history = _jsonl_file(RUN_HEALTH_HISTORY_FILE)
+    recent_health = ", ".join(str(row.get("overall_health", "unknown")) for row in health_history[-4:]) or "unknown"
+    replay_report = _json_file(LIFECYCLE_REPLAY_REPORT_FILE)
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：4C",
+        "- 阶段：4D",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -195,6 +242,12 @@ def main() -> int:
         "- item_versions.jsonl 路径：data/item_versions.jsonl",
         "- lifecycle_events.jsonl 路径：data/lifecycle_events.jsonl",
         "- lifecycle_report.json 路径：data/lifecycle_report.json",
+        "- lifecycle_replay_report.json 路径：data/lifecycle_replay_report.json",
+        "- alert_state.json 路径：data/alert_state.json",
+        "- alert_events.jsonl 路径：data/alert_events.jsonl",
+        "- alert_report.json 路径：data/alert_report.json",
+        "- run_health.json 路径：data/run_health.json",
+        "- run_health_history.jsonl 路径：data/run_health_history.jsonl",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
         f"- source_status.json 是否存在：{_yes_no(status_exists)}",
@@ -210,6 +263,7 @@ def main() -> int:
         f"- item_versions.jsonl 是否存在：{_yes_no(ITEM_VERSIONS_FILE.exists())}",
         f"- lifecycle_events.jsonl 是否存在：{_yes_no(LIFECYCLE_EVENTS_FILE.exists())}",
         f"- lifecycle_report.json 是否存在：{_yes_no(LIFECYCLE_REPORT_FILE.exists())}",
+        f"- lifecycle replay：{_escape_table_cell(replay_report.get('passed', 'unknown'))}/{_escape_table_cell(replay_report.get('scenario_count', 'unknown'))} passed",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
         "",
@@ -222,6 +276,36 @@ def main() -> int:
         f"- Semantic versions：{_escape_table_cell(lifecycle_totals.get('new_semantic_versions', 0))}",
         f"- Extraction revisions：{_escape_table_cell(lifecycle_totals.get('new_extraction_revisions', 0))}",
         f"- Lifecycle events：{_escape_table_cell(lifecycle_totals.get('lifecycle_events', 0))}",
+        "",
+        "### 运行健康",
+        "",
+        f"- 整体健康状态：{_escape_table_cell(run_health.get('overall_health', 'unknown'))}",
+        "",
+        "| 组件 | 状态 | 说明 |",
+        "|---|---|---|",
+        *health_rows,
+        "",
+        "### 运维告警",
+        "",
+        f"- 整体告警状态：{_escape_table_cell(alert_report.get('overall_alert_status', 'unknown'))}",
+        f"- Open conditions：{_escape_table_cell(alert_totals.get('open_conditions', 'unknown'))}",
+        f"- Resolved：{_escape_table_cell(alert_totals.get('resolved', 'unknown'))}",
+        "- 告警等级仅表示自动化系统中的人工复查优先级，不表示官方事件的重要程度。",
+        "",
+        "| 等级 | 新增 | 更新 | 升级 | 解决 | 当前 Open |",
+        "|---|---:|---:|---:|---:|---:|",
+        f"| Info | {_escape_table_cell(alert_totals.get('info', 0))} | {_escape_table_cell(alert_totals.get('updated', 0))} | 0 | {_escape_table_cell(alert_totals.get('resolved', 0))} | {_escape_table_cell(alert_totals.get('open_info', 0))} |",
+        f"| Warning | {_escape_table_cell(alert_totals.get('warning', 0))} | {_escape_table_cell(alert_totals.get('updated', 0))} | {_escape_table_cell(alert_totals.get('escalated', 0))} | {_escape_table_cell(alert_totals.get('resolved', 0))} | {_escape_table_cell(alert_totals.get('open_warning', 0))} |",
+        f"| High | {_escape_table_cell(alert_totals.get('high', 0))} | 0 | {_escape_table_cell(alert_totals.get('escalated', 0))} | {_escape_table_cell(alert_totals.get('resolved', 0))} | {_escape_table_cell(alert_totals.get('open_high', 0))} |",
+        f"| Critical | {_escape_table_cell(alert_totals.get('critical', 0))} | 0 | {_escape_table_cell(alert_totals.get('escalated', 0))} | {_escape_table_cell(alert_totals.get('resolved', 0))} | {_escape_table_cell(alert_totals.get('open_critical', 0))} |",
+        "",
+        "### 长期运行趋势",
+        "",
+        f"- 历史记录数量：{len(health_history)}",
+        f"- 最近 4 次 healthy/degraded/unhealthy：{recent_health}",
+        f"- 来源连续失败：{sum(1 for item in (alert_report.get('open_alerts', []) or []) if isinstance(item, dict) and item.get('alert_type') == 'source_unreachable')}",
+        f"- 详情成功率趋势：{', '.join(str(row.get('detail_success_rate', 'unknown')) for row in health_history[-4:]) or 'unknown'}",
+        f"- LLM 连续 validation failure：{sum(1 for item in (alert_report.get('open_alerts', []) or []) if isinstance(item, dict) and item.get('alert_type') == 'llm_validation_failed')}",
         "",
         "### 官方条目抽取",
         "",

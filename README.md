@@ -861,4 +861,23 @@ HTTPS Remote 中的 Token 如果包含特殊字符，需要 URL 编码。例如 
 - 在新的受控阶段评估 FCC、CelesTrak、arXiv、技术博客和微信公众号白名单等信息来源；
 - 增加数据去重、来源标注和结构化归档；
 - 后续阶段再考虑趋势分析和长期知识库自动沉淀；
-- 增加失败告警、运行日志归档和更细粒度的测试。
+- 在现有告警与健康历史基础上继续完善人工复查工作流。
+
+## 阶段 4D：离线回放、告警与长期运行健康
+
+阶段 4D 将 Phase 4C 的生命周期规则整理为生产采集和 replay 共用的确定性纯核心。`scripts/replay_lifecycle_events.py` 只读取 `tests/fixtures/lifecycle_replay/` 中的 `.invalid` 虚构数据，完全离线运行，默认使用临时目录，并拒绝把工作目录指向生产 `data/`。它不会读取 `.env`、访问网页、调用浏览器或 LLM、发送邮件，也不会修改 `items.jsonl`、生命周期状态、版本或事件历史。
+
+告警分为两类：事件型通知对 new、semantic changed、extraction improved、reappeared 和 detail fetch recovered 的稳定 event ID 只通知一次；条件型告警对 temporarily missing、long absent、连续 fetch failed、source unreachable、解析成功率下降、LLM 校验失败以及邮件/Gitee/完整性问题维护 open、冷却、升级和 resolve。`info / warning / high / critical` 只表示自动化系统中的人工复查优先级，不表示 Starlink、SpaceX 或相关事件的重要程度、影响或安全等级。
+
+运行健康使用 `healthy / degraded / unhealthy`，汇总来源可达性、候选完整性、详情成功率、生命周期、LLM、输出检查、审计、邮件和 Gitee。LLM disabled 是合法健康配置，无新增条目不是故障，页面 hash changed 也不等于条目事实变化，Playwright fallback 本身不自动降级。source unreachable 仅表示采集器未成功访问来源，不代表官方服务中断；fetch recovery 仅表示采集链路恢复，不代表官方服务恢复。
+
+Phase 4D 新增数据文件：
+
+- `data/lifecycle_replay_report.json`：13 个虚构场景的完全离线验收摘要；
+- `data/alert_state.json`：历史 watermark、open conditions、冷却和去重状态；
+- `data/alert_events.jsonl`：限长告警动作历史；
+- `data/alert_report.json`：本轮告警摘要；
+- `data/run_health.json`：当前 run health；
+- `data/run_health_history.jsonl`：按 run ID 去重、受历史上限控制的趋势数据。
+
+首次 Phase 4D 运行会把已有 Phase 4C lifecycle event 设置为 watermark，不重发旧通知。生命周期、告警与健康状态均使用 `last_applied_run_id / last_applied_started_at` 防止重复或乱序运行覆盖较新状态；JSONL 历史使用公开配置限制长度，open alert 状态不会因裁剪丢失。每周 workflow 只运行包含 replay 的离线单元测试，不重复执行完整 replay。

@@ -1,8 +1,9 @@
 {
   "attention_items": [],
+  "duplicate_run_ignored": false,
   "events_this_run": [],
-  "generated_at": "2026-07-15T09:56:06+00:00",
-  "run_id": "29406235097",
+  "generated_at": "2026-07-15T20:42:39+08:00",
+  "run_id": "local-0d87ba964d55b826",
   "sources": {
     "spacex_official_launches": {
       "active": 1,
@@ -33,7 +34,8 @@
       "temporarily_missing": 0
     }
   },
-  "stage": "4C",
+  "stage": "4D",
+  "stale_run_ignored": false,
   "thresholds": {
     "detail_failure_attention_threshold": 3,
     "long_absence_min_days": 14,
@@ -57,5 +59,6 @@
     "unchanged": 5
   },
   "version": 1,
-  "versions_this_run": []
+  "versions_this_run": [],
+  "warnings": []
 }

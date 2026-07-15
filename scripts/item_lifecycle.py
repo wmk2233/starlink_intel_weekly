@@ -7,8 +7,8 @@ import os
 import shutil
 import unicodedata
 from copy import deepcopy
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -61,6 +61,9 @@ class LifecycleUpdatePlan:
     new_versions: list[dict[str, Any]]
     new_lifecycle_events: list[dict[str, Any]]
     lifecycle_report: dict[str, Any]
+    warnings: list[str] = field(default_factory=list)
+    ignored_as_stale: bool = False
+    duplicate_run: bool = False
 
 
 def now_iso() -> str:
@@ -258,10 +261,8 @@ def compare_extraction_versions(
         if not _is_empty(value) and _is_empty(new_evidence.get(key)):
             degraded_reasons.append(f"field_evidence.{key}")
 
-    if old_payload["parser_version"] != new_payload["parser_version"]:
-        improved_reasons.append("parser_version")
-    if old_payload["detail_parse_method"] != new_payload["detail_parse_method"]:
-        improved_reasons.append("detail_parse_method")
+    # Parser or method metadata alone changes the extraction hash but is not an
+    # improvement unless factual completeness or evidence also improves.
 
     old_quality = QUALITY_RANK.get(str(old_payload["source_quality"] or "unknown").lower(), 0)
     new_quality = QUALITY_RANK.get(str(new_payload["source_quality"] or "unknown").lower(), 0)
@@ -321,11 +322,11 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def load_lifecycle_state(path: Path = ITEM_LIFECYCLE_STATE_FILE) -> dict[str, Any]:
-    return load_json(path, {"version": 1, "stage": "4C", "generated_at": None, "migration": {}, "items": {}})
+    return load_json(path, {"version": 1, "stage": "4D", "generated_at": None, "migration": {}, "items": {}})
 
 
 def load_lifecycle_report(path: Path = LIFECYCLE_REPORT_FILE) -> dict[str, Any]:
-    return load_json(path, {"version": 1, "stage": "4C", "generated_at": None, "totals": {}, "sources": {}})
+    return load_json(path, {"version": 1, "stage": "4D", "generated_at": None, "totals": {}, "sources": {}})
 
 
 def _parse_datetime(value: object) -> datetime | None:
@@ -339,6 +340,38 @@ def _parse_datetime(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _deterministic_observed_at(
+    previous_items: list[dict[str, Any]], merged_items: list[dict[str, Any]]
+) -> str:
+    candidates: list[datetime] = []
+    for record in [*previous_items, *merged_items]:
+        for key in ("last_seen_at", "last_detail_attempt_at", "first_seen_at"):
+            parsed = _parse_datetime(record.get(key))
+            if parsed is not None:
+                candidates.append(parsed)
+    selected = max(candidates) if candidates else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return selected.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def classify_run_order(
+    *,
+    run_id: str,
+    started_at: str,
+    last_applied_run_id: object,
+    last_applied_started_at: object,
+) -> str:
+    """Return current, duplicate, stale, or invalid without reading external state."""
+    if str(last_applied_run_id or "") == run_id:
+        return "duplicate"
+    current = _parse_datetime(started_at)
+    previous = _parse_datetime(last_applied_started_at)
+    if current is None:
+        return "invalid"
+    if previous is not None and current <= previous:
+        return "stale"
+    return "current"
 
 
 def _days_since(value: object, observed_at: str) -> int:
@@ -594,6 +627,96 @@ def _initialize_existing_records(
     return versions, events, initialized
 
 
+def _ignored_lifecycle_plan(
+    *,
+    previous_items: list[dict[str, Any]],
+    lifecycle_state: dict[str, Any] | None,
+    existing_versions: list[dict[str, Any]] | None,
+    existing_events: list[dict[str, Any]] | None,
+    run_id: str,
+    observed_at: str,
+    reason: str,
+) -> LifecycleUpdatePlan:
+    state_document = deepcopy(
+        lifecycle_state
+        or {"version": 1, "stage": "4D", "generated_at": None, "migration": {}, "items": {}}
+    )
+    state_items = state_document.get("items", {}) if isinstance(state_document.get("items"), dict) else {}
+    sources: dict[str, dict[str, Any]] = {}
+    for item in state_items.values():
+        source_id = str(item.get("source_id") or "")
+        if not source_id:
+            continue
+        source = sources.setdefault(
+            source_id,
+            {
+                "source_id": source_id,
+                "source_name": source_id,
+                "active": 0,
+                "temporarily_missing": 0,
+                "long_absent": 0,
+                "fetch_failed": 0,
+                "new": 0,
+                "changed": 0,
+                "extraction_improved": 0,
+                "recovered": 0,
+                "reappeared": 0,
+                "attention": 0,
+            },
+        )
+        lifecycle_name = str(item.get("lifecycle_state") or "active")
+        if lifecycle_name in source:
+            source[lifecycle_name] += 1
+        if item.get("attention_required") is True:
+            source["attention"] += 1
+    totals = {
+        "initialized": 0,
+        "new": 0,
+        "changed": 0,
+        "extraction_improved": 0,
+        "temporarily_missing": 0,
+        "long_absent": 0,
+        "detail_fetch_failed": 0,
+        "recovered_after_failure": 0,
+        "reappeared": 0,
+        "unchanged": len(state_items),
+        "new_semantic_versions": 0,
+        "new_extraction_revisions": 0,
+        "lifecycle_events": 0,
+    }
+    warning = (
+        "检测到重复 run_id，生命周期更新已幂等跳过。"
+        if reason == "duplicate_run"
+        else "检测到旧运行或无法安全解析的运行时间，生命周期状态未被覆盖。"
+    )
+    report = {
+        "version": 1,
+        "stage": "4D",
+        "generated_at": observed_at,
+        "run_id": run_id,
+        "totals": totals,
+        "sources": sources,
+        "attention_items": [],
+        "events_this_run": [],
+        "versions_this_run": [],
+        "stale_run_ignored": reason != "duplicate_run",
+        "duplicate_run_ignored": reason == "duplicate_run",
+        "warnings": [warning],
+    }
+    return LifecycleUpdatePlan(
+        updated_items=deepcopy(previous_items),
+        updated_lifecycle_state=state_document,
+        all_versions=deepcopy(existing_versions or []),
+        all_lifecycle_events=deepcopy(existing_events or []),
+        new_versions=[],
+        new_lifecycle_events=[],
+        lifecycle_report=report,
+        warnings=[warning],
+        ignored_as_stale=reason != "duplicate_run",
+        duplicate_run=reason == "duplicate_run",
+    )
+
+
 def build_lifecycle_update_plan(
     previous_items: list[dict[str, Any]],
     merged_items: list[dict[str, Any]],
@@ -610,13 +733,38 @@ def build_lifecycle_update_plan(
     max_item_versions_per_record: int = DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
     max_lifecycle_events: int = DEFAULT_MAX_LIFECYCLE_EVENTS,
 ) -> LifecycleUpdatePlan:
-    observed_at = observed_at or now_iso()
-    run_id = run_id or os.getenv("GITHUB_RUN_ID") or hashlib.sha256(observed_at.encode("utf-8")).hexdigest()[:16]
+    """Build a deterministic lifecycle plan without network, environment, or file I/O."""
+    if observed_at is None:
+        previous_started = _parse_datetime((lifecycle_state or {}).get("last_applied_started_at"))
+        observed_at = (
+            (previous_started + timedelta(seconds=1)).isoformat(timespec="seconds")
+            if previous_started is not None
+            else _deterministic_observed_at(previous_items, merged_items)
+        )
+    run_id = run_id or hashlib.sha256(observed_at.encode("utf-8")).hexdigest()[:16]
     long_absence_observation_threshold = max(1, int(long_absence_observation_threshold))
     long_absence_min_days = max(1, int(long_absence_min_days))
     detail_failure_attention_threshold = max(1, int(detail_failure_attention_threshold))
     max_item_versions_per_record = max(1, int(max_item_versions_per_record))
     max_lifecycle_events = max(1, int(max_lifecycle_events))
+
+    previous_state_document = lifecycle_state or {}
+    run_order = classify_run_order(
+        run_id=run_id,
+        started_at=observed_at,
+        last_applied_run_id=previous_state_document.get("last_applied_run_id"),
+        last_applied_started_at=previous_state_document.get("last_applied_started_at"),
+    )
+    if run_order in {"duplicate", "stale", "invalid"}:
+        return _ignored_lifecycle_plan(
+            previous_items=previous_items,
+            lifecycle_state=lifecycle_state,
+            existing_versions=existing_versions,
+            existing_events=existing_events,
+            run_id=run_id,
+            observed_at=observed_at,
+            reason="duplicate_run" if run_order == "duplicate" else "stale_run",
+        )
 
     updated_items = deepcopy(merged_items)
     records_by_id = {
@@ -631,12 +779,14 @@ def build_lifecycle_update_plan(
     }
     state_document = deepcopy(
         lifecycle_state
-        or {"version": 1, "stage": "4C", "generated_at": None, "migration": {}, "items": {}}
+        or {"version": 1, "stage": "4D", "generated_at": None, "migration": {}, "items": {}}
     )
     state_document["version"] = 1
-    state_document["stage"] = "4C"
+    state_document["stage"] = "4D"
     state_document["generated_at"] = observed_at
     state_document["run_id"] = run_id
+    state_document["last_applied_run_id"] = run_id
+    state_document["last_applied_started_at"] = observed_at
     state_items = state_document.setdefault("items", {})
     if not isinstance(state_items, dict):
         raise ValueError("item_lifecycle_state.json 的 items 必须是 object。")
@@ -955,6 +1105,8 @@ def build_lifecycle_update_plan(
         _apply_state_to_item(record, state)
 
     for record_id, state in state_items.items():
+        state["last_applied_run_id"] = run_id
+        state["last_applied_started_at"] = observed_at
         record = records_by_id.get(record_id)
         if record is not None:
             _apply_state_to_item(record, state)
@@ -1027,7 +1179,7 @@ def build_lifecycle_update_plan(
     ]
     lifecycle_report = {
         "version": 1,
-        "stage": "4C",
+        "stage": "4D",
         "generated_at": observed_at,
         "run_id": run_id,
         "thresholds": {
@@ -1055,6 +1207,9 @@ def build_lifecycle_update_plan(
             }
             for item in new_versions
         ],
+        "stale_run_ignored": False,
+        "duplicate_run_ignored": False,
+        "warnings": [],
     }
 
     validate_lifecycle_update_plan(
@@ -1077,6 +1232,99 @@ def build_lifecycle_update_plan(
         new_lifecycle_events=new_events,
         lifecycle_report=lifecycle_report,
     )
+
+
+def apply_lifecycle_observation(
+    *,
+    previous_item: dict[str, Any] | None,
+    previous_lifecycle_state: dict[str, Any] | None,
+    observation: dict[str, Any],
+    run_context: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one offline observation through the same pure engine used in production."""
+    run_id = str(run_context.get("run_id") or "")
+    observed_at = str(run_context.get("started_at") or run_context.get("observed_at") or "")
+    if not run_id or _parse_datetime(observed_at) is None:
+        return {
+            "updated_item": deepcopy(previous_item),
+            "updated_lifecycle_state": deepcopy(previous_lifecycle_state),
+            "new_versions": [],
+            "new_events": [],
+            "warnings": ["run_context 缺少可解析的 run_id 或 started_at，已安全拒绝。"],
+            "ignored_as_stale": True,
+            "duplicate_run": False,
+        }
+
+    current_record = deepcopy(observation.get("current_record") or previous_item)
+    if current_record is None:
+        raise ValueError("observation 必须提供 current_record 或 previous_item。")
+    for key in ("source_id", "canonical_url", "record_id"):
+        value = observation.get(key)
+        if key == "record_id" and value:
+            current_record["id"] = value
+        elif value:
+            current_record[key] = value
+    current_record.setdefault("record_scope", "item")
+    current_record["seen_in_current_index"] = bool(observation.get("seen_in_current_index"))
+    if observation.get("detail_fetch_status"):
+        current_record["detail_fetch_status"] = observation.get("detail_fetch_status")
+    if observation.get("error_type"):
+        current_record["last_detail_error_type"] = observation.get("error_type")
+    if str(current_record.get("detail_fetch_status") or "").lower() in {"failed", "failed_this_run"}:
+        current_record["current_run_data_reused"] = True
+
+    source_id = str(current_record.get("source_id") or observation.get("source_id") or "")
+    state_document: dict[str, Any] = {
+        "version": 1,
+        "stage": "4D",
+        "migration": {"phase4c_initialized": True},
+        "items": {},
+    }
+    if previous_lifecycle_state:
+        record_id = str(current_record.get("id") or "")
+        state_document["items"][record_id] = deepcopy(previous_lifecycle_state)
+        state_document["last_applied_run_id"] = previous_lifecycle_state.get("last_applied_run_id")
+        state_document["last_applied_started_at"] = previous_lifecycle_state.get("last_applied_started_at")
+    previous_items = [deepcopy(previous_item)] if previous_item else []
+    plan = build_lifecycle_update_plan(
+        previous_items,
+        [current_record],
+        {
+            source_id: {
+                "index_observation_complete": bool(observation.get("index_observation_complete")),
+                "reachable": observation.get("index_reachable", True),
+                "checked_at": observed_at,
+            }
+        },
+        lifecycle_state=state_document,
+        existing_versions=deepcopy(observation.get("existing_versions") or []),
+        existing_events=deepcopy(observation.get("existing_events") or []),
+        run_id=run_id,
+        observed_at=observed_at,
+        long_absence_observation_threshold=int(
+            policy.get("long_absence_observation_threshold", DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD)
+        ),
+        long_absence_min_days=int(policy.get("long_absence_min_days", DEFAULT_LONG_ABSENCE_MIN_DAYS)),
+        detail_failure_attention_threshold=int(
+            policy.get("detail_failure_attention_threshold", DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD)
+        ),
+        max_item_versions_per_record=int(
+            policy.get("max_item_versions_per_record", DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD)
+        ),
+        max_lifecycle_events=int(policy.get("max_lifecycle_events", DEFAULT_MAX_LIFECYCLE_EVENTS)),
+    )
+    record_id = str(current_record.get("id") or "")
+    updated_item = next((item for item in plan.updated_items if str(item.get("id") or "") == record_id), None)
+    return {
+        "updated_item": updated_item,
+        "updated_lifecycle_state": deepcopy(plan.updated_lifecycle_state.get("items", {}).get(record_id)),
+        "new_versions": deepcopy(plan.new_versions),
+        "new_events": deepcopy(plan.new_lifecycle_events),
+        "warnings": deepcopy(plan.warnings),
+        "ignored_as_stale": plan.ignored_as_stale,
+        "duplicate_run": plan.duplicate_run,
+    }
 
 
 def validate_lifecycle_update_plan(plan: LifecycleUpdatePlan) -> None:
@@ -1133,12 +1381,12 @@ def write_lifecycle_transaction(
     try:
         for path, content in payloads.items():
             path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(path.suffix + ".phase4c.tmp")
+            temporary = path.with_suffix(path.suffix + ".phase4d.tmp")
             temporary.write_text(content, encoding="utf-8", newline="\n")
             temporary_paths[path] = temporary
         for path in payloads:
             if path.exists():
-                backup = path.with_suffix(path.suffix + ".phase4c.bak")
+                backup = path.with_suffix(path.suffix + ".phase4d.bak")
                 shutil.copy2(path, backup)
                 backup_paths[path] = backup
         for path, temporary in temporary_paths.items():

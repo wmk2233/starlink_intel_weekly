@@ -1,5 +1,18 @@
 # Starlink 情报周报自动化部署检查清单
 
+## 19. 阶段 4D 回放、告警与健康部署清单
+
+- [ ] 确认 replay fixture 仅使用 `example.invalid`，完全离线且不修改生产数据。
+- [ ] 确认 `data/lifecycle_replay_report.json` 为 13/13 passed、`network_accessed=false`、`production_files_modified=false`。
+- [ ] 确认首次 bootstrap 仅把已有生命周期事件设为 watermark，不重发历史通知。
+- [ ] 确认事件型通知与条件型告警分离，severity 仅表示人工复查优先级。
+- [ ] 确认 source unreachable 文案不代表官方服务中断，recovery 不代表官方服务恢复。
+- [ ] 确认 run health 允许 LLM disabled 和无新增条目保持 healthy。
+- [ ] 在 GitHub Variables 配置告警冷却、趋势阈值和历史上限；这些字段不是 Secrets。
+- [ ] 确认 workflow 不运行完整 replay，只运行全量离线单元测试。
+- [ ] 确认 Gitee 仍为三次重试、失败非阻塞，邮件仍只有两份 Markdown 附件。
+- [ ] 确认 `.env`、`prompts/`、HTML、HAR、trace、截图和视频均未提交。
+
 ## 18. 阶段 4C 生命周期部署清单
 
 - [ ] 确认 `data/item_lifecycle_state.json` 的 `phase4c_initialized=true` 且初始化只发生一次。

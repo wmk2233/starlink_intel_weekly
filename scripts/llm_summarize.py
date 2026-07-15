@@ -721,6 +721,13 @@ def system_prompt() -> str:
         "detail_fetch_recovered 表示采集链路恢复，不代表官方服务恢复。\n"
         "reappeared 表示历史条目重新出现在索引中，不代表重新发布。\n"
         "不得将 parser enrichment 或字段补全描述为官方内容更新。\n"
+        "运维告警和运行健康由代码确定性生成，不是官方事实来源，也不得进入 key point 引用。\n"
+        "告警 severity 仅表示采集系统人工复查优先级，不代表内容重要性、风险程度或战略影响。\n"
+        "source_unreachable 表示采集器未成功访问来源，不得写成官方服务中断。\n"
+        "candidate_discovery_degraded 不代表官方删除了内容。\n"
+        "llm_validation_failed 只表示模型输出未通过本地来源校验。\n"
+        "email_delivery_failed 和 gitee_sync_failed 仅属于分发链路问题。\n"
+        "output_validation_failed、project_audit_failed 和 state_integrity_failed 属于自动化系统完整性问题。\n"
         "如果没有 new 或 changed 条目，必须明确写“本周未检测到新增或内容变化条目”。\n"
         "每个 key point 必须逐字使用 allowed_reference_pairs 中属于同一记录的 record_id 和 canonical_url。\n"
         "不得使用相对 URL、改写 URL、索引页 URL 或外部 URL。\n"
@@ -783,6 +790,10 @@ def build_user_prompt(
             "collector_recovery_is_not_service_recovery": True,
             "reappeared_is_not_republication": True,
             "monitoring_context_is_not_model_input": True,
+            "operational_alerts_are_not_official_facts": True,
+            "alert_severity_is_not_event_importance": True,
+            "source_unreachable_is_not_service_outage": True,
+            "distribution_failures_are_not_collection_failures": True,
         },
         "allowed_reference_pairs": allowed_pairs,
         "final_core_records": final_core_records,

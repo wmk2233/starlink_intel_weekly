@@ -1,0 +1,30 @@
+{
+  "bootstrap": {
+    "initialized": true,
+    "initialized_at": "2026-07-15T20:42:39+08:00",
+    "lifecycle_event_watermark_count": 6
+  },
+  "condition_counters": {
+    "candidate_discovery_degraded|spacex_official_launches|global": 0,
+    "candidate_discovery_degraded|starlink_official_updates|global": 0,
+    "detail_success_rate_degraded|global|global": 0,
+    "source_unreachable|spacex_official_launches|global": 0,
+    "source_unreachable|starlink_official_updates|global": 0
+  },
+  "generated_at": "2026-07-15T20:42:39+08:00",
+  "last_applied_run_id": "local-0d87ba964d55b826",
+  "last_applied_started_at": "2026-07-15T20:42:39+08:00",
+  "last_processed_lifecycle_event_at": "2026-07-15T17:29:14+08:00",
+  "last_processed_run_id": "local-0d87ba964d55b826",
+  "open_conditions": {},
+  "processed_event_ids": [
+    "d4c7646bc0583fa1a0ba",
+    "70fb365de75585cbfae6",
+    "84f288e03ab654dfc90e",
+    "00e4fe6d4713663c874b",
+    "2e5bbd08b0cd35da547c",
+    "fae2e46494eea006e122"
+  ],
+  "stage": "4D",
+  "version": 1
+}

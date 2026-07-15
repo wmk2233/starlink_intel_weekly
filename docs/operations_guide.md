@@ -1,5 +1,21 @@
 # Starlink 情报周报自动化运维指南
 
+## 19. 阶段 4D 告警与 run health 运维
+
+完整 replay 使用 `.invalid` 虚构 fixture 且完全离线：
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED="1"
+$env:LLM_ENABLED="false"
+python scripts/replay_lifecycle_events.py --all --fixture-dir tests\fixtures\lifecycle_replay --json --no-write --strict
+```
+
+诊断告警与健康时使用 `scripts/diagnose_alerts.py --all --json --no-write` 和 `scripts/diagnose_run_health.py --all --history --json --no-write`。事件型通知只对新 event ID 通知一次；条件型告警会 open、在冷却结束后 update、达到阈值时 escalate，并在采集条件恢复后 resolve。历史 4C 事件在 bootstrap 时只建立 watermark，不重发。
+
+告警等级只表示自动化系统中的人工复查优先级，不代表官方事件重要性。source unreachable 表示采集器未成功访问来源，不代表官方服务中断；fetch failed 不代表官方页面故障；detail fetch recovered 不代表官方服务恢复。LLM disabled、无新增条目、单纯页面 hash changed 和正常 Playwright fallback 都不是故障。
+
+`alert_events.jsonl` 与 `run_health_history.jsonl` 有历史上限并使用原子替换；open alert 状态保存在 `alert_state.json`，不会因历史裁剪丢失。出现 stale run warning 时，先确认 GitHub Actions concurrency，再检查 `last_applied_run_id / last_applied_started_at`，不要手工回退生产状态。
+
 ## 18. 阶段 4C 生命周期运维
 
 日常诊断使用只读命令：

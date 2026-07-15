@@ -58,7 +58,7 @@ class ItemVersionHistoryTests(unittest.TestCase):
                 events_path=root / "events.jsonl",
                 report_path=root / "report.json",
             )
-            self.assertEqual("4C", json.loads((root / "report.json").read_text(encoding="utf-8"))["stage"])
+            self.assertEqual("4D", json.loads((root / "report.json").read_text(encoding="utf-8"))["stage"])
             self.assertNotIn("<html", (root / "versions.jsonl").read_text(encoding="utf-8").lower())
 
 

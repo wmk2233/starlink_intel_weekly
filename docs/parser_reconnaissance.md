@@ -1,5 +1,13 @@
 # 官方页面解析侦察记录
 
+## 2026-07-15 阶段 4D 长期可靠性观察边界
+
+- 生命周期 replay 完全离线，只使用 `.invalid` 虚构数据，不把真实官方正文复制进 fixture。
+- 生产与 replay 共用 `build_lifecycle_update_plan()`，parser metadata 单独变化不会误报 semantic changed 或 extraction improved。
+- 候选数量异常使用成功完整索引历史的滚动中位数和连续次数，不硬编码当前候选数量。
+- source unreachable、详情成功率下降和 candidate discovery degraded 都是采集系统信号，不代表官方服务中断、内容删除或事件重要性。
+- run health 只聚合有限状态；不保存完整 HTML、DOM、异常、截图、HAR、视频或 trace。
+
 ## 2026-07-15 阶段 4C 生命周期观察边界
 
 - 两个现有官方索引继续沿用 Phase 4A/4B 的 stable ID、canonical URL、静态解析和受控 Playwright fallback，不新增来源。

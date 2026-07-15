@@ -1,0 +1,22 @@
+{
+  "source_id": "fixture_official_updates",
+  "source_name": "Fixture Official Updates",
+  "items": [
+    {
+      "id": "fixture-item-a",
+      "canonical_url": "https://example.invalid/updates/item-a",
+      "title": "Fixture item A",
+      "summary": "Synthetic summary alpha.",
+      "evidence": "Synthetic evidence alpha.",
+      "structured_fields": {"fixture_status": "alpha"}
+    },
+    {
+      "id": "fixture-item-b",
+      "canonical_url": "https://example.invalid/updates/item-b",
+      "title": "Fixture item B",
+      "summary": "Synthetic summary beta.",
+      "evidence": "Synthetic evidence beta.",
+      "structured_fields": {"fixture_status": "beta"}
+    }
+  ]
+}

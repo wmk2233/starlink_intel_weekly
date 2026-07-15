@@ -12,10 +12,11 @@ from typing import Any
 import yaml
 
 from item_lifecycle import ALLOWED_EVENT_TYPES, ALLOWED_LIFECYCLE_STATES, ALLOWED_VERSION_KINDS
+from operational_health import ALERT_ACTIONS, ALERT_SEVERITIES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "4C"
+CURRENT_STAGE = "4D"
 
 REQUIRED_FILES = [
     "README.md",
@@ -37,6 +38,12 @@ REQUIRED_FILES = [
     "scripts/diagnose_official_details.py",
     "scripts/item_lifecycle.py",
     "scripts/diagnose_item_lifecycle.py",
+    "scripts/operational_health.py",
+    "scripts/replay_lifecycle_events.py",
+    "scripts/evaluate_alerts.py",
+    "scripts/build_run_health.py",
+    "scripts/diagnose_alerts.py",
+    "scripts/diagnose_run_health.py",
     "scripts/parsers/__init__.py",
     "scripts/parsers/common.py",
     "scripts/parsers/starlink_updates.py",
@@ -59,6 +66,19 @@ REQUIRED_FILES = [
     "tests/test_item_version_history.py",
     "tests/test_lifecycle_reporting.py",
     "tests/test_lifecycle_llm_guardrails.py",
+    "tests/test_lifecycle_replay.py",
+    "tests/test_lifecycle_replay_safety.py",
+    "tests/test_alert_event_notifications.py",
+    "tests/test_alert_condition_state.py",
+    "tests/test_alert_escalation_and_resolution.py",
+    "tests/test_alert_bootstrap.py",
+    "tests/test_run_health.py",
+    "tests/test_run_health_trends.py",
+    "tests/test_stale_run_protection.py",
+    "tests/test_history_retention.py",
+    "tests/test_phase4d_reporting.py",
+    "tests/test_phase4d_llm_guardrails.py",
+    "tests/fixtures/lifecycle_replay/items.json",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
@@ -75,6 +95,12 @@ REQUIRED_FILES = [
     "data/item_versions.jsonl",
     "data/lifecycle_events.jsonl",
     "data/lifecycle_report.json",
+    "data/lifecycle_replay_report.json",
+    "data/alert_state.json",
+    "data/alert_events.jsonl",
+    "data/alert_report.json",
+    "data/run_health.json",
+    "data/run_health_history.jsonl",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -103,6 +129,12 @@ SENSITIVE_SCAN_TARGETS = [
     "data/item_versions.jsonl",
     "data/lifecycle_events.jsonl",
     "data/lifecycle_report.json",
+    "data/lifecycle_replay_report.json",
+    "data/alert_state.json",
+    "data/alert_events.jsonl",
+    "data/alert_report.json",
+    "data/run_health.json",
+    "data/run_health_history.jsonl",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -265,6 +297,17 @@ def check_workflow(report: dict[str, Any]) -> None:
         "DETAIL_FAILURE_ATTENTION_THRESHOLD",
         "MAX_ITEM_VERSIONS_PER_RECORD",
         "MAX_LIFECYCLE_EVENTS",
+        "ALERT_COOLDOWN_HOURS",
+        "MAX_ALERT_EVENTS",
+        "MAX_RUN_HEALTH_RECORDS",
+        "CANDIDATE_TREND_WINDOW",
+        "DETAIL_SUCCESS_RATE_WARNING_THRESHOLD",
+        "data/lifecycle_replay_report.json",
+        "data/alert_state.json",
+        "data/alert_events.jsonl",
+        "data/alert_report.json",
+        "data/run_health.json",
+        "data/run_health_history.jsonl",
         "data/item_extraction_report.json",
         "data/detail_extraction_diagnostics.json",
         "DETAIL_RENDER_MODE: ${{ vars.DETAIL_RENDER_MODE || 'auto' }}",
@@ -581,6 +624,137 @@ def check_phase4c_lifecycle(report: dict[str, Any]) -> None:
     ]:
         if required_doc not in docs:
             add_issue(report, section, f"阶段 4C 文档缺少：{required_doc}")
+            return
+    mark_passed_if_clean(report, section)
+
+
+def check_phase4d_reliability(report: dict[str, Any]) -> None:
+    section = "phase4d_reliability"
+    lifecycle = read_text("scripts/item_lifecycle.py")
+    collector = read_text("scripts/collect_sources.py")
+    replay = read_text("scripts/replay_lifecycle_events.py")
+    operations = read_text("scripts/operational_health.py")
+    weekly = read_text("scripts/run_weekly.py")
+    email = read_text("scripts/send_email.py")
+    llm = read_text("scripts/llm_summarize.py")
+    summary = read_text("scripts/print_action_summary.py")
+    workflow = read_text(".github/workflows/weekly.yml")
+    required = {
+        "lifecycle": ["build_lifecycle_update_plan", "apply_lifecycle_observation", "classify_run_order", "last_applied_started_at"],
+        "collector": ["stale_run_ignored", "拒绝覆盖生产采集与生命周期状态"],
+        "replay": ["build_lifecycle_update_plan", "synthetic_offline_replay", "example.invalid", "PROTECTED_NAMES", "production_files_modified", "network_accessed"],
+        "operations": [
+            "EVENT_NOTIFICATION_RULES", "build_alert_key", "evaluate_alerts_data", "build_run_health_data",
+            "alert_cooldown_hours", "escalate", "resolve", "source_unreachable",
+            "candidate_discovery_degraded", "detail_success_rate_degraded", "llm_validation_failed",
+            "gitee_sync_failed", "output_validation_failed", "atomic_write_bundle",
+            "max_alert_events", "max_run_health_records", "last_applied_started_at",
+        ],
+        "weekly": ["## 运行健康与告警", "## 运维告警明细", "## 长期运行趋势", "## 离线生命周期回放验收"],
+        "email": ["运行健康状态", "本轮告警", "人工复查优先级", "attachment_paths"],
+        "llm": ["运维告警和运行健康", "不代表内容重要性", "不得写成官方服务中断", "分发链路问题"],
+        "summary": ["### 运行健康", "### 运维告警", "### 长期运行趋势"],
+        "workflow": [
+            "actions/checkout@v5", "actions/setup-python@v6", "playwright install --with-deps chromium",
+            "data/lifecycle_replay_report.json", "data/alert_state.json", "data/alert_events.jsonl",
+            "data/alert_report.json", "data/run_health.json", "data/run_health_history.jsonl",
+        ],
+    }
+    texts = {
+        "lifecycle": lifecycle,
+        "collector": collector,
+        "replay": replay,
+        "operations": operations,
+        "weekly": weekly,
+        "email": email,
+        "llm": llm,
+        "summary": summary,
+        "workflow": workflow,
+    }
+    missing = [f"{name}:{snippet}" for name, snippets in required.items() for snippet in snippets if snippet not in texts[name]]
+    if missing:
+        add_issue(report, section, "阶段 4D 实现线索缺失：" + "、".join(missing))
+        return
+    for forbidden in ["requests", "playwright", "send_weekly_email", "call_deepseek", "call_openai"]:
+        if re.search(rf"(^|\n)\s*(from|import)\s+[^\n]*{re.escape(forbidden)}", replay):
+            add_issue(report, section, f"replay 不应导入网络、浏览器、邮件或 LLM 能力：{forbidden}")
+            return
+    if "python scripts/replay_lifecycle_events.py" in workflow:
+        add_issue(report, section, "每周 workflow 不应执行完整 lifecycle replay")
+        return
+    if "git add ." in workflow:
+        add_issue(report, section, "workflow 不得使用 git add .")
+        return
+
+    valid_replay, replay_report, error = json_file(PROJECT_ROOT / "data/lifecycle_replay_report.json")
+    if not valid_replay or not isinstance(replay_report, dict):
+        add_issue(report, section, f"lifecycle_replay_report.json 异常：{error}")
+        return
+    if not (
+        replay_report.get("mode") == "synthetic_offline_replay"
+        and replay_report.get("fixture_domain") == "example.invalid"
+        and replay_report.get("network_accessed") is False
+        and replay_report.get("production_files_modified") is False
+        and int(replay_report.get("failed") or 0) == 0
+    ):
+        add_issue(report, section, "离线 replay 安全状态或场景结果异常")
+        return
+
+    valid_state, alert_state, error = json_file(PROJECT_ROOT / "data/alert_state.json")
+    valid_events, alert_events, events_error = jsonl_file(PROJECT_ROOT / "data/alert_events.jsonl")
+    valid_report, alert_report, report_error = json_file(PROJECT_ROOT / "data/alert_report.json")
+    valid_health, run_health, health_error = json_file(PROJECT_ROOT / "data/run_health.json")
+    valid_history, health_history, history_error = jsonl_file(PROJECT_ROOT / "data/run_health_history.jsonl")
+    if not all((valid_state, valid_events, valid_report, valid_health, valid_history)):
+        add_issue(report, section, f"Phase 4D 数据文件异常：{error or events_error or report_error or health_error or history_error}")
+        return
+    if alert_state.get("bootstrap", {}).get("initialized") is not True:
+        add_issue(report, section, "告警历史 watermark 未初始化")
+        return
+    if any(value.get("action") not in ALERT_ACTIONS or value.get("severity") not in ALERT_SEVERITIES for value in alert_events):
+        add_issue(report, section, "告警事件 action 或 severity 非法")
+        return
+    alert_ids = [str(value.get("alert_event_id") or "") for value in alert_events]
+    if len(alert_ids) != len(set(alert_ids)):
+        add_issue(report, section, "告警事件 ID 未去重")
+        return
+    run_ids = [str(value.get("run_id") or "") for value in health_history]
+    if len(run_ids) != len(set(run_ids)):
+        add_issue(report, section, "run health history 未按 run_id 去重")
+        return
+    if run_health.get("overall_health") not in {"healthy", "degraded", "unhealthy"}:
+        add_issue(report, section, "overall_health 非法")
+        return
+    if alert_report.get("overall_alert_status") not in {"normal", "attention", "high_attention", "critical"}:
+        add_issue(report, section, "overall_alert_status 非法")
+        return
+    fixture = read_text("tests/fixtures/lifecycle_replay/items.json")
+    if "example.invalid" not in fixture or "starlink.com" in fixture.lower() or "spacex.com" in fixture.lower():
+        add_issue(report, section, "replay fixture 必须仅使用虚构 .invalid 数据")
+        return
+    serialized = "".join(
+        read_text(path)
+        for path in [
+            "data/lifecycle_replay_report.json", "data/alert_state.json", "data/alert_events.jsonl",
+            "data/alert_report.json", "data/run_health.json", "data/run_health_history.jsonl",
+        ]
+    ).lower()
+    if "<html" in serialized or "<!doctype html" in serialized:
+        add_issue(report, section, "Phase 4D 数据疑似保存完整 HTML")
+        return
+    docs = "\n".join(
+        read_text(path)
+        for path in [
+            "README.md", "RELEASE_NOTES.md", "docs/deployment_checklist.md", "docs/operations_guide.md",
+            "docs/parser_reconnaissance.md", "docs/starlink_knowledge_base.md",
+        ]
+    )
+    for phrase in [
+        "阶段 4D", "完全离线", ".invalid", "事件型通知", "条件型告警", "人工复查优先级",
+        "source unreachable", "不代表官方服务中断", "乱序", "run health", "历史上限",
+    ]:
+        if phrase not in docs:
+            add_issue(report, section, f"阶段 4D 文档缺少：{phrase}")
             return
     mark_passed_if_clean(report, section)
 
@@ -1011,6 +1185,7 @@ def build_report() -> dict[str, Any]:
     check_sources(report)
     check_phase4b_detail_extraction(report)
     check_phase4c_lifecycle(report)
+    check_phase4d_reliability(report)
     check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)
@@ -1029,6 +1204,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         ("sources", "sources.yml"),
         ("phase4b_detail_extraction", "Phase 4B 详情解析与失败恢复"),
         ("phase4c_lifecycle", "Phase 4C 增量变化与生命周期"),
+        ("phase4d_reliability", "Phase 4D 回放、告警与运行健康"),
         ("llm_config", "LLM 配置与文档"),
         ("data_files", "数据文件"),
         ("weekly_outputs", "weekly 输出"),

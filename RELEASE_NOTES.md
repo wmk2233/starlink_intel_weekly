@@ -1,5 +1,16 @@
 # Release Notes
 
+## v0.4D：离线生命周期回放、告警与运行健康
+
+- 新增生产与 replay 共用的确定性生命周期核心，并以 `last_applied_*` 防止重复或乱序运行覆盖较新状态。
+- 新增 13 个完全离线的 `.invalid` 虚构 replay 场景；默认临时运行，禁止修改生产生命周期文件。
+- 新增事件型通知与条件型告警，支持 info/warning/high/critical、稳定 key 去重、冷却、升级、resolve 和历史 watermark。
+- 告警 severity 仅代表自动化人工复查优先级，不代表官方事件重要性；source unreachable 不代表官方服务中断，采集恢复不代表服务恢复。
+- 新增 run health、长期趋势、候选滚动中位数与详情成功率连续下降监测；LLM disabled 和无新增条目均可保持 healthy。
+- 新增告警/健康 JSON 与 JSONL 历史上限、原子写入和 open alert 保留规则。
+- 周报、邮件和 GitHub Actions Summary 增加运行健康、告警、趋势与 replay 验收展示；邮件仍只有 summary/details 双附件。
+- 未新增正式来源，未保存完整 HTML、截图、HAR、视频或 trace。
+
 ## v0.4C：增量变化与条目生命周期
 
 - 新增 `active / temporarily_missing / fetch_failed / long_absent` 当前状态，以及 new、semantic changed、extraction improved、missing、failure、recovery、reappeared 的确定性事件。

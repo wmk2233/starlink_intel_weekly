@@ -1,0 +1,59 @@
+{
+  "alert_summary": {
+    "open_critical": 0,
+    "open_high": 0,
+    "open_warning": 0
+  },
+  "components": {
+    "candidate_discovery": {
+      "complete_sources": 2,
+      "status": "healthy",
+      "total_sources": 2
+    },
+    "detail_extraction": {
+      "failed": 0,
+      "status": "healthy",
+      "success": 5,
+      "success_rate": 1.0
+    },
+    "email": {
+      "result": "disabled",
+      "status": "healthy"
+    },
+    "gitee_sync": {
+      "result": "skipped",
+      "status": "healthy"
+    },
+    "lifecycle": {
+      "status": "healthy"
+    },
+    "llm": {
+      "enabled": false,
+      "result": "skipped_disabled",
+      "status": "healthy"
+    },
+    "output_validation": {
+      "status": "healthy"
+    },
+    "project_audit": {
+      "status": "healthy"
+    },
+    "source_collection": {
+      "reachable_sources": 2,
+      "status": "healthy",
+      "total_sources": 2
+    }
+  },
+  "duration_seconds": 143.0,
+  "finished_at": "2026-07-15T20:45:02+08:00",
+  "generated_at": "2026-07-15T20:45:02+08:00",
+  "last_applied_run_id": "local-0d87ba964d55b826",
+  "last_applied_started_at": "2026-07-15T20:42:39+08:00",
+  "overall_health": "healthy",
+  "run_id": "local-0d87ba964d55b826",
+  "severity_safety_note": "告警等级只表示自动化系统中的人工复查优先级，不表示 Starlink、SpaceX 或相关事件的战略重要性、影响程度或安全等级。",
+  "stage": "4D",
+  "started_at": "2026-07-15T20:42:39+08:00",
+  "version": 1,
+  "warnings": []
+}

@@ -12,6 +12,12 @@ from urllib.parse import urlsplit
 
 from parsers.common import DETAIL_ERROR_TYPES
 from item_lifecycle import ALLOWED_EVENT_TYPES, ALLOWED_LIFECYCLE_STATES, ALLOWED_VERSION_KINDS
+from operational_health import (
+    ALERT_ACTIONS,
+    ALERT_SEVERITIES,
+    DEFAULT_MAX_ALERT_EVENTS,
+    DEFAULT_MAX_RUN_HEALTH_RECORDS,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +117,12 @@ def build_report(week_id: str) -> dict[str, Any]:
     item_versions_path = DATA_DIR / "item_versions.jsonl"
     lifecycle_events_path = DATA_DIR / "lifecycle_events.jsonl"
     lifecycle_report_path = DATA_DIR / "lifecycle_report.json"
+    replay_report_path = DATA_DIR / "lifecycle_replay_report.json"
+    alert_state_path = DATA_DIR / "alert_state.json"
+    alert_events_path = DATA_DIR / "alert_events.jsonl"
+    alert_report_path = DATA_DIR / "alert_report.json"
+    run_health_path = DATA_DIR / "run_health.json"
+    run_health_history_path = DATA_DIR / "run_health_history.jsonl"
 
     report: dict[str, Any] = {"week_id": week_id, "status": "unknown", "checks": {}, "errors": []}
 
@@ -595,6 +607,129 @@ def build_report(week_id: str) -> dict[str, Any]:
         "生命周期关键文件 run_id 不一致",
     )
 
+    valid_replay, replay_report, error = load_json_file(replay_report_path)
+    add_check(report, "lifecycle_replay_report_valid", valid_replay, error)
+    add_check(
+        report,
+        "lifecycle_replay_is_offline_and_safe",
+        valid_replay
+        and replay_report.get("stage") == "4D"
+        and replay_report.get("mode") == "synthetic_offline_replay"
+        and replay_report.get("fixture_domain") == "example.invalid"
+        and replay_report.get("network_accessed") is False
+        and replay_report.get("production_files_modified") is False
+        and int(replay_report.get("failed") or 0) == 0
+        and int(replay_report.get("passed") or 0) == int(replay_report.get("scenario_count") or -1),
+        "离线 replay 未全部通过或安全标记异常",
+    )
+
+    valid_alert_state, alert_state, error = load_json_file(alert_state_path)
+    add_check(report, "alert_state_valid", valid_alert_state, error)
+    open_conditions = alert_state.get("open_conditions", {}) if valid_alert_state else {}
+    open_conditions = open_conditions if isinstance(open_conditions, dict) else {}
+    add_check(
+        report,
+        "alert_bootstrap_watermark_valid",
+        valid_alert_state
+        and alert_state.get("bootstrap", {}).get("initialized") is True
+        and int(alert_state.get("bootstrap", {}).get("lifecycle_event_watermark_count") or 0) >= 6,
+        "告警 bootstrap 或历史事件 watermark 缺失",
+    )
+    add_check(
+        report,
+        "open_alert_keys_unique",
+        all(key == value.get("alert_key") for key, value in open_conditions.items() if isinstance(value, dict)),
+        "open condition alert_key 不一致",
+    )
+    valid_alert_events, alert_events, error = load_jsonl_records(alert_events_path)
+    add_check(report, "alert_events_valid", valid_alert_events, error)
+    alert_event_ids = [str(value.get("alert_event_id") or "") for value in alert_events]
+    add_check(
+        report,
+        "alert_event_ids_unique",
+        valid_alert_events and len(alert_event_ids) == len(set(alert_event_ids)) and all(alert_event_ids),
+        "alert_events.jsonl 存在重复或空 ID",
+    )
+    add_check(
+        report,
+        "alert_event_enums_valid",
+        valid_alert_events
+        and all(value.get("action") in ALERT_ACTIONS and value.get("severity") in ALERT_SEVERITIES for value in alert_events),
+        "告警 action 或 severity 非法",
+    )
+    notified_lifecycle_ids = [
+        str(value.get("lifecycle_event_id"))
+        for value in alert_events
+        if value.get("action") == "notify" and value.get("lifecycle_event_id")
+    ]
+    add_check(
+        report,
+        "event_notifications_unique",
+        len(notified_lifecycle_ids) == len(set(notified_lifecycle_ids)),
+        "同一生命周期事件被重复通知",
+    )
+    bootstrap_at = str(alert_state.get("bootstrap", {}).get("initialized_at") or "") if valid_alert_state else ""
+    historical_ids = {
+        str(value.get("event_id"))
+        for value in events
+        if bootstrap_at and str(value.get("occurred_at") or "") <= bootstrap_at
+    }
+    add_check(
+        report,
+        "alert_bootstrap_did_not_replay_history",
+        not (historical_ids & set(notified_lifecycle_ids)),
+        "Phase 4C 历史生命周期事件被重新通知",
+    )
+    add_check(
+        report,
+        "alert_events_retention_valid",
+        len(alert_events) <= DEFAULT_MAX_ALERT_EVENTS,
+        "alert_events.jsonl 超过默认上限",
+    )
+
+    valid_alert_report, alert_report, error = load_json_file(alert_report_path)
+    add_check(report, "alert_report_valid", valid_alert_report, error)
+    add_check(
+        report,
+        "alert_status_allowed",
+        valid_alert_report and alert_report.get("overall_alert_status") in {"normal", "attention", "high_attention", "critical"},
+        "overall_alert_status 非法",
+    )
+
+    valid_health, run_health, error = load_json_file(run_health_path)
+    add_check(report, "run_health_valid", valid_health, error)
+    add_check(
+        report,
+        "run_health_status_allowed",
+        valid_health and run_health.get("overall_health") in {"healthy", "degraded", "unhealthy"},
+        "overall_health 非法",
+    )
+    valid_health_history, health_history, error = load_jsonl_records(run_health_history_path)
+    add_check(report, "run_health_history_valid", valid_health_history, error)
+    health_run_ids = [str(value.get("run_id") or "") for value in health_history]
+    add_check(
+        report,
+        "run_health_run_ids_unique",
+        valid_health_history and len(health_run_ids) == len(set(health_run_ids)) and all(health_run_ids),
+        "run health history 存在重复或空 run_id",
+    )
+    add_check(
+        report,
+        "run_health_retention_valid",
+        len(health_history) <= DEFAULT_MAX_RUN_HEALTH_RECORDS,
+        "run_health_history.jsonl 超过默认上限",
+    )
+    operational_text = "".join(
+        read_text(path)
+        for path in (replay_report_path, alert_state_path, alert_events_path, alert_report_path, run_health_path, run_health_history_path)
+    ).lower()
+    add_check(
+        report,
+        "phase4d_outputs_no_full_html",
+        "<html" not in operational_text and "<!doctype html" not in operational_text,
+        "Phase 4D 输出疑似包含完整 HTML",
+    )
+
     summary_text = read_text(summary_path)
     add_check(report, "summary_has_core_conclusions", "本周核心结论" in summary_text, "summary 缺少“本周核心结论”")
     add_check(report, "summary_has_source_overview", "来源状态概览" in summary_text, "summary 缺少“来源状态概览”")
@@ -605,6 +740,13 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_input_dedup", "原始候选记录" in summary_text, "summary 缺少三层输入统计")
     add_check(report, "summary_has_structured_official_items", "## 结构化官方条目" in summary_text, "summary 缺少结构化官方条目")
     add_check(report, "summary_has_lifecycle_overview", "## 条目生命周期概览" in summary_text, "summary 缺少条目生命周期概览")
+    add_check(report, "summary_has_run_health_alerts", "## 运行健康与告警" in summary_text, "summary 缺少运行健康与告警")
+    add_check(
+        report,
+        "summary_has_alert_safety_note",
+        "人工复查优先级" in summary_text and "不表示 Starlink、SpaceX 或相关事件" in summary_text,
+        "summary 缺少告警等级安全解释",
+    )
     for heading in ["本轮新增条目", "本轮内容变化", "解析质量提升", "暂时消失与长期未见", "详情抓取失败与恢复", "历史版本"]:
         add_check(report, f"summary_has_lifecycle_{hashlib.sha256(heading.encode()).hexdigest()[:8]}", heading in summary_text, f"summary 缺少{heading}")
     baseline_total = sum(int(value.get("baseline_items") or 0) for value in extraction_sources.values() if isinstance(value, dict)) if isinstance(extraction_sources, dict) else 0
@@ -643,16 +785,27 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "details_has_lifecycle_state", "## 条目生命周期状态" in details_text, "details 缺少条目生命周期状态")
     add_check(report, "details_has_lifecycle_events", "## 本轮生命周期事件" in details_text, "details 缺少本轮生命周期事件")
     add_check(report, "details_has_version_history", "## 结构化版本历史" in details_text, "details 缺少结构化版本历史")
+    add_check(report, "details_has_operational_alerts", "## 运维告警明细" in details_text, "details 缺少运维告警明细")
+    add_check(report, "details_has_health_trends", "## 长期运行趋势" in details_text, "details 缺少长期运行趋势")
+    add_check(report, "details_has_replay_acceptance", "## 离线生命周期回放验收" in details_text, "details 缺少离线生命周期回放验收")
 
     llm_source = read_text(PROJECT_ROOT / "scripts" / "llm_summarize.py")
     for phrase in ["不一定表示官方本周发布", "不代表官方事实变化", "不代表官方删除", "不代表官方服务恢复", "不代表重新发布"]:
         add_check(report, f"llm_lifecycle_guardrail_{hashlib.sha256(phrase.encode()).hexdigest()[:8]}", phrase in llm_source, f"LLM 缺少生命周期约束：{phrase}")
+    for phrase in ["运维告警和运行健康", "不代表内容重要性", "不得写成官方服务中断", "分发链路问题"]:
+        add_check(report, f"llm_phase4d_guardrail_{hashlib.sha256(phrase.encode()).hexdigest()[:8]}", phrase in llm_source, f"LLM 缺少 Phase 4D 约束：{phrase}")
     email_source = read_text(PROJECT_ROOT / "scripts" / "send_email.py")
     add_check(
         report,
         "email_recovery_wording_safe",
         "采集链路恢复，不代表官方服务恢复" in email_source,
         "邮件模板未区分采集恢复与官方服务恢复",
+    )
+    add_check(
+        report,
+        "email_alert_severity_wording_safe",
+        "人工复查优先级" in email_source and "不表示 Starlink 或 SpaceX 事件的影响等级" in email_source,
+        "邮件模板缺少告警等级安全解释",
     )
 
     index_text = read_text(index_path)

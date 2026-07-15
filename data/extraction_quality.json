@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T09:56:06+00:00",
+  "generated_at": "2026-07-15T20:42:39+08:00",
   "parser_version": "official_item_extraction_v2",
   "sources": {
     "spacex_official_launches": {
@@ -18,7 +18,7 @@
       "http_status": 200,
       "item_level_count": 1,
       "items_collected": 1,
-      "last_checked_at": "2026-07-15T09:55:50+00:00",
+      "last_checked_at": "2026-07-15T20:42:16+08:00",
       "level_counts": {
         "item_level": 1
       },
@@ -57,7 +57,7 @@
       "http_status": 200,
       "item_level_count": 4,
       "items_collected": 4,
-      "last_checked_at": "2026-07-15T09:55:19+00:00",
+      "last_checked_at": "2026-07-15T20:41:25+08:00",
       "level_counts": {
         "item_level": 4
       },

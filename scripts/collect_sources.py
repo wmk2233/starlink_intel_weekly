@@ -73,7 +73,7 @@ ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json
 ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
 DETAIL_EXTRACTION_DIAGNOSTICS_FILE = PROJECT_ROOT / "data" / "detail_extraction_diagnostics.json"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
-USER_AGENT = "starlink-intel-weekly/phase4c (+official-source-monitoring)"
+USER_AGENT = "starlink-intel-weekly/phase4d (+official-source-monitoring)"
 COLLECTOR_NAME = "official_item_extraction_v2"
 PARSER_VERSION = COLLECTOR_NAME
 SUPPORTED_SOURCE_IDS = {"starlink_official_updates", "spacex_official_launches"}
@@ -176,6 +176,7 @@ class CollectResult:
     wrote_item_report: bool = False
     wrote_detail_diagnostics: bool = False
     wrote_lifecycle: bool = False
+    stale_run_ignored: bool = False
 
     @property
     def page_change_status(self) -> str:
@@ -2418,6 +2419,7 @@ def collect_all_sources(
     result.changed_count = int(lifecycle_totals.get("changed") or 0)
     result.unchanged_count = int(lifecycle_totals.get("unchanged") or 0)
     result.total_items = len(lifecycle_plan.updated_items)
+    result.stale_run_ignored = lifecycle_plan.ignored_as_stale
 
     if dry_run or lifecycle_dry_run:
         print(f"[dry-run] 本次解析 {len(all_items)} 条记录，不写入 {ITEMS_FILE}。")
@@ -2432,11 +2434,15 @@ def collect_all_sources(
         print(f"[dry-run] 不写入 {LIFECYCLE_REPORT_FILE}。")
         return result
 
+    if lifecycle_plan.ignored_as_stale:
+        print("warning: 检测到乱序旧运行，已拒绝覆盖生产采集与生命周期状态。")
+        return result
+
     write_lifecycle_transaction(lifecycle_plan)
     result.wrote_items = True
     result.wrote_lifecycle = True
     print(
-        f"阶段 4C 事务已完成：baseline 0 条，新增 {result.new_count} 条，"
+        f"阶段 4D 生命周期事务已完成：baseline 0 条，新增 {result.new_count} 条，"
         f"变化 {result.changed_count} 条，未变化 {result.unchanged_count} 条，"
         f"生命周期事件 {lifecycle_totals.get('lifecycle_events', 0)} 条。"
     )

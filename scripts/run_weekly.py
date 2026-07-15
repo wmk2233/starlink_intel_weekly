@@ -49,6 +49,22 @@ from item_lifecycle import (
     safe_positive_int,
 )
 from send_email import send_weekly_email
+from operational_health import (
+    ALERT_EVENTS_FILE,
+    ALERT_REPORT_FILE,
+    ALERT_STATE_FILE,
+    RUN_HEALTH_FILE,
+    RUN_HEALTH_HISTORY_FILE,
+    SEVERITY_SAFETY_NOTE,
+    build_run_health_data,
+    default_alert_state,
+    evaluate_alerts_data,
+    load_json as load_operational_json,
+    load_jsonl as load_operational_jsonl,
+    policy_from_env as operational_policy_from_env,
+    write_alert_evaluation,
+    write_health_evaluation,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +74,7 @@ KNOWLEDGE_BASE = DOCS_DIR / "starlink_knowledge_base.md"
 WEEKLY_ARCHIVE_INDEX = WEEKLY_DIR / "index.md"
 WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
 RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
+LIFECYCLE_REPLAY_REPORT_FILE = PROJECT_ROOT / "data" / "lifecycle_replay_report.json"
 DETAIL_HISTORY_HEADING = "## 9. 自动化测试记录"
 LEGACY_HISTORY_HEADINGS = [
     "## 9. 自动化测试记录",
@@ -125,6 +142,19 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "lifecycle_new_semantic_versions": "0",
         "lifecycle_new_extraction_revisions": "0",
         "lifecycle_event_count": "0",
+        "lifecycle_replay_report_path": "data/lifecycle_replay_report.json",
+        "alert_state_path": "data/alert_state.json",
+        "alert_events_path": "data/alert_events.jsonl",
+        "alert_report_path": "data/alert_report.json",
+        "run_health_path": "data/run_health.json",
+        "run_health_history_path": "data/run_health_history.jsonl",
+        "overall_health": "unknown",
+        "overall_alert_status": "unknown",
+        "new_alerts": "0",
+        "resolved_alerts": "0",
+        "open_warning_alerts": "0",
+        "open_high_alerts": "0",
+        "open_critical_alerts": "0",
         "item_extraction_overview": "暂无官方条目抽取结果。",
         "detail_extraction_overview": "暂无官方详情解析结果。",
         "detail_failure_overview": "本轮没有详情解析失败。",
@@ -1448,6 +1478,148 @@ def render_lifecycle_details(
 """
 
 
+def apply_operational_to_meta(
+    meta: dict[str, str], alert_report: dict[str, object], run_health: dict[str, object]
+) -> None:
+    totals = alert_report.get("totals", {}) if isinstance(alert_report, dict) else {}
+    totals = totals if isinstance(totals, dict) else {}
+    meta["overall_health"] = str(run_health.get("overall_health") or "unknown")
+    meta["overall_alert_status"] = str(alert_report.get("overall_alert_status") or "unknown")
+    meta["new_alerts"] = str(
+        int(totals.get("new_notifications") or 0)
+        + int(totals.get("opened") or 0)
+        + int(totals.get("escalated") or 0)
+    )
+    meta["resolved_alerts"] = str(totals.get("resolved") or 0)
+    meta["open_warning_alerts"] = str(totals.get("open_warning") or 0)
+    meta["open_high_alerts"] = str(totals.get("open_high") or 0)
+    meta["open_critical_alerts"] = str(totals.get("open_critical") or 0)
+
+
+def render_run_health_and_alerts(
+    run_health: dict[str, object], alert_report: dict[str, object]
+) -> str:
+    components = run_health.get("components", {}) if isinstance(run_health, dict) else {}
+    components = components if isinstance(components, dict) else {}
+    labels = {
+        "source_collection": "来源采集",
+        "candidate_discovery": "候选发现",
+        "detail_extraction": "详情解析",
+        "lifecycle": "生命周期处理",
+        "llm": "LLM",
+        "output_validation": "输出检查",
+        "project_audit": "项目审计",
+        "email": "邮件",
+        "gitee_sync": "Gitee 同步",
+    }
+    rows = ["| 指标 | 状态 |", "|---|---|", f"| 整体运行健康 | {escape_table_cell(run_health.get('overall_health', 'unknown'))} |"]
+    for key, label in labels.items():
+        component = components.get(key, {}) if isinstance(components.get(key), dict) else {}
+        status = component.get("status", "unknown")
+        if key == "llm" and component.get("enabled") is False:
+            status = "disabled"
+        rows.append(f"| {label} | {escape_table_cell(status)} |")
+    totals = alert_report.get("totals", {}) if isinstance(alert_report, dict) else {}
+    totals = totals if isinstance(totals, dict) else {}
+    summary = [
+        f"- Info：{totals.get('info', 0)}",
+        f"- Warning：{totals.get('warning', 0)}",
+        f"- High：{totals.get('high', 0)}",
+        f"- Critical：{totals.get('critical', 0)}",
+        f"- Open conditions：{totals.get('open_conditions', 0)}",
+        f"- Resolved：{totals.get('resolved', 0)}",
+    ]
+    meaningful = any(int(totals.get(key) or 0) for key in ("warning", "high", "critical", "open_conditions"))
+    note = "" if meaningful else "\n本轮未产生需要人工处理的运维告警。"
+    return "\n".join(rows) + "\n\n### 本轮告警摘要\n\n" + "\n".join(summary) + note + f"\n\n{SEVERITY_SAFETY_NOTE}"
+
+
+def render_alert_details(alert_report: dict[str, object]) -> str:
+    alerts = []
+    for key in ("alerts_this_run", "open_alerts"):
+        values = alert_report.get(key, []) if isinstance(alert_report, dict) else []
+        if isinstance(values, list):
+            alerts.extend(value for value in values if isinstance(value, dict))
+    rows = [
+        "| Alert Type | Kind | Severity | Action | Source | Record ID | Consecutive | First Opened | Last Observed | Status | Message |",
+        "|---|---|---|---|---|---|---:|---|---|---|---|",
+    ]
+    seen: set[tuple[str, str, str]] = set()
+    for alert in alerts[:40]:
+        identity = (str(alert.get("alert_key")), str(alert.get("action")), str(alert.get("status")))
+        if identity in seen:
+            continue
+        seen.add(identity)
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(alert.get("alert_type", "")),
+                    escape_table_cell(alert.get("alert_kind", "condition")),
+                    escape_table_cell(alert.get("severity", "unknown")),
+                    escape_table_cell(alert.get("action", "current")),
+                    escape_table_cell(alert.get("source_id", "")),
+                    escape_table_cell(alert.get("record_id", "")),
+                    str(alert.get("consecutive_observations") or 0),
+                    escape_table_cell(alert.get("first_opened_at", "")),
+                    escape_table_cell(alert.get("last_observed_at") or alert.get("occurred_at") or ""),
+                    escape_table_cell(alert.get("status", "event")),
+                    escape_table_cell(alert.get("message_code", "")),
+                ]
+            )
+            + " |"
+        )
+    if len(rows) == 2:
+        rows.append("| 无 |  | info |  |  |  | 0 |  |  | normal | 本轮无运维告警 |")
+    return "\n".join(rows) + f"\n\n{SEVERITY_SAFETY_NOTE}"
+
+
+def render_health_trends(history: list[dict[str, object]]) -> str:
+    rows = [
+        "| 运行时间 | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
+    ]
+    for record in history[-12:]:
+        total = int(record.get("total_sources") or 0)
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(record.get("generated_at", "")),
+                    escape_table_cell(record.get("overall_health", "unknown")),
+                    f"{record.get('reachable_sources', 0)}/{total}",
+                    display_metric(record.get("detail_success_rate")),
+                    str(record.get("new_items") or 0),
+                    str(record.get("changed_items") or 0),
+                    str(record.get("fetch_failed") or 0),
+                    str(record.get("open_warning") or 0),
+                    str(record.get("open_high") or 0),
+                    escape_table_cell(record.get("llm_status", "unknown")),
+                    escape_table_cell(record.get("email_status", "unknown")),
+                    escape_table_cell(record.get("gitee_status", "unknown")),
+                ]
+            )
+            + " |"
+        )
+    if len(rows) == 2:
+        rows.append("| 暂无 | unknown | 0/0 | unknown | 0 | 0 | 0 | 0 | 0 | unknown | unknown | unknown |")
+    return "\n".join(rows)
+
+
+def render_replay_acceptance(report: dict[str, object]) -> str:
+    if not report:
+        return "最近一次离线 replay 报告不存在。"
+    return "\n".join(
+        [
+            f"- 场景数量：{report.get('scenario_count', 'unknown')}",
+            f"- 通过数量：{report.get('passed', 'unknown')}",
+            f"- 失败数量：{report.get('failed', 'unknown')}",
+            f"- 网络访问：{report.get('network_accessed', 'unknown')}",
+            f"- 生产文件修改：{report.get('production_files_modified', 'unknown')}",
+        ]
+    )
+
+
 def build_weekly_summary_markdown(
     meta: dict[str, str],
     source_items: list[dict[str, object]],
@@ -1456,9 +1628,13 @@ def build_weekly_summary_markdown(
     llm_summary_data: dict[str, object],
     item_report: dict[str, object],
     lifecycle_report: dict[str, object] | None = None,
+    run_health: dict[str, object] | None = None,
+    alert_report: dict[str, object] | None = None,
 ) -> str:
     week_id = meta["iso_week"]
     lifecycle_report = lifecycle_report or {}
+    run_health = run_health or {}
+    alert_report = alert_report or {}
     return f"""# Starlink 情报周报总结版：{week_id}
 
 ## 1. 本周概览
@@ -1467,7 +1643,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4C：使用确定性规则管理条目新增、语义变化、解析提升、暂时消失、详情失败与恢复；这些采集状态不代表官方业务状态。
+当前阶段为阶段 4D：在确定性生命周期管理之上增加完全离线回放、运维告警和长期运行健康；这些采集及告警状态不代表官方业务状态或事件重要程度。
 
 ## 2. 本周核心结论
 
@@ -1491,6 +1667,10 @@ def build_weekly_summary_markdown(
 ## 条目生命周期概览
 
 {render_lifecycle_summary(lifecycle_report)}
+
+## 运行健康与告警
+
+{render_run_health_and_alerts(run_health, alert_report)}
 
 ## 3. 来源状态概览
 
@@ -1543,6 +1723,10 @@ def build_weekly_details_markdown(
     lifecycle_state: dict[str, object] | None = None,
     lifecycle_report: dict[str, object] | None = None,
     item_versions: list[dict[str, object]] | None = None,
+    run_health: dict[str, object] | None = None,
+    alert_report: dict[str, object] | None = None,
+    health_history: list[dict[str, object]] | None = None,
+    replay_report: dict[str, object] | None = None,
 ) -> str:
     error_note = ""
     if collection_errors:
@@ -1551,6 +1735,10 @@ def build_weekly_details_markdown(
     lifecycle_state = lifecycle_state or {}
     lifecycle_report = lifecycle_report or {}
     item_versions = item_versions or []
+    run_health = run_health or {}
+    alert_report = alert_report or {}
+    health_history = health_history or []
+    replay_report = replay_report or {}
     return f"""# Starlink 情报周报明细版：{week_id}
 
 ## 1. 文档说明
@@ -1571,6 +1759,12 @@ def build_weekly_details_markdown(
 | `data/item_versions.jsonl` | 限长的结构化语义与解析版本历史 |
 | `data/lifecycle_events.jsonl` | 限长、去重的生命周期事件历史 |
 | `data/lifecycle_report.json` | 本轮生命周期统计、事件与版本摘要 |
+| `data/lifecycle_replay_report.json` | 完全离线的 `.invalid` 虚构生命周期回放验收摘要 |
+| `data/alert_state.json` | 告警 watermark、open conditions、冷却和去重状态 |
+| `data/alert_events.jsonl` | 限长的告警 notify/open/update/escalate/resolve 历史 |
+| `data/alert_report.json` | 本轮告警摘要 |
+| `data/run_health.json` | 当前运行健康状态 |
+| `data/run_health_history.jsonl` | 限长、按 run ID 去重的长期趋势历史 |
 | `data/llm_audit.json` | 可选 LLM 摘要审计 |
 | `data/llm_summaries.json` | 可选 LLM 摘要输出 |
 | `data/llm_usage.jsonl` | 限长的 LLM 状态、token 与耗时记录 |
@@ -1610,6 +1804,18 @@ def build_weekly_details_markdown(
 {render_detail_failure_overview(item_report)}
 
 {render_lifecycle_details(lifecycle_state, lifecycle_report, item_versions)}
+
+## 运维告警明细
+
+{render_alert_details(alert_report)}
+
+## 长期运行趋势
+
+{render_health_trends(health_history)}
+
+## 离线生命周期回放验收
+
+{render_replay_acceptance(replay_report)}
 
 ## 8. 局限性
 
@@ -1709,13 +1915,17 @@ def write_weekly_outputs(
     lifecycle_state: dict[str, object],
     lifecycle_report: dict[str, object],
     item_versions: list[dict[str, object]],
+    run_health: dict[str, object],
+    alert_report: dict[str, object],
+    health_history: list[dict[str, object]],
+    replay_report: dict[str, object],
 ) -> None:
     history_records = load_existing_history([paths["details"], paths["index"]])
     history_records.append(meta)
     history_records = history_records[-max_records:]
 
     summary_content = build_weekly_summary_markdown(
-        meta, source_items, source_statuses, quality_sources, llm_summary_data, item_report, lifecycle_report
+        meta, source_items, source_statuses, quality_sources, llm_summary_data, item_report, lifecycle_report, run_health, alert_report
     )
     details_content = build_weekly_details_markdown(
         meta,
@@ -1730,6 +1940,10 @@ def write_weekly_outputs(
         lifecycle_state,
         lifecycle_report,
         item_versions,
+        run_health,
+        alert_report,
+        health_history,
+        replay_report,
     )
 
     if output_mode in {"dual", "both"}:
@@ -1827,6 +2041,19 @@ def summarize_current_week_outputs(
         "lifecycle_new_semantic_versions": int(meta.get("lifecycle_new_semantic_versions") or 0),
         "lifecycle_new_extraction_revisions": int(meta.get("lifecycle_new_extraction_revisions") or 0),
         "lifecycle_event_count": int(meta.get("lifecycle_event_count") or 0),
+        "lifecycle_replay_report_path": meta.get("lifecycle_replay_report_path"),
+        "alert_state_path": meta.get("alert_state_path"),
+        "alert_events_path": meta.get("alert_events_path"),
+        "alert_report_path": meta.get("alert_report_path"),
+        "run_health_path": meta.get("run_health_path"),
+        "run_health_history_path": meta.get("run_health_history_path"),
+        "overall_health": meta.get("overall_health", "unknown"),
+        "overall_alert_status": meta.get("overall_alert_status", "unknown"),
+        "new_alerts": int(meta.get("new_alerts") or 0),
+        "resolved_alerts": int(meta.get("resolved_alerts") or 0),
+        "open_warning_alerts": int(meta.get("open_warning_alerts") or 0),
+        "open_high_alerts": int(meta.get("open_high_alerts") or 0),
+        "open_critical_alerts": int(meta.get("open_critical_alerts") or 0),
         "summary_exists": paths["summary"].exists(),
         "details_exists": paths["details"].exists(),
         "index_exists": paths["index"].exists(),
@@ -2001,6 +2228,13 @@ def append_run_history(
         "lifecycle_new_semantic_versions": int(meta.get("lifecycle_new_semantic_versions") or 0),
         "lifecycle_new_extraction_revisions": int(meta.get("lifecycle_new_extraction_revisions") or 0),
         "lifecycle_event_count": int(meta.get("lifecycle_event_count") or 0),
+        "overall_health": meta.get("overall_health", "unknown"),
+        "overall_alert_status": meta.get("overall_alert_status", "unknown"),
+        "new_alerts": int(meta.get("new_alerts") or 0),
+        "resolved_alerts": int(meta.get("resolved_alerts") or 0),
+        "open_warning_alerts": int(meta.get("open_warning_alerts") or 0),
+        "open_high_alerts": int(meta.get("open_high_alerts") or 0),
+        "open_critical_alerts": int(meta.get("open_critical_alerts") or 0),
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
     records = load_run_history()
@@ -2524,6 +2758,10 @@ def main() -> int:
     lifecycle_state: dict[str, object] = {}
     lifecycle_report: dict[str, object] = {}
     item_versions: list[dict[str, object]] = []
+    alert_report: dict[str, object] = {}
+    run_health: dict[str, object] = {}
+    health_history: list[dict[str, object]] = []
+    replay_report: dict[str, object] = load_json_for_report(LIFECYCLE_REPLAY_REPORT_FILE)
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
@@ -2531,7 +2769,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4C 增量变化检测与条目生命周期管理。")
+    print("当前阶段：4D 生命周期回放、运维告警与长期运行健康。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -2616,6 +2854,65 @@ def main() -> int:
     if llm_return_code != 0 and args.fail_on_llm_error:
         return llm_return_code
 
+    operational_policy, operational_warnings = operational_policy_from_env()
+    for warning in operational_warnings:
+        print(f"warning: {warning}")
+    operational_run_id = str(lifecycle_report.get("run_id") or make_run_id(meta))
+    operational_started_at = str(lifecycle_report.get("generated_at") or meta["run_iso"])
+    lifecycle_event_history = load_operational_jsonl(LIFECYCLE_EVENTS_FILE)
+    if collection_result is not None and (args.dry_run or args.lifecycle_dry_run):
+        known_event_ids = {str(event.get("event_id")) for event in lifecycle_event_history}
+        lifecycle_event_history.extend(
+            event
+            for event in collection_result.lifecycle_events
+            if str(event.get("event_id")) not in known_event_ids
+        )
+    run_context = {
+        "run_id": operational_run_id,
+        "started_at": operational_started_at,
+        "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "email_status": "disabled" if args.no_email or args.dry_run else os.getenv("EMAIL_STATUS") or "unknown",
+        "gitee_status": os.getenv("GITEE_SYNC_STATUS") or "unknown",
+        "output_check_status": os.getenv("OUTPUT_CHECK_STATUS") or "unknown",
+        "project_audit_status": os.getenv("PROJECT_AUDIT_STATUS") or "unknown",
+        "state_integrity_status": "passed" if lifecycle_state and lifecycle_report else "failed",
+        "transaction_status": "passed",
+        "stable_id_status": "passed",
+    }
+    alert_evaluation = evaluate_alerts_data(
+        lifecycle_events=lifecycle_event_history,
+        lifecycle_state=lifecycle_state,
+        lifecycle_report=lifecycle_report,
+        source_status={"sources": source_statuses},
+        item_extraction_report=item_report,
+        llm_audit=llm_audit,
+        run_context=run_context,
+        previous_state=load_operational_json(ALERT_STATE_FILE, default_alert_state()),
+        existing_alert_events=load_operational_jsonl(ALERT_EVENTS_FILE),
+        health_history=load_operational_jsonl(RUN_HEALTH_HISTORY_FILE),
+        policy=operational_policy,
+    )
+    alert_report = alert_evaluation.report
+    if not args.dry_run and not args.lifecycle_dry_run:
+        write_alert_evaluation(alert_evaluation)
+    health_evaluation = build_run_health_data(
+        source_status={"sources": source_statuses},
+        item_extraction_report=item_report,
+        lifecycle_report=lifecycle_report,
+        llm_audit=llm_audit,
+        alert_report=alert_report,
+        run_context=run_context,
+        previous_history=load_operational_jsonl(RUN_HEALTH_HISTORY_FILE),
+        policy=operational_policy,
+    )
+    run_health = health_evaluation.health
+    health_history = health_evaluation.history
+    if not args.dry_run and not args.lifecycle_dry_run:
+        write_health_evaluation(health_evaluation)
+    apply_operational_to_meta(meta, alert_report, run_health)
+    print(f"整体运行健康：{meta['overall_health']}")
+    print(f"整体告警状态：{meta['overall_alert_status']}")
+
     write_weekly_outputs(
         paths=paths,
         meta=meta,
@@ -2633,6 +2930,10 @@ def main() -> int:
         lifecycle_state=lifecycle_state,
         lifecycle_report=lifecycle_report,
         item_versions=item_versions,
+        run_health=run_health,
+        alert_report=alert_report,
+        health_history=health_history,
+        replay_report=replay_report,
     )
     manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
     update_weekly_archive_index(manifest, args.dry_run)
@@ -2650,6 +2951,8 @@ def main() -> int:
     print(f"LLM 用量记录：{meta['llm_usage_path']}")
     print(f"生命周期状态：{meta['item_lifecycle_state_path']}")
     print(f"生命周期报告：{meta['lifecycle_report_path']}")
+    print(f"告警报告：{meta['alert_report_path']}")
+    print(f"运行健康：{meta['run_health_path']}")
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
@@ -2660,8 +2963,12 @@ def main() -> int:
         return 0
 
     print("开始发送邮件。")
+    health_components = run_health.get("components", {}) if isinstance(run_health, dict) else {}
+    health_components = health_components if isinstance(health_components, dict) else {}
+    alert_totals = alert_report.get("totals", {}) if isinstance(alert_report, dict) else {}
+    alert_totals = alert_totals if isinstance(alert_totals, dict) else {}
     collection_context = {
-        "stage": "4C",
+        "stage": "4D",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -2690,6 +2997,23 @@ def main() -> int:
         "lifecycle_recovered": meta["lifecycle_recovered"],
         "lifecycle_reappeared": meta["lifecycle_reappeared"],
         "lifecycle_attention_items": meta["lifecycle_attention_items"],
+        "overall_health": meta["overall_health"],
+        "overall_alert_status": meta["overall_alert_status"],
+        "health_source_collection": str((health_components.get("source_collection") or {}).get("status", "unknown")),
+        "health_detail_extraction": str((health_components.get("detail_extraction") or {}).get("status", "unknown")),
+        "health_lifecycle": str((health_components.get("lifecycle") or {}).get("status", "unknown")),
+        "health_llm": str((health_components.get("llm") or {}).get("status", "unknown")),
+        "health_output_validation": str((health_components.get("output_validation") or {}).get("status", "unknown")),
+        "health_project_audit": str((health_components.get("project_audit") or {}).get("status", "unknown")),
+        "health_email": str((health_components.get("email") or {}).get("status", "unknown")),
+        "health_gitee_sync": str((health_components.get("gitee_sync") or {}).get("status", "unknown")),
+        "alert_info": str(alert_totals.get("info") or 0),
+        "alert_warning": str(alert_totals.get("warning") or 0),
+        "alert_high": str(alert_totals.get("high") or 0),
+        "alert_critical": str(alert_totals.get("critical") or 0),
+        "alert_open_conditions": str(alert_totals.get("open_conditions") or 0),
+        "resolved_alerts": str(alert_totals.get("resolved") or 0),
+        "alert_empty_note": "本轮未产生需要人工处理的运维告警。" if not any(int(alert_totals.get(key) or 0) for key in ("warning", "high", "critical", "open_conditions")) else "",
         "summary_file": paths["summary"].name,
         "details_file": paths["details"].name,
         "index_file": paths["index"].name,
