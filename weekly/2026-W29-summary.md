@@ -156,10 +156,10 @@ LLM Provider：deepseek
 | 详情解析 | healthy |
 | 生命周期处理 | healthy |
 | LLM | disabled |
-| 输出检查 | healthy |
-| 项目审计 | healthy |
-| 邮件 | healthy |
-| Gitee 同步 | healthy |
+| 输出检查 | unknown |
+| 项目审计 | unknown |
+| 邮件 | unknown |
+| Gitee 同步 | unknown |
 
 ### 本轮告警摘要
 
@@ -177,8 +177,8 @@ LLM Provider：deepseek
 
 | 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 | 主导解析层级 | 主导质量 |
 |---|---|---|---:|---:|---:|---|---|
-| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | item_level | medium |
 | Starlink Official Updates | reachable | changed | 0 | 0 | 4 | item_level | medium |
+| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | item_level | medium |
 
 ## 4. 本周值得关注的信息
 
@@ -188,16 +188,16 @@ LLM Provider：deepseek
 
 ### 4.2 页面级变化说明
 
-- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 - Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
+- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 页面变化状态与条目变化状态是两个检测层级，不能相互替代。
 
 ## 5. 解析质量概览
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |
 |---|---|---|---:|---:|---:|---:|
-| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 | Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
+| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 
 说明：解析质量只表示规则化抽取完整度，不表示事实重要性或事实可信度。
 
@@ -215,11 +215,11 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 20:45:02 中国标准时间+0800
+- 运行时间：2026-07-15 12:56:20 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：否
-- 是否执行真实来源采集：否
+- 是否发送邮件：是
+- 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0

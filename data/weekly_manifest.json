@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T20:45:02+08:00",
+  "generated_at": "2026-07-15T12:57:08+00:00",
   "weeks": {
     "2026-W25": {
       "changed_items": 0,
@@ -94,7 +94,7 @@
       "details_path": "weekly/2026-W29-details.md",
       "dominant_extracted_level": "item_level",
       "dominant_quality": "medium",
-      "generated_at": "2026-07-15T20:45:02+08:00",
+      "generated_at": "2026-07-15T12:56:20+00:00",
       "index_exists": true,
       "index_path": "weekly/2026-W29.md",
       "item_lifecycle_state_path": "data/item_lifecycle_state.json",

@@ -80,48 +80,26 @@
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T20:42:16+08:00 | afd623b148154a55 |
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T20:41:25+08:00 | af3930b8728267ea |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T12:56:20+00:00 | 4e2afb8f21e86000 |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T12:56:52+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
+| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T12:56:20+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
-| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T20:41:25+08:00 |
 
 ## 5. 解析质量诊断
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 页面级 | 链接级 | 条目级 | 静态候选 | 渲染候选 | 候选总数 | 解析器版本 |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 0 | 1 | 0 | 1 | 1 | spacex_launches_item_v2 |
 | Starlink Official Updates | item_level | medium | 0.8 | 0 | 0 | 4 | 0 | 4 | 4 | starlink_updates_item_v2 |
+| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 0 | 1 | 0 | 1 | 1 | spacex_launches_item_v2 |
 
 ## 6. 采集条目明细
 
-### 6.1 SpaceX Official Launches
-
-| 字段 | 内容 |
-|---|---|
-| id | c6060f6415f8c377 |
-| title | SDA’s Third Tranche 1 Mission |
-| url | https://www.spacex.com/launches/sda-t1tl-e |
-| source_id | spacex_official_launches |
-| category | spacex_launch |
-| change_status | unchanged |
-| extracted_level | item_level |
-| source_quality | medium |
-| extraction_confidence | 0.8 |
-| content_hash | 59cceb914691430c |
-| previous_content_hash | 59cceb914691430c |
-| first_seen_at | 2026-07-15T15:31:12+08:00 |
-| last_seen_at | 2026-07-15T20:42:16+08:00 |
-| last_changed_at | 2026-07-15T15:31:12+08:00 |
-| matched_keywords | [] |
-| candidate_links | [] |
-| extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
-
-### 6.2 Starlink Official Updates
+### 6.1 Starlink Official Updates
 
 | 字段 | 内容 |
 |---|---|
@@ -137,7 +115,27 @@
 | content_hash | a4a8dfdee687fbe2 |
 | previous_content_hash | a4a8dfdee687fbe2 |
 | first_seen_at | 2026-07-14T14:54:30+08:00 |
-| last_seen_at | 2026-07-15T20:41:25+08:00 |
+| last_seen_at | 2026-07-15T12:56:20+00:00 |
+| last_changed_at | 2026-07-15T15:30:05+08:00 |
+| matched_keywords | ["starlink"] |
+| candidate_links | [] |
+| extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
+
+| 字段 | 内容 |
+|---|---|
+| id | 044bafcf1089533d |
+| title | Space Safety Web Interface |
+| url | https://starlink.com/updates/space-safety-web-interface |
+| source_id | starlink_official_updates |
+| category | starlink_update |
+| change_status | unchanged |
+| extracted_level | item_level |
+| source_quality | medium |
+| extraction_confidence | 0.8 |
+| content_hash | 782864df0d71359e |
+| previous_content_hash | 782864df0d71359e |
+| first_seen_at | 2026-07-15T15:30:05+08:00 |
+| last_seen_at | 2026-07-15T12:56:20+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -157,7 +155,7 @@
 | content_hash | bbda025dc135eb82 |
 | previous_content_hash | bbda025dc135eb82 |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T20:41:25+08:00 |
+| last_seen_at | 2026-07-15T12:56:20+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -177,47 +175,49 @@
 | content_hash | a73aef78a8f128de |
 | previous_content_hash | a73aef78a8f128de |
 | first_seen_at | 2026-07-15T15:34:13+08:00 |
-| last_seen_at | 2026-07-15T20:41:25+08:00 |
+| last_seen_at | 2026-07-15T12:56:20+00:00 |
 | last_changed_at | 2026-07-15T15:34:13+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
 | extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
 
+### 6.2 SpaceX Official Launches
+
 | 字段 | 内容 |
 |---|---|
-| id | 044bafcf1089533d |
-| title | Space Safety Web Interface |
-| url | https://starlink.com/updates/space-safety-web-interface |
-| source_id | starlink_official_updates |
-| category | starlink_update |
+| id | c6060f6415f8c377 |
+| title | SDA’s Third Tranche 1 Mission |
+| url | https://www.spacex.com/launches/sda-t1tl-e |
+| source_id | spacex_official_launches |
+| category | spacex_launch |
 | change_status | unchanged |
 | extracted_level | item_level |
 | source_quality | medium |
 | extraction_confidence | 0.8 |
-| content_hash | 782864df0d71359e |
-| previous_content_hash | 782864df0d71359e |
-| first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T20:41:25+08:00 |
-| last_changed_at | 2026-07-15T15:30:05+08:00 |
-| matched_keywords | ["starlink"] |
+| content_hash | 59cceb914691430c |
+| previous_content_hash | 59cceb914691430c |
+| first_seen_at | 2026-07-15T15:31:12+08:00 |
+| last_seen_at | 2026-07-15T12:56:52+00:00 |
+| last_changed_at | 2026-07-15T15:31:12+08:00 |
+| matched_keywords | [] |
 | candidate_links | [] |
 | extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
 
 ## 7. 原始摘要与证据片段
 
-### 7.1 SDA’s Third Tranche 1 Mission
-
-- 来源：SpaceX Official Launches
-- 链接：[链接](https://www.spacex.com/launches/sda-t1tl-e)
-- summary：SpaceX designs, manufactures and launches advanced rockets and spacecraft. The company was founded in 2002 to revolutionize space technology, with the ultimate goal of enabling people to live on other planets.
-- evidence：SpaceX is targeting Thursday, July 16 at 1:32 p.m. PT for a Falcon 9 launch of the Space Development Agency’s (SDA) third Tranche 1 data transport mission to low-Earth orbit from Space Launch Complex 4 East (SLC-4E) at Vandenberg Space Force Base in California. If needed, a backup opportunity is available on Friday, July 17 at 1:24 p.m. PT. This is the third of nine Tranche 1 missions Falcon 9 will launch on behalf of the SDA.
-
-### 7.2 Stargaze: SpaceX’s Space Situational Awareness System
+### 7.1 Stargaze: SpaceX’s Space Situational Awareness System
 
 - 来源：Starlink Official Updates
 - 链接：[链接](https://starlink.com/updates/stargaze)
 - summary：Stargaze: SpaceX’s Space Situational Awareness System that enhances the safety and sustainability of satellite operations in low Earth orbit.
 - evidence：SpaceX has developed a novel Space Situational Awareness (SSA) system, called Stargaze
+
+### 7.2 Space Safety Web Interface
+
+- 来源：Starlink Official Updates
+- 链接：[链接](https://starlink.com/updates/space-safety-web-interface)
+- summary：A new web-based tool that simplifies satellite conjunction screening and ephemeris sharing for operators.
+- evidence：To ensure safe spaceflight for everyone, all satellite operators should track their spacecraft with onboard GNSS, accurately predict their future trajectories, and broadcast that information to other satellite operators. Starlink currently publishes its ephemeris to multiple conjunction screening platforms and makes them available on our public website . For the past two years, Starlink has provided free, low-latency conjunction screening to participating satellite operators via our Space Traff…
 
 ### 7.3 Starlink Beam Switching
 
@@ -233,12 +233,12 @@
 - summary：Latest updates on Starlink network speeds, latency, resilience, scalability, and capacity.
 - evidence：Over the past year, Starlink has expanded to 42 new countries, territories and other markets around the world while growing by 2.7 million+ active customers globally and serving more than 6 million and counting with high-speed, low-latency internet. During that time, the SpaceX team has also launched more than 100 Starlink missions, adding 2,300+ satellites to the constellation, and invested heavily in our ground infrastructure, network backbone, and internal technologies and systems. As a resu…
 
-### 7.5 Space Safety Web Interface
+### 7.5 SDA’s Third Tranche 1 Mission
 
-- 来源：Starlink Official Updates
-- 链接：[链接](https://starlink.com/updates/space-safety-web-interface)
-- summary：A new web-based tool that simplifies satellite conjunction screening and ephemeris sharing for operators.
-- evidence：To ensure safe spaceflight for everyone, all satellite operators should track their spacecraft with onboard GNSS, accurately predict their future trajectories, and broadcast that information to other satellite operators. Starlink currently publishes its ephemeris to multiple conjunction screening platforms and makes them available on our public website . For the past two years, Starlink has provided free, low-latency conjunction screening to participating satellite operators via our Space Traff…
+- 来源：SpaceX Official Launches
+- 链接：[链接](https://www.spacex.com/launches/sda-t1tl-e)
+- summary：SpaceX designs, manufactures and launches advanced rockets and spacecraft. The company was founded in 2002 to revolutionize space technology, with the ultimate goal of enabling people to live on other planets.
+- evidence：SpaceX is targeting Thursday, July 16 at 1:32 p.m. PT for a Falcon 9 launch of the Space Development Agency’s (SDA) third Tranche 1 data transport mission to low-Earth orbit from Space Launch Complex 4 East (SLC-4E) at Vandenberg Space Force Base in California. If needed, a backup opportunity is available on Friday, July 17 at 1:24 p.m. PT. This is the third of nine Tranche 1 missions Falcon 9 will launch on behalf of the SDA.
 
 ## 官方条目解析诊断
 
@@ -249,11 +249,11 @@
 
 | 状态 | 来源 | 标题 | 日期文本 | 相关性 | 层级 | 质量 | 字段证据 | 官方链接 |
 |---|---|---|---|---|---|---|---|---|
-| unchanged | SpaceX Official Launches | SDA’s Third Tranche 1 Mission | 未知 | incidental | item_level | medium/0.8 | evidence, mission_status, summary, title | [链接](https://www.spacex.com/launches/sda-t1tl-e) |
 | unchanged | Starlink Official Updates | Stargaze: SpaceX’s Space Situational Awareness System | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/stargaze) |
+| unchanged | Starlink Official Updates | Space Safety Web Interface | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/space-safety-web-interface) |
 | unchanged | Starlink Official Updates | Starlink Beam Switching | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/starlink-beam-switching) |
 | unchanged | Starlink Official Updates | Starlink Network Update | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/network-update) |
-| unchanged | Starlink Official Updates | Space Safety Web Interface | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/space-safety-web-interface) |
+| unchanged | SpaceX Official Launches | SDA’s Third Tranche 1 Mission | 未知 | incidental | item_level | medium/0.8 | evidence, mission_status, summary, title | [链接](https://www.spacex.com/launches/sda-t1tl-e) |
 
 ## 官方详情页解析诊断
 
@@ -310,6 +310,7 @@
 | 运行时间 | Overall health | 来源可达 | 详情成功率 | 新条目 | 变化条目 | 失败条目 | Open warning | Open high | LLM 状态 | 邮件状态 | Gitee 状态 |
 |---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | 2026-07-15T20:45:02+08:00 | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | disabled | skipped |
+| 2026-07-15T12:57:08+00:00 | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | unknown | unknown |
 
 ## 离线生命周期回放验收
 
@@ -330,16 +331,6 @@
 
 ## 9. 自动化测试记录
 
-- 运行时间：2026-07-14 13:17:17 中国标准时间+0800
-  - ISO 周编号：2026-W29
-  - 执行环境：Windows 10
-  - Python 版本：3.11.9
-  - 输出模式：dual
-  - 是否发送邮件：否
-  - 是否执行真实来源采集：否
-  - 是否生成解析质量诊断：是
-  - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
-  - 已接入来源数量：2
 - 运行时间：2026-07-14 05:59:08 UTC+0000
   - ISO 周编号：2026-W29
   - 执行环境：Linux 6.17.0-1018-azure
@@ -529,4 +520,14 @@
   - 是否执行真实来源采集：否
   - 是否生成解析质量诊断：是
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 12:56:20 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
   - 已接入来源数量：2

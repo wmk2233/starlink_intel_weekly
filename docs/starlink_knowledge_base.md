@@ -33,15 +33,15 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| SpaceX Official Launches | 2026-07-15T20:42:16+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
-| Starlink Official Updates | 2026-07-15T20:41:25+08:00 | reachable | changed | 2026-07-15T20:41:25+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-15T12:56:20+00:00 | reachable | changed | 2026-07-15T12:56:20+00:00 | 正常 |
+| SpaceX Official Launches | 2026-07-15T12:56:52+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |
 |---|---|---|---:|---:|---:|---:|
-| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 | Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
+| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 
 ## 周报输出结构
 
@@ -136,13 +136,13 @@
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-15 20:45:02 中国标准时间+0800
+- 运行时间：2026-07-15 12:56:20 UTC+0000
 - ISO 周编号：2026-W29
-- 执行环境：Windows 10
-- Python 版本：3.11.9
+- 执行环境：Linux 6.17.0-1018-azure
+- Python 版本：3.11.15
 - 输出模式：dual
-- 是否发送邮件：否
-- 是否执行真实来源采集：否
+- 是否发送邮件：是
+- 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W29-summary.md
 - 明细版文档：weekly/2026-W29-details.md
@@ -150,11 +150,11 @@
 - 周报总索引：weekly/index.md
 - 周报 manifest：data/weekly_manifest.json
 - 运行历史：data/run_history.jsonl
-- 本次采集来源名称：SpaceX Official Launches、Starlink Official Updates
+- 本次采集来源名称：Starlink Official Updates、SpaceX Official Launches
 - 本次采集条目数量：5
 - 已接入来源数量：2
-- 来源可达性概览：SpaceX Official Launches=reachable；Starlink Official Updates=reachable
-- 页面变化状态概览：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
+- 来源可达性概览：Starlink Official Updates=reachable；SpaceX Official Launches=reachable
+- 页面变化状态概览：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
 - 新增条目数：0
 - 内容变化条目数：0
 - 未变化条目数：5
