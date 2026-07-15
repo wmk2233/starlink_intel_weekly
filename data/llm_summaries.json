@@ -1,67 +1,57 @@
 {
+  "allowed_reference_pairs": [
+    {
+      "canonical_url": "https://starlink.com/updates/network-update",
+      "record_id": "d3b89bb9510b1b9a"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
+      "record_id": "495a49c7d5c93cbc"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
+      "record_id": "044bafcf1089533d"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/stargaze",
+      "record_id": "95bbf31b3a93d3e6"
+    }
+  ],
   "base_url_label": "deepseek_default",
-  "generated_at": "2026-07-15T06:21:58+00:00",
-  "input_records": 2,
-  "input_records_after_dedup": 3,
-  "input_records_before_dedup": 5,
+  "final_core_input_records": 4,
+  "final_core_unique_urls": 4,
+  "generated_at": "2026-07-15T08:29:10+00:00",
+  "input_records": 4,
+  "input_records_after_dedup": 7,
+  "input_records_before_dedup": 9,
   "llm_enabled": true,
   "llm_provider": "deepseek",
   "llm_status": "generated",
   "model": "deepseek-v4-flash",
+  "raw_candidate_records": 9,
+  "records_after_url_dedup": 7,
+  "reused_historical_records": 0,
   "summary": {
     "key_points": [
       {
-        "caveat": "本周 Starlink 官方更新来源页面 hash 发生变化，但规则未检测到新增或内容变化条目；现有条目（Stargaze）为历史基线，并非本周新增。",
-        "point": "本周未检测到新增或内容变化条目。",
+        "caveat": "以下信息来自历史基线记录，并非本周新确认内容。",
+        "point": "本周未检测到新增或内容变化条目。已有条目涵盖网络速度与覆盖更新、波束切换技术、空间安全网络界面以及 Stargaze 空间态势感知系统。",
         "source_record_ids": [
-          "95bbf31b3a93d3e6",
-          "85aab698bd64b7d5"
-        ],
-        "source_urls": [
-          "https://starlink.com/updates/stargaze",
-          "https://www.spacex.com/launches"
-        ]
-      }
-    ],
-    "llm_summary_version": "llm_source_guarded_v1",
-    "not_generated_claims": [
-      "未生成发射时间",
-      "未生成任务状态",
-      "未生成载荷数量",
-      "未生成未在来源中出现的技术判断"
-    ],
-    "overall_summary_cn": "本周（2026-W29）监测周期内，两个官方来源均未检测到与 Starlink 直接相关的新增条目或内容变化。Starlink 官方 Updates 页面哈希发生变化，但规则未识别出可确认的新事件；现有条目 Stargaze 属于历史基线。SpaceX 官方 Launches 页面状态无变化，且来源质量为 low，未产生具体事件记录。",
-    "risk_warnings": [
-      "SpaceX Official Launches 来源仅记录页面级监测结果，不得据此推断发射时间、任务状态或载荷细节。",
-      "Starlink 的 Stargaze 条目为历史基线（2026-05-21），并非本周新增，避免误读为本周事件。",
-      "页面级哈希变化不代表存在可确认的新事件，仅说明页面内容可能出现细微调整。"
-    ],
-    "source_based_notes": [
-      {
-        "extracted_level": "item_level",
-        "note": "页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。现有条目（Stargaze）为历史基线，并非本周新增。",
-        "source_name": "Starlink Official Updates",
-        "source_quality": "high",
-        "source_record_ids": [
+          "d3b89bb9510b1b9a",
+          "495a49c7d5c93cbc",
+          "044bafcf1089533d",
           "95bbf31b3a93d3e6"
         ],
         "source_urls": [
+          "https://starlink.com/updates/network-update",
+          "https://starlink.com/updates/starlink-beam-switching",
+          "https://starlink.com/updates/space-safety-web-interface",
           "https://starlink.com/updates/stargaze"
         ]
-      },
-      {
-        "extracted_level": "page_level",
-        "note": "页面可达，hash 未变化，来源质量为 low。当前规则未识别到稳定独立条目，不得扩展为具体发射事件。",
-        "source_name": "SpaceX Official Launches",
-        "source_quality": "low",
-        "source_record_ids": [
-          "85aab698bd64b7d5"
-        ],
-        "source_urls": [
-          "https://www.spacex.com/launches"
-        ]
       }
-    ]
+    ],
+    "llm_summary_version": "llm_reference_aligned_v2",
+    "overall_summary": "本周未检测到新增或内容变化条目。所有 Starlink 官方更新条目均为历史基线记录，本周内容未发生变化。"
   },
-  "unique_source_urls": 3
+  "unique_source_urls": 7
 }

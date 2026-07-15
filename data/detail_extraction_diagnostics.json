@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T07:55:17+00:00",
+  "generated_at": "2026-07-15T08:28:59+00:00",
   "render_mode": "auto",
   "sources": {
     "spacex_official_launches": {
@@ -7,7 +7,7 @@
       "details": [
         {
           "canonical_url": "https://www.spacex.com/launches/sda-t1tl-e",
-          "checked_at": "2026-07-15T07:55:01+00:00",
+          "checked_at": "2026-07-15T08:28:43+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -55,7 +55,7 @@
       "details": [
         {
           "canonical_url": "https://starlink.com/updates/stargaze",
-          "checked_at": "2026-07-15T07:54:27+00:00",
+          "checked_at": "2026-07-15T08:28:11+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -65,7 +65,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 169425,
+            "dom_length": 169429,
             "evidence_length": 86,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -88,7 +88,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
-          "checked_at": "2026-07-15T07:54:27+00:00",
+          "checked_at": "2026-07-15T08:28:11+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -121,7 +121,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
-          "checked_at": "2026-07-15T07:54:27+00:00",
+          "checked_at": "2026-07-15T08:28:11+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -154,7 +154,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/network-update",
-          "checked_at": "2026-07-15T07:54:27+00:00",
+          "checked_at": "2026-07-15T08:28:11+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -164,7 +164,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 173702,
+            "dom_length": 173706,
             "evidence_length": 1141,
             "final_host": "starlink.com",
             "navigation_status": "success",
