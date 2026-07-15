@@ -1,13 +1,17 @@
 {
-  "api_called": false,
+  "api_called": true,
   "base_url_label": "deepseek_default",
   "dedup_strategy": "source_id+normalized_url_latest_record",
   "duplicate_records_removed": 2,
-  "error_type": null,
-  "errors": [],
+  "error_type": "validation_failed",
+  "errors": [
+    "source_based_notes[1] 缺少来源记录或 URL。",
+    "source_based_notes[1] 出现输入外 URL。",
+    "LLM 输出包含输入记录之外的 URL。"
+  ],
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T07:50:44+00:00",
+  "generated_at": "2026-07-15T07:55:26+00:00",
   "guardrails": {
     "no_external_knowledge": true,
     "no_unsourced_claims": true,
@@ -17,9 +21,9 @@
   "input_records": 4,
   "input_records_after_dedup": 7,
   "input_records_before_dedup": 9,
-  "llm_enabled": false,
+  "llm_enabled": true,
   "llm_provider": "deepseek",
-  "llm_status": "skipped",
+  "llm_status": "validation_failed",
   "model": "deepseek-v4-flash",
   "monitoring_context": [
     {
@@ -49,22 +53,22 @@
       "unchanged_items": 4
     }
   ],
-  "output_record_references_after_dedup": 0,
-  "output_record_references_before_dedup": 0,
-  "output_url_references_after_dedup": 0,
-  "output_url_references_before_dedup": 0,
+  "output_record_references_after_dedup": 4,
+  "output_record_references_before_dedup": 4,
+  "output_url_references_after_dedup": 5,
+  "output_url_references_before_dedup": 5,
   "raw_candidate_records": 9,
-  "reason": "LLM is disabled.",
+  "reason": "LLM output failed source-guardrail validation.",
   "records_after_url_dedup": 7,
   "reused_historical_records": 0,
   "summary_generated": false,
   "unique_source_urls": 7,
   "usage": {
-    "completion_tokens": null,
-    "latency_ms": null,
-    "prompt_tokens": null,
-    "total_tokens": null
+    "completion_tokens": 883,
+    "latency_ms": 8623.08,
+    "prompt_tokens": 6909,
+    "total_tokens": 7792
   },
-  "validation_status": "skipped",
+  "validation_status": "failed",
   "warnings": []
 }

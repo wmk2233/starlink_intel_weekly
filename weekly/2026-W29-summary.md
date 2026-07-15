@@ -25,10 +25,10 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：skipped
+状态：validation_failed
 
 说明：
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
 - 未配置当前 provider 对应的 API Key 时会自动跳过；
 - 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
@@ -46,8 +46,8 @@ LLM Provider：deepseek
 | 复用历史记录 | 0 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 7 |
-| 输出 record ID 引用（前 / 后） | 0 / 0 |
-| 输出 URL 引用（前 / 后） | 0 / 0 |
+| 输出 record ID 引用（前 / 后） | 4 / 4 |
+| 输出 URL 引用（前 / 后） | 5 / 5 |
 
 ### 页面级监测解释
 
@@ -58,12 +58,12 @@ LLM Provider：deepseek
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | unknown |
-| Completion tokens | unknown |
-| Total tokens | unknown |
-| API 调用耗时 | unknown ms |
+| Prompt tokens | 6909 |
+| Completion tokens | 883 |
+| Total tokens | 7792 |
+| API 调用耗时 | 8623.08 ms |
 
-跳过原因：LLM is disabled.
+跳过原因：LLM output failed source-guardrail validation.
 
 当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
 
@@ -132,7 +132,7 @@ LLM Provider：deepseek
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 
 ## 7. 本周文档
 
@@ -141,7 +141,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 07:49:56 UTC+0000
+- 运行时间：2026-07-15 07:54:27 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 是否发送邮件：是
@@ -152,4 +152,4 @@ LLM Provider：deepseek
 - 内容变化条目数：0
 - 未变化条目数：5
 - LLM Provider：deepseek
-- LLM 摘要状态：skipped
+- LLM 摘要状态：validation_failed
