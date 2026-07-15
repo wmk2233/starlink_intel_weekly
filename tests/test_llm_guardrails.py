@@ -32,7 +32,7 @@ def source_record() -> dict[str, object]:
 def valid_summary() -> dict[str, object]:
     return {
         "llm_summary_version": SUMMARY_VERSION,
-        "overall_summary_cn": "本周未检测到新增或内容变化条目。",
+        "overall_summary": "本周未检测到新增或内容变化条目。",
         "key_points": [
             {
                 "point": "本周未检测到新增或内容变化条目。",
@@ -41,18 +41,6 @@ def valid_summary() -> dict[str, object]:
                 "caveat": "页面级记录。",
             }
         ],
-        "source_based_notes": [
-            {
-                "source_name": "Official Source",
-                "note": "本周未检测到新增或内容变化条目。",
-                "source_record_ids": ["record-1"],
-                "source_urls": ["https://example.com/source"],
-                "extracted_level": "page_level",
-                "source_quality": "low",
-            }
-        ],
-        "risk_warnings": [],
-        "not_generated_claims": [],
     }
 
 
@@ -80,14 +68,14 @@ class LlmGuardrailTests(unittest.TestCase):
 
     def test_page_level_launch_success_is_rejected(self) -> None:
         summary = valid_summary()
-        summary["overall_summary_cn"] = "本周未检测到新增或内容变化条目，但发射成功。"
+        summary["overall_summary"] = "本周未检测到新增或内容变化条目，但发射成功。"
         valid, _summary, errors, _warnings = validate_llm_output(json.dumps(summary), [source_record()])
         self.assertFalse(valid)
         self.assertTrue(any("发射成功" in error for error in errors))
 
     def test_page_level_technical_upgrade_is_rejected(self) -> None:
         summary = valid_summary()
-        summary["overall_summary_cn"] = "本周未检测到新增或内容变化条目，但技术升级。"
+        summary["overall_summary"] = "本周未检测到新增或内容变化条目，但技术升级。"
         valid, _summary, errors, _warnings = validate_llm_output(json.dumps(summary), [source_record()])
         self.assertFalse(valid)
         self.assertTrue(any("技术升级" in error for error in errors))
@@ -139,6 +127,7 @@ class LlmGuardrailTests(unittest.TestCase):
     def test_validation_failure_does_not_overwrite_summary(self) -> None:
         summary = valid_summary()
         summary["key_points"][0]["source_record_ids"] = ["unknown"]  # type: ignore[index]
+        summary["key_points"][0]["source_urls"] = ["https://unknown.example/source"]  # type: ignore[index]
         with tempfile.TemporaryDirectory() as directory:
             _code, audit, output = self._run_with_mock_output(json.dumps(summary), directory)
             self.assertEqual("validation_failed", audit["llm_status"])
@@ -149,6 +138,24 @@ class LlmGuardrailTests(unittest.TestCase):
             _code, audit, output = self._run_with_mock_output("not-json", directory)
             self.assertEqual("validation_failed", audit["llm_status"])
             self.assertEqual({"sentinel": True}, json.loads(output.read_text(encoding="utf-8")))
+
+    def test_valid_output_is_generated_with_allowed_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _code, audit, output = self._run_with_mock_output(json.dumps(valid_summary()), directory)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual("generated", audit["llm_status"])
+            self.assertEqual(
+                [{"record_id": "record-1", "canonical_url": "https://example.com/source"}],
+                payload["allowed_reference_pairs"],
+            )
+            self.assertNotIn("source_based_notes", payload["summary"])
+
+    def test_source_based_notes_are_rejected_by_strict_validation(self) -> None:
+        summary = valid_summary()
+        summary["source_based_notes"] = []
+        valid, _summary, errors, _warnings = validate_llm_output(json.dumps(summary), [source_record()])
+        self.assertFalse(valid)
+        self.assertTrue(any("不得由模型生成" in error for error in errors))
 
     def test_dry_run_does_not_write_usage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

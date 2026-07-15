@@ -213,3 +213,14 @@ GitHub Actions 定时规则为：
 - baseline=0 时不显示首次建库，LLM 文案按当前运行动态生成；
 - Actions Summary 显示原始候选、URL 去重后和最终核心输入；
 - Playwright 详情 fallback 会增加 workflow 执行时间。
+
+## 17. 阶段 4B.1 LLM 引用对齐部署清单
+
+- 模型 prompt 只包含 `final_core_records` 和 `allowed_reference_pairs`；
+- `monitoring_context`、页面 hash、可达性、条目数量与索引页 URL 不进入模型输入；
+- 模型不生成 `source_based_notes`，只生成 `overall_summary` 和 `key_points`；
+- 每个 key point 的 record ID 与 canonical URL 必须属于同一允许引用对；
+- 输入外 ID/URL 被删除，单侧缺失引用仅在可确定配对时补齐；
+- 修复后无来源的要点被删除，无法安全修复时保持 `validation_failed`；
+- 校验失败不得覆盖旧摘要，不保存完整 prompt 或完整原始 response；
+- 本地测试保持 `PYTHON_DOTENV_DISABLED=1`、`LLM_ENABLED=false`。

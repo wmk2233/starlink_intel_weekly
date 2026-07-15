@@ -262,3 +262,11 @@ python scripts/diagnose_official_details.py --all --limit 10 --render-mode auto 
 parser v2 的 `semantic_content_hash` 不包含 parser version、质量、字段证据或提取方法；这些变化通过 `extraction_hash` 和 `extraction_change_status=improved` 观察。事实字段真正变化时才使用 `change_reason=semantic_content_changed`。不得从 URL slug 推断日期、状态或载荷。
 
 LLM 运行统计依次显示原始候选记录、URL 去重后记录和最终核心输入记录。baseline 说明仅在本轮产生 baseline 时出现，LLM 状态说明按当前实际启用状态生成。详情 Playwright 会增加运行时间，排障时先看失败类型，不反复请求追求固定成功率。
+
+## 17. 阶段 4B.1 LLM 引用对齐运维
+
+模型输入边界是 `final_core_records + allowed_reference_pairs`。`monitoring_context` 只用于代码生成页面监测解释，不发送给模型；页面 hash、可达性、条目数量和索引页 URL 不能成为核心摘要引用。
+
+模型 schema 不包含 `source_based_notes`，只生成 `overall_summary` 与 `key_points`。每个 key point 必须包含安全配对的 record ID 和 canonical URL。对齐器可以补齐单侧缺失引用，但不会把属于不同记录的合法 ID/URL 强行配对，也不会改写 claim 文本；修复后无合法来源的要点会删除，严格校验仍失败时保留旧摘要。
+
+排障优先查看 `data/llm_audit.json` 中的 `invalid_record_ids_removed`、`invalid_urls_removed`、`missing_record_ids_repaired`、`missing_urls_repaired`、`key_points_removed_without_sources` 和 `reference_alignment_status`。审计不保存完整 prompt 或完整原始 response。

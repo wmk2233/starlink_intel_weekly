@@ -31,7 +31,7 @@ DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 SUPPORTED_PROVIDERS = {"openai", "deepseek"}
 LEGACY_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
-SUMMARY_VERSION = "llm_source_guarded_v1"
+SUMMARY_VERSION = "llm_reference_aligned_v2"
 DEDUP_STRATEGY = "source_id+normalized_url_latest_record"
 DEFAULT_MAX_USAGE_RECORDS = 200
 TRACKING_QUERY_PARAMETERS = {
@@ -208,6 +208,39 @@ def normalize_source_url(url: str) -> str:
         return urlunsplit((scheme, netloc, path, urlencode(query_items, doseq=True), ""))
     except (TypeError, ValueError):
         return raw
+
+
+def build_allowed_reference_pairs(records: list[dict[str, Any]]) -> list[dict[str, str]]:
+    pairs: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for record in records:
+        record_id = str(record.get("id") or "").strip()
+        canonical_url = normalize_source_url(
+            str(record.get("canonical_url") or record.get("url") or "")
+        )
+        pair = (record_id, canonical_url)
+        if not record_id or not canonical_url or pair in seen:
+            continue
+        seen.add(pair)
+        pairs.append({"record_id": record_id, "canonical_url": canonical_url})
+    return pairs
+
+
+def empty_reference_alignment_stats(status: str = "not_run") -> dict[str, int | str]:
+    return {
+        "output_record_references_before_dedup": 0,
+        "output_record_references_after_dedup": 0,
+        "output_url_references_before_dedup": 0,
+        "output_url_references_after_dedup": 0,
+        "invalid_record_ids_removed": 0,
+        "invalid_urls_removed": 0,
+        "missing_record_ids_repaired": 0,
+        "missing_urls_repaired": 0,
+        "mismatched_reference_pairs_removed": 0,
+        "key_points_removed_without_sources": 0,
+        "source_based_notes_removed": 0,
+        "reference_alignment_status": status,
+    }
 
 
 def parse_record_timestamp(record: dict[str, Any]) -> datetime | None:
@@ -441,6 +474,9 @@ def build_guardrails(strict_source: bool) -> dict[str, bool]:
         "no_external_knowledge": True,
         "no_unsourced_claims": True,
         "page_level_no_fact_expansion": True,
+        "monitoring_context_model_generated": False,
+        "source_based_notes_model_generated": False,
+        "paired_references_required": True,
     }
 
 
@@ -474,12 +510,9 @@ def build_audit(
     dedup.setdefault("final_core_input_records", input_records)
     dedup.setdefault("final_core_unique_urls", input_records)
     dedup.setdefault("reused_historical_records", 0)
-    references = output_reference_stats or {
-        "output_record_references_before_dedup": 0,
-        "output_record_references_after_dedup": 0,
-        "output_url_references_before_dedup": 0,
-        "output_url_references_after_dedup": 0,
-    }
+    references = empty_reference_alignment_stats()
+    if output_reference_stats:
+        references.update(output_reference_stats)
     usage_data = empty_usage()
     if usage:
         usage_data.update({key: usage.get(key) for key in usage_data})
@@ -597,6 +630,12 @@ def build_usage_record(audit: dict[str, Any]) -> dict[str, Any]:
         "final_core_input_records": audit.get("final_core_input_records"),
         "final_core_unique_urls": audit.get("final_core_unique_urls"),
         "reused_historical_records": audit.get("reused_historical_records"),
+        "invalid_record_ids_removed": audit.get("invalid_record_ids_removed"),
+        "invalid_urls_removed": audit.get("invalid_urls_removed"),
+        "missing_record_ids_repaired": audit.get("missing_record_ids_repaired"),
+        "missing_urls_repaired": audit.get("missing_urls_repaired"),
+        "key_points_removed_without_sources": audit.get("key_points_removed_without_sources"),
+        "reference_alignment_status": audit.get("reference_alignment_status"),
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
@@ -649,36 +688,45 @@ def system_prompt() -> str:
         "不得使用模型记忆。\n"
         "不得推测未给出的事实。\n"
         "不得编造发射时间、任务状态、载荷数量、技术细节、商业服务状态。\n"
-        "“页面变化状态”和“条目变化状态”是两个不同层级的检测结果。\n"
-        "page_change_status=changed 只表示页面级 hash 或页面内容发生变化，不表示存在可确认的新事件。\n"
-        "如果 page_change_status=changed，但 new_items=0 且 changed_items=0，必须表述为："
-        "“页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。”\n"
-        "不得把页面级变化写成发射任务变化、服务更新、技术升级、网络容量变化、"
-        "卫星部署变化、用户数量变化或其他事件事实。\n"
-        "如果记录是 page_level 或 source_quality=low，只能说明页面级监测结果，不得写成具体事件。\n"
+        "页面可达性、页面 hash、页面变化状态和条目计数由代码确定性生成，不属于你的输出范围。\n"
+        "不得生成 source_based_notes，也不得引用索引页或 monitoring context URL。\n"
         "baseline 表示首次成功条目抽取形成的历史基线，不是本周新增，禁止写成 new 或本周新事件。\n"
         "同一来源存在 item_level 时，应以条目级记录为核心，不得把 page_level 当作核心事实。\n"
         "SpaceX 条目只有 starlink_relevance=direct 时才能进入 Starlink 核心结论。\n"
         "如果 current_run_data_reused=true，本轮未重新确认详情正文。只能说明该记录来自最近一次成功解析，"
         "不得描述为本轮新确认内容。\n"
         "如果没有 new 或 changed 条目，必须明确写“本周未检测到新增或内容变化条目”。\n"
-        "每条摘要必须引用已有 record id 和 URL。\n"
+        "每个 key point 必须逐字使用 allowed_reference_pairs 中属于同一记录的 record_id 和 canonical_url。\n"
+        "不得使用相对 URL、改写 URL、索引页 URL 或外部 URL。\n"
+        "只生成 overall_summary 和 key_points。\n"
         "输出必须是合法 JSON。"
     )
 
 
 def build_user_prompt(
     selected_items: list[dict[str, Any]],
-    source_status: dict[str, Any],
-    extraction_quality: dict[str, Any],
-    weekly_manifest: dict[str, Any],
+    source_status: dict[str, Any] | None = None,
+    extraction_quality: dict[str, Any] | None = None,
+    weekly_manifest: dict[str, Any] | None = None,
     monitoring_context: list[dict[str, Any]] | None = None,
 ) -> str:
+    del source_status, extraction_quality, weekly_manifest, monitoring_context
+    allowed_pairs = build_allowed_reference_pairs(selected_items)
+    pair_by_id = {pair["record_id"]: pair["canonical_url"] for pair in allowed_pairs}
+    final_core_records: list[dict[str, Any]] = []
+    for item in selected_items:
+        record_id = str(item.get("id") or "").strip()
+        if record_id not in pair_by_id:
+            continue
+        record = copy.deepcopy(item)
+        record.pop("candidate_links", None)
+        record["url"] = pair_by_id[record_id]
+        record["canonical_url"] = pair_by_id[record_id]
+        final_core_records.append(record)
     payload = {
         "instructions": {
             "output_json_schema": {
-                "llm_summary_version": SUMMARY_VERSION,
-                "overall_summary_cn": "string",
+                "overall_summary": "string",
                 "key_points": [
                     {
                         "point": "string",
@@ -687,42 +735,25 @@ def build_user_prompt(
                         "caveat": "string",
                     }
                 ],
-                "source_based_notes": [
-                    {
-                        "source_name": "string",
-                        "note": "string",
-                        "source_record_ids": ["record id"],
-                        "source_urls": ["url"],
-                        "extracted_level": "string",
-                        "source_quality": "string",
-                    }
-                ],
-                "risk_warnings": ["string"],
-                "not_generated_claims": ["string"],
             },
             "format": "只输出 JSON，不要 Markdown，不要代码块。",
-            "required_not_generated_claims": [
-                "未生成发射时间",
-                "未生成任务状态",
-                "未生成载荷数量",
-                "未生成未在来源中出现的技术判断",
+            "reference_rules": [
+                "逐字使用 allowed_reference_pairs 中的 record_id 和 canonical_url。",
+                "record_id 与 canonical_url 必须来自同一个允许引用对。",
+                "不得输出索引页 URL、相对 URL、改写 URL 或外部 URL。",
+                "不得生成 source_based_notes；页面监测解释由代码生成。",
             ],
         },
         "source_constraints": {
-            "allowed_record_ids": [item.get("id") for item in selected_items],
-            "allowed_urls": [item.get("url") for item in selected_items],
             "no_external_sources": True,
-            "page_level_low_records_must_not_be_fact_expanded": True,
             "baseline_is_not_new": True,
             "item_level_preferred": True,
             "spacex_core_requires_direct_starlink_relevance": True,
             "reused_history_is_not_current_confirmation": True,
+            "monitoring_context_is_not_model_input": True,
         },
-        "items": selected_items,
-        "monitoring_context": monitoring_context or [],
-        "source_status": source_status,
-        "extraction_quality": extraction_quality,
-        "weekly_manifest": weekly_manifest,
+        "allowed_reference_pairs": allowed_pairs,
+        "final_core_records": final_core_records,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
 
@@ -792,14 +823,11 @@ def call_deepseek(
 
 
 def narrative_text(summary: dict[str, Any]) -> str:
-    parts = [str(summary.get("overall_summary_cn") or "")]
+    parts = [str(summary.get("overall_summary") or "")]
     for point in summary.get("key_points", []) if isinstance(summary.get("key_points"), list) else []:
         if isinstance(point, dict):
             parts.append(str(point.get("point") or ""))
             parts.append(str(point.get("caveat") or ""))
-    for note in summary.get("source_based_notes", []) if isinstance(summary.get("source_based_notes"), list) else []:
-        if isinstance(note, dict):
-            parts.append(str(note.get("note") or ""))
     return "\n".join(parts)
 
 
@@ -824,42 +852,123 @@ def _ordered_unique(values: object, normalizer: Any = str) -> list[str]:
     return result
 
 
+def align_llm_references(
+    llm_output: dict[str, Any],
+    allowed_records: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, int | str]]:
+    allowed_pairs = build_allowed_reference_pairs(allowed_records)
+    id_to_url = {pair["record_id"]: pair["canonical_url"] for pair in allowed_pairs}
+    url_to_id = {pair["canonical_url"]: pair["record_id"] for pair in allowed_pairs}
+    stats = empty_reference_alignment_stats()
+    aligned = {
+        "llm_summary_version": SUMMARY_VERSION,
+        "overall_summary": llm_output.get("overall_summary", llm_output.get("overall_summary_cn")),
+        "key_points": [],
+    }
+    changed = "overall_summary_cn" in llm_output or any(
+        key not in {"overall_summary", "overall_summary_cn", "key_points"}
+        for key in llm_output
+    )
+
+    source_notes = llm_output.get("source_based_notes")
+    if isinstance(source_notes, list):
+        stats["source_based_notes_removed"] = len(source_notes)
+        changed = changed or bool(source_notes)
+        for note in source_notes:
+            if not isinstance(note, dict):
+                continue
+            note_ids = note.get("source_record_ids", [])
+            note_urls = note.get("source_urls", [])
+            if isinstance(note_ids, list):
+                valid_note_ids = [str(value).strip() for value in note_ids if value not in (None, "")]
+                stats["output_record_references_before_dedup"] += len(valid_note_ids)
+                stats["invalid_record_ids_removed"] += sum(value not in id_to_url for value in valid_note_ids)
+            if isinstance(note_urls, list):
+                valid_note_urls = [normalize_source_url(str(value)) for value in note_urls if value not in (None, "")]
+                stats["output_url_references_before_dedup"] += len(valid_note_urls)
+                stats["invalid_urls_removed"] += sum(value not in url_to_id for value in valid_note_urls)
+
+    raw_key_points = llm_output.get("key_points")
+    if not isinstance(raw_key_points, list):
+        raw_key_points = []
+    for point in raw_key_points:
+        if not isinstance(point, dict):
+            stats["key_points_removed_without_sources"] += 1
+            changed = True
+            continue
+        raw_ids = point.get("source_record_ids", [])
+        raw_urls = point.get("source_urls", [])
+        ids = [str(value).strip() for value in raw_ids if value not in (None, "")] if isinstance(raw_ids, list) else []
+        urls = [normalize_source_url(str(value)) for value in raw_urls if value not in (None, "")] if isinstance(raw_urls, list) else []
+        stats["output_record_references_before_dedup"] += len(ids)
+        stats["output_url_references_before_dedup"] += len(urls)
+
+        pairs: list[tuple[str, str]] = []
+        seen_pairs: set[tuple[str, str]] = set()
+        for index in range(max(len(ids), len(urls))):
+            record_id = ids[index] if index < len(ids) else ""
+            canonical_url = urls[index] if index < len(urls) else ""
+            id_valid = bool(record_id and record_id in id_to_url)
+            url_valid = bool(canonical_url and canonical_url in url_to_id)
+            if record_id and not id_valid:
+                stats["invalid_record_ids_removed"] += 1
+                changed = True
+            if canonical_url and not url_valid:
+                stats["invalid_urls_removed"] += 1
+                changed = True
+
+            if id_valid and url_valid:
+                if id_to_url[record_id] != canonical_url:
+                    stats["mismatched_reference_pairs_removed"] += 1
+                    changed = True
+                    continue
+                pair = (record_id, canonical_url)
+            elif id_valid:
+                pair = (record_id, id_to_url[record_id])
+                stats["missing_urls_repaired"] += 1
+                changed = True
+            elif url_valid:
+                pair = (url_to_id[canonical_url], canonical_url)
+                stats["missing_record_ids_repaired"] += 1
+                changed = True
+            else:
+                continue
+            if pair in seen_pairs:
+                changed = True
+                continue
+            seen_pairs.add(pair)
+            pairs.append(pair)
+
+        if not pairs:
+            stats["key_points_removed_without_sources"] += 1
+            changed = True
+            continue
+        aligned_point = {
+            "point": point.get("point"),
+            "source_record_ids": [pair[0] for pair in pairs],
+            "source_urls": [pair[1] for pair in pairs],
+            "caveat": point.get("caveat", ""),
+        }
+        if set(point) - {"point", "source_record_ids", "source_urls", "caveat"}:
+            changed = True
+        aligned["key_points"].append(aligned_point)
+        stats["output_record_references_after_dedup"] += len(pairs)
+        stats["output_url_references_after_dedup"] += len(pairs)
+
+    if allowed_pairs and not aligned["key_points"]:
+        stats["reference_alignment_status"] = "failed"
+    elif changed:
+        stats["reference_alignment_status"] = "repaired"
+    else:
+        stats["reference_alignment_status"] = "passed"
+    return aligned, stats
+
+
 def normalize_and_deduplicate_llm_references(
     llm_output: dict[str, Any],
     allowed_records: list[dict[str, Any]],
-) -> tuple[dict[str, Any], dict[str, int]]:
-    normalized = copy.deepcopy(llm_output)
-    canonical_urls = {
-        normalize_source_url(str(record.get("url") or "")): normalize_source_url(str(record.get("url") or ""))
-        for record in allowed_records
-        if normalize_source_url(str(record.get("url") or ""))
-    }
-    stats = {
-        "output_record_references_before_dedup": 0,
-        "output_record_references_after_dedup": 0,
-        "output_url_references_before_dedup": 0,
-        "output_url_references_after_dedup": 0,
-    }
-    for section_name in ["key_points", "source_based_notes"]:
-        section = normalized.get(section_name)
-        if not isinstance(section, list):
-            continue
-        for entry in section:
-            if not isinstance(entry, dict):
-                continue
-            raw_ids = entry.get("source_record_ids", [])
-            raw_urls = entry.get("source_urls", [])
-            if isinstance(raw_ids, list):
-                stats["output_record_references_before_dedup"] += len([value for value in raw_ids if value])
-            if isinstance(raw_urls, list):
-                stats["output_url_references_before_dedup"] += len([value for value in raw_urls if value])
-            ids = _ordered_unique(raw_ids, lambda value: str(value).strip())
-            urls = _ordered_unique(raw_urls, lambda value: normalize_source_url(str(value)))
-            entry["source_record_ids"] = ids
-            entry["source_urls"] = [canonical_urls.get(url, url) for url in urls]
-            stats["output_record_references_after_dedup"] += len(ids)
-            stats["output_url_references_after_dedup"] += len(urls)
-    return normalized, stats
+) -> tuple[dict[str, Any], dict[str, int | str]]:
+    return align_llm_references(llm_output, allowed_records)
 
 
 def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> tuple[bool, dict[str, Any] | None, list[str], list[str]]:
@@ -874,21 +983,36 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
 
     if summary.get("llm_summary_version") != SUMMARY_VERSION:
         errors.append("llm_summary_version 不符合要求。")
-    for key in ["overall_summary_cn", "key_points", "source_based_notes", "risk_warnings", "not_generated_claims"]:
+    for key in ["overall_summary", "key_points"]:
         if key not in summary:
             errors.append(f"缺少字段：{key}")
 
-    valid_ids = {str(item.get("id")) for item in input_records if item.get("id")}
-    valid_urls = {normalize_source_url(str(item.get("url"))) for item in input_records if item.get("url")}
+    unexpected_fields = set(summary) - {"llm_summary_version", "overall_summary", "key_points"}
+    if unexpected_fields:
+        errors.append("LLM 摘要包含 schema 外字段。")
+    if "source_based_notes" in summary:
+        errors.append("source_based_notes 不得由模型生成。")
+
+    allowed_pairs = build_allowed_reference_pairs(input_records)
+    valid_pair_set = {(pair["record_id"], pair["canonical_url"]) for pair in allowed_pairs}
+    valid_ids = {pair["record_id"] for pair in allowed_pairs}
+    valid_urls = {pair["canonical_url"] for pair in allowed_pairs}
 
     key_points = summary.get("key_points", [])
     if not isinstance(key_points, list):
         errors.append("key_points 不是列表。")
         key_points = []
+    if input_records and not key_points:
+        errors.append("key_points 没有可验证的来源要点。")
     for index, point in enumerate(key_points, start=1):
         if not isinstance(point, dict):
             errors.append(f"key_points[{index}] 不是 object。")
             continue
+        unexpected_point_fields = set(point) - {"point", "source_record_ids", "source_urls", "caveat"}
+        if unexpected_point_fields:
+            errors.append(f"key_points[{index}] 包含 schema 外字段。")
+        if not str(point.get("point") or "").strip():
+            errors.append(f"key_points[{index}] 缺少 point 文本。")
         ids = [str(item) for item in point.get("source_record_ids", []) if item]
         urls = [str(item) for item in point.get("source_urls", []) if item]
         if not ids or not urls:
@@ -902,28 +1026,10 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
             errors.append(f"key_points[{index}] 出现重复 record id。")
         if len(normalized_urls) != len(set(normalized_urls)):
             errors.append(f"key_points[{index}] 出现重复 URL。")
-
-    notes = summary.get("source_based_notes", [])
-    if not isinstance(notes, list):
-        errors.append("source_based_notes 不是列表。")
-        notes = []
-    for index, note in enumerate(notes, start=1):
-        if not isinstance(note, dict):
-            errors.append(f"source_based_notes[{index}] 不是 object。")
-            continue
-        ids = [str(item) for item in note.get("source_record_ids", []) if item]
-        urls = [str(item) for item in note.get("source_urls", []) if item]
-        if not ids or not urls:
-            errors.append(f"source_based_notes[{index}] 缺少来源记录或 URL。")
-        if any(item not in valid_ids for item in ids):
-            errors.append(f"source_based_notes[{index}] 出现输入外 record id。")
-        normalized_urls = [normalize_source_url(item) for item in urls]
-        if any(item not in valid_urls for item in normalized_urls):
-            errors.append(f"source_based_notes[{index}] 出现输入外 URL。")
-        if len(ids) != len(set(ids)):
-            errors.append(f"source_based_notes[{index}] 出现重复 record id。")
-        if len(normalized_urls) != len(set(normalized_urls)):
-            errors.append(f"source_based_notes[{index}] 出现重复 URL。")
+        if len(ids) != len(normalized_urls):
+            errors.append(f"key_points[{index}] 的 record id 与 URL 数量不一致。")
+        elif any(pair not in valid_pair_set for pair in zip(ids, normalized_urls)):
+            errors.append(f"key_points[{index}] 的 record id 与 URL 不属于同一允许记录。")
 
     unexpected_urls = sorted(
         url for url in extract_urls(summary) if normalize_source_url(url) not in valid_urls
@@ -1041,6 +1147,7 @@ def run_llm_summary(
             "reused_historical_records": sum(
                 bool(item.get("current_run_data_reused")) for item in selected_items
             ),
+            "allowed_reference_pair_count": len(build_allowed_reference_pairs(selected_items)),
         }
     )
     monitoring_context = build_monitoring_context(
@@ -1116,13 +1223,7 @@ def run_llm_summary(
         print("LLM 摘要状态：skipped_no_api_key")
         return 0, audit
 
-    prompt = build_user_prompt(
-        selected_items,
-        source_status_data,
-        extraction_quality_data,
-        weekly_manifest_data,
-        monitoring_context,
-    )
+    prompt = build_user_prompt(selected_items)
 
     usage = empty_usage()
     started_at = time.perf_counter()
@@ -1182,18 +1283,19 @@ def run_llm_summary(
         print("LLM 摘要状态：api_error")
         return (1 if fail_on_llm_error else 0), audit
 
-    output_reference_stats: dict[str, Any] = {}
+    output_reference_stats: dict[str, Any] = empty_reference_alignment_stats()
     try:
         raw_summary = json.loads(raw_output)
     except json.JSONDecodeError:
         raw_summary = None
     if isinstance(raw_summary, dict):
-        normalized_output, output_reference_stats = normalize_and_deduplicate_llm_references(
+        normalized_output, output_reference_stats = align_llm_references(
             raw_summary,
             selected_items,
         )
         validation_input = json.dumps(normalized_output, ensure_ascii=False)
     else:
+        output_reference_stats["reference_alignment_status"] = "failed"
         validation_input = raw_output
     valid, summary, errors, validation_warnings = validate_llm_output(validation_input, selected_items)
     warnings = config_warnings + validation_warnings
@@ -1236,6 +1338,7 @@ def run_llm_summary(
         "final_core_input_records": dedup_stats["final_core_input_records"],
         "final_core_unique_urls": dedup_stats["final_core_unique_urls"],
         "reused_historical_records": dedup_stats["reused_historical_records"],
+        "allowed_reference_pairs": build_allowed_reference_pairs(selected_items),
         "summary": summary,
     }
     audit = build_audit(

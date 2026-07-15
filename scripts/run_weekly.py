@@ -131,6 +131,12 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "llm_output_record_references_after_dedup": "0",
         "llm_output_url_references_before_dedup": "0",
         "llm_output_url_references_after_dedup": "0",
+        "llm_invalid_record_ids_removed": "0",
+        "llm_invalid_urls_removed": "0",
+        "llm_missing_record_ids_repaired": "0",
+        "llm_missing_urls_repaired": "0",
+        "llm_key_points_removed_without_sources": "0",
+        "llm_reference_alignment_status": "not_run",
         "llm_prompt_tokens": "unknown",
         "llm_completion_tokens": "unknown",
         "llm_total_tokens": "unknown",
@@ -770,6 +776,12 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     meta["llm_output_record_references_after_dedup"] = str(audit.get("output_record_references_after_dedup") or 0)
     meta["llm_output_url_references_before_dedup"] = str(audit.get("output_url_references_before_dedup") or 0)
     meta["llm_output_url_references_after_dedup"] = str(audit.get("output_url_references_after_dedup") or 0)
+    meta["llm_invalid_record_ids_removed"] = str(audit.get("invalid_record_ids_removed") or 0)
+    meta["llm_invalid_urls_removed"] = str(audit.get("invalid_urls_removed") or 0)
+    meta["llm_missing_record_ids_repaired"] = str(audit.get("missing_record_ids_repaired") or 0)
+    meta["llm_missing_urls_repaired"] = str(audit.get("missing_urls_repaired") or 0)
+    meta["llm_key_points_removed_without_sources"] = str(audit.get("key_points_removed_without_sources") or 0)
+    meta["llm_reference_alignment_status"] = str(audit.get("reference_alignment_status") or "not_run")
     meta["llm_prompt_tokens"] = display_metric(usage.get("prompt_tokens"))
     meta["llm_completion_tokens"] = display_metric(usage.get("completion_tokens"))
     meta["llm_total_tokens"] = display_metric(usage.get("total_tokens"))
@@ -829,6 +841,12 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
         f"| 唯一来源 URL | {meta.get('llm_unique_source_urls', '0')} |",
         f"| 输出 record ID 引用（前 / 后） | {meta.get('llm_output_record_references_before_dedup', '0')} / {meta.get('llm_output_record_references_after_dedup', '0')} |",
         f"| 输出 URL 引用（前 / 后） | {meta.get('llm_output_url_references_before_dedup', '0')} / {meta.get('llm_output_url_references_after_dedup', '0')} |",
+        f"| 移除非法 record ID | {meta.get('llm_invalid_record_ids_removed', '0')} |",
+        f"| 移除非法 URL | {meta.get('llm_invalid_urls_removed', '0')} |",
+        f"| 补齐缺失 record ID | {meta.get('llm_missing_record_ids_repaired', '0')} |",
+        f"| 补齐缺失 URL | {meta.get('llm_missing_urls_repaired', '0')} |",
+        f"| 删除无来源要点 | {meta.get('llm_key_points_removed_without_sources', '0')} |",
+        f"| 引用对齐状态 | {meta.get('llm_reference_alignment_status', 'not_run')} |",
         "",
         "### 页面级监测解释",
         "",
@@ -857,7 +875,7 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
         return "\n".join(lines)
 
     summary = llm_summary_data.get("summary", {}) if isinstance(llm_summary_data.get("summary"), dict) else {}
-    overall = str(summary.get("overall_summary_cn") or "LLM 摘要文件缺少总体摘要。")
+    overall = str(summary.get("overall_summary") or summary.get("overall_summary_cn") or "LLM 摘要文件缺少总体摘要。")
     lines.extend(["### 总体摘要", "", overall, "", "### 来源约束要点", "", "| 要点 | 来源记录 | 来源链接 | 限制说明 |", "|---|---|---|---|"])
     key_points = summary.get("key_points", [])
     if isinstance(key_points, list) and key_points:
@@ -905,6 +923,12 @@ def render_llm_audit_section(meta: dict[str, str]) -> str:
         ("输出 record ID 去重后数量", meta.get("llm_output_record_references_after_dedup", "0")),
         ("输出 URL 去重前数量", meta.get("llm_output_url_references_before_dedup", "0")),
         ("输出 URL 去重后数量", meta.get("llm_output_url_references_after_dedup", "0")),
+        ("移除非法 record ID", meta.get("llm_invalid_record_ids_removed", "0")),
+        ("移除非法 URL", meta.get("llm_invalid_urls_removed", "0")),
+        ("补齐缺失 record ID", meta.get("llm_missing_record_ids_repaired", "0")),
+        ("补齐缺失 URL", meta.get("llm_missing_urls_repaired", "0")),
+        ("删除无来源要点", meta.get("llm_key_points_removed_without_sources", "0")),
+        ("引用对齐状态", meta.get("llm_reference_alignment_status", "not_run")),
         ("Prompt tokens", meta.get("llm_prompt_tokens", "unknown")),
         ("Completion tokens", meta.get("llm_completion_tokens", "unknown")),
         ("Total tokens", meta.get("llm_total_tokens", "unknown")),
@@ -1147,7 +1171,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4B：增强官方详情静态解析、受控浏览器 fallback、逐候选诊断与历史失败恢复。
+当前阶段为阶段 4B.1：对齐 final core records 与允许引用对，页面监测解释继续由代码确定性生成。
 
 ## 2. 本周核心结论
 
@@ -2093,7 +2117,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4B 官方详情动态解析、逐候选诊断与失败恢复。")
+    print("当前阶段：4B.1 LLM 核心引用与监测上下文边界对齐。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")

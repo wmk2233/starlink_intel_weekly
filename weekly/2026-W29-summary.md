@@ -6,7 +6,7 @@
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4B：增强官方详情静态解析、受控浏览器 fallback、逐候选诊断与历史失败恢复。
+当前阶段为阶段 4B.1：对齐 final core records 与允许引用对，页面监测解释继续由代码确定性生成。
 
 ## 2. 本周核心结论
 
@@ -25,10 +25,10 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：validation_failed
+状态：skipped
 
 说明：
-- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
+- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
 - 未配置当前 provider 对应的 API Key 时会自动跳过；
 - 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
@@ -46,8 +46,14 @@ LLM Provider：deepseek
 | 复用历史记录 | 0 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 7 |
-| 输出 record ID 引用（前 / 后） | 4 / 4 |
-| 输出 URL 引用（前 / 后） | 5 / 5 |
+| 输出 record ID 引用（前 / 后） | 0 / 0 |
+| 输出 URL 引用（前 / 后） | 0 / 0 |
+| 移除非法 record ID | 0 |
+| 移除非法 URL | 0 |
+| 补齐缺失 record ID | 0 |
+| 补齐缺失 URL | 0 |
+| 删除无来源要点 | 0 |
+| 引用对齐状态 | not_run |
 
 ### 页面级监测解释
 
@@ -58,12 +64,12 @@ LLM Provider：deepseek
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | 6909 |
-| Completion tokens | 883 |
-| Total tokens | 7792 |
-| API 调用耗时 | 8623.08 ms |
+| Prompt tokens | unknown |
+| Completion tokens | unknown |
+| Total tokens | unknown |
+| API 调用耗时 | unknown ms |
 
-跳过原因：LLM output failed source-guardrail validation.
+跳过原因：LLM is disabled.
 
 当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
 
@@ -103,8 +109,8 @@ LLM Provider：deepseek
 
 | 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 | 主导解析层级 | 主导质量 |
 |---|---|---|---:|---:|---:|---|---|
-| Starlink Official Updates | reachable | changed | 0 | 0 | 4 | item_level | medium |
 | SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | item_level | medium |
+| Starlink Official Updates | reachable | changed | 0 | 0 | 4 | item_level | medium |
 
 ## 4. 本周值得关注的信息
 
@@ -114,16 +120,16 @@ LLM Provider：deepseek
 
 ### 4.2 页面级变化说明
 
-- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
 - SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
+- Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
 页面变化状态与条目变化状态是两个检测层级，不能相互替代。
 
 ## 5. 解析质量概览
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |
 |---|---|---|---:|---:|---:|---:|
-| Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
 | SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
+| Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
 
 说明：解析质量只表示规则化抽取完整度，不表示事实重要性或事实可信度。
 
@@ -132,7 +138,7 @@ LLM Provider：deepseek
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
+- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
 
 ## 7. 本周文档
 
@@ -141,15 +147,15 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 07:54:27 UTC+0000
+- 运行时间：2026-07-15 16:19:57 中国标准时间+0800
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：是
-- 是否执行真实来源采集：是
+- 是否发送邮件：否
+- 是否执行真实来源采集：否
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0
 - 内容变化条目数：0
 - 未变化条目数：5
 - LLM Provider：deepseek
-- LLM 摘要状态：validation_failed
+- LLM 摘要状态：skipped

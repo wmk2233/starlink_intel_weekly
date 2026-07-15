@@ -22,9 +22,9 @@
 
 | 字段 | 内容 |
 |---|---|
-| LLM 是否启用 | true |
+| LLM 是否启用 | false |
 | LLM Provider | deepseek |
-| LLM 状态 | validation_failed |
+| LLM 状态 | skipped |
 | 模型 | deepseek-v4-flash |
 | Base URL 类型 | deepseek_default |
 | 输入记录数 | 4 |
@@ -37,15 +37,21 @@
 | 最终核心输入记录 | 4 |
 | 最终核心唯一 URL | 4 |
 | 复用历史记录 | 0 |
-| 输出 record ID 去重前数量 | 4 |
-| 输出 record ID 去重后数量 | 4 |
-| 输出 URL 去重前数量 | 5 |
-| 输出 URL 去重后数量 | 5 |
-| Prompt tokens | 6909 |
-| Completion tokens | 883 |
-| Total tokens | 7792 |
-| API 调用耗时 | 8623.08 ms |
-| 校验状态 | failed |
+| 输出 record ID 去重前数量 | 0 |
+| 输出 record ID 去重后数量 | 0 |
+| 输出 URL 去重前数量 | 0 |
+| 输出 URL 去重后数量 | 0 |
+| 移除非法 record ID | 0 |
+| 移除非法 URL | 0 |
+| 补齐缺失 record ID | 0 |
+| 补齐缺失 URL | 0 |
+| 删除无来源要点 | 0 |
+| 引用对齐状态 | not_run |
+| Prompt tokens | unknown |
+| Completion tokens | unknown |
+| Total tokens | unknown |
+| API 调用耗时 | unknown ms |
+| 校验状态 | skipped |
 | 严格来源约束 | true |
 | 页面级记录禁止事实扩展 | true |
 | 审计文件 | data/llm_audit.json |
@@ -57,37 +63,55 @@
 - SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 - Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
 
-- 原因：LLM output failed source-guardrail validation.
-
-### 错误类型
-
-- source_based_notes[1] 缺少来源记录或 URL。；source_based_notes[1] 出现输入外 URL。；LLM 输出包含输入记录之外的 URL。
+- 原因：LLM is disabled.
 
 
 ## 3. 来源状态诊断
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T07:54:27+00:00 | f5de55de511ccacf |
 | SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T07:55:01+00:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T07:54:27+00:00 | f5de55de511ccacf |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T07:54:27+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
+| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T07:54:27+00:00 |
 
 ## 5. 解析质量诊断
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 页面级 | 链接级 | 条目级 | 静态候选 | 渲染候选 | 候选总数 | 解析器版本 |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| Starlink Official Updates | item_level | medium | 0.8 | 0 | 0 | 4 | 0 | 4 | 4 | starlink_updates_item_v2 |
 | SpaceX Official Launches | item_level | medium | 0.8 | 0 | 0 | 1 | 0 | 1 | 1 | spacex_launches_item_v2 |
+| Starlink Official Updates | item_level | medium | 0.8 | 0 | 0 | 4 | 0 | 4 | 4 | starlink_updates_item_v2 |
 
 ## 6. 采集条目明细
 
-### 6.1 Starlink Official Updates
+### 6.1 SpaceX Official Launches
+
+| 字段 | 内容 |
+|---|---|
+| id | c6060f6415f8c377 |
+| title | SDA’s Third Tranche 1 Mission |
+| url | https://www.spacex.com/launches/sda-t1tl-e |
+| source_id | spacex_official_launches |
+| category | spacex_launch |
+| change_status | unchanged |
+| extracted_level | item_level |
+| source_quality | medium |
+| extraction_confidence | 0.8 |
+| content_hash | 85a78959c0b1f6e2 |
+| previous_content_hash | 85a78959c0b1f6e2 |
+| first_seen_at | 2026-07-15T15:31:12+08:00 |
+| last_seen_at | 2026-07-15T07:55:01+00:00 |
+| last_changed_at | 2026-07-15T15:31:12+08:00 |
+| matched_keywords | [] |
+| candidate_links | [] |
+| extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
+
+### 6.2 Starlink Official Updates
 
 | 字段 | 内容 |
 |---|---|
@@ -169,64 +193,42 @@
 | candidate_links | [] |
 | extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
 
-### 6.2 SpaceX Official Launches
-
-| 字段 | 内容 |
-|---|---|
-| id | c6060f6415f8c377 |
-| title | SDA’s Third Tranche 1 Mission |
-| url | https://www.spacex.com/launches/sda-t1tl-e |
-| source_id | spacex_official_launches |
-| category | spacex_launch |
-| change_status | unchanged |
-| extracted_level | item_level |
-| source_quality | medium |
-| extraction_confidence | 0.8 |
-| content_hash | 85a78959c0b1f6e2 |
-| previous_content_hash | 85a78959c0b1f6e2 |
-| first_seen_at | 2026-07-15T15:31:12+08:00 |
-| last_seen_at | 2026-07-15T07:55:01+00:00 |
-| last_changed_at | 2026-07-15T15:31:12+08:00 |
-| matched_keywords | [] |
-| candidate_links | [] |
-| extraction_notes | 条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。 |
-
 ## 7. 原始摘要与证据片段
 
-### 7.1 Stargaze: SpaceX’s Space Situational Awareness System
+### 7.1 SDA’s Third Tranche 1 Mission
+
+- 来源：SpaceX Official Launches
+- 链接：[链接](https://www.spacex.com/launches/sda-t1tl-e)
+- summary：SpaceX designs, manufactures and launches advanced rockets and spacecraft. The company was founded in 2002 to revolutionize space technology, with the ultimate goal of enabling people to live on other planets.
+- evidence：SpaceX is targeting Thursday, July 16 at 1:32 p.m. PT for a Falcon 9 launch of the Space Development Agency’s (SDA) third Tranche 1 data transport mission to low-Earth orbit from Space Launch Complex 4 East (SLC-4E) at Vandenberg Space Force Base in California. If needed, a backup opportunity is available on Friday, July 17 at 1:24 p.m. PT. This is the third of nine Tranche 1 missions Falcon 9 will launch on behalf of the SDA.
+
+### 7.2 Stargaze: SpaceX’s Space Situational Awareness System
 
 - 来源：Starlink Official Updates
 - 链接：[链接](https://starlink.com/updates/stargaze)
 - summary：Stargaze: SpaceX’s Space Situational Awareness System that enhances the safety and sustainability of satellite operations in low Earth orbit.
 - evidence：SpaceX has developed a novel Space Situational Awareness (SSA) system, called Stargaze
 
-### 7.2 Space Safety Web Interface
+### 7.3 Space Safety Web Interface
 
 - 来源：Starlink Official Updates
 - 链接：[链接](https://starlink.com/updates/space-safety-web-interface)
 - summary：A new web-based tool that simplifies satellite conjunction screening and ephemeris sharing for operators.
 - evidence：To ensure safe spaceflight for everyone, all satellite operators should track their spacecraft with onboard GNSS, accurately predict their future trajectories, and broadcast that information to other satellite operators. Starlink currently publishes its ephemeris to multiple conjunction screening platforms and makes them available on our public website . For the past two years, Starlink has provided free, low-latency conjunction screening to participating satellite operators via our Space Traff…
 
-### 7.3 Starlink Beam Switching
+### 7.4 Starlink Beam Switching
 
 - 来源：Starlink Official Updates
 - 链接：[链接](https://starlink.com/updates/starlink-beam-switching)
 - summary：Starlink uses beam switching to automatically route around obstacles for reliable high-speed internet.
 - evidence：Starlink is built to deliver reliable high-speed internet, even when a customer’s view of the sky isn’t perfect. Trees, buildings, and other obstacles can temporarily block the connection to a given satellite, but the system is designed in such a way that these are generally imperceptible to the user. A given user terminal in the US has 10s of satellites in view, providing diversity to route traffic via a satellite with a stable and unobstructed connection. Starlink terminals automatically swit…
 
-### 7.4 Starlink Network Update
+### 7.5 Starlink Network Update
 
 - 来源：Starlink Official Updates
 - 链接：[链接](https://starlink.com/updates/network-update)
 - summary：Latest updates on Starlink network speeds, latency, resilience, scalability, and capacity.
 - evidence：Over the past year, Starlink has expanded to 42 new countries, territories and other markets around the world while growing by 2.7 million+ active customers globally and serving more than 6 million and counting with high-speed, low-latency internet. During that time, the SpaceX team has also launched more than 100 Starlink missions, adding 2,300+ satellites to the constellation, and invested heavily in our ground infrastructure, network backbone, and internal technologies and systems. As a resu…
-
-### 7.5 SDA’s Third Tranche 1 Mission
-
-- 来源：SpaceX Official Launches
-- 链接：[链接](https://www.spacex.com/launches/sda-t1tl-e)
-- summary：SpaceX designs, manufactures and launches advanced rockets and spacecraft. The company was founded in 2002 to revolutionize space technology, with the ultimate goal of enabling people to live on other planets.
-- evidence：SpaceX is targeting Thursday, July 16 at 1:32 p.m. PT for a Falcon 9 launch of the Space Development Agency’s (SDA) third Tranche 1 data transport mission to low-Earth orbit from Space Launch Complex 4 East (SLC-4E) at Vandenberg Space Force Base in California. If needed, a backup opportunity is available on Friday, July 17 at 1:24 p.m. PT. This is the third of nine Tranche 1 missions Falcon 9 will launch on behalf of the SDA.
 
 ## 官方条目解析诊断
 
@@ -237,11 +239,11 @@
 
 | 状态 | 来源 | 标题 | 日期文本 | 相关性 | 层级 | 质量 | 字段证据 | 官方链接 |
 |---|---|---|---|---|---|---|---|---|
+| unchanged | SpaceX Official Launches | SDA’s Third Tranche 1 Mission | 未知 | incidental | item_level | medium/0.8 | evidence, mission_status, summary, title | [链接](https://www.spacex.com/launches/sda-t1tl-e) |
 | unchanged | Starlink Official Updates | Stargaze: SpaceX’s Space Situational Awareness System | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/stargaze) |
 | unchanged | Starlink Official Updates | Space Safety Web Interface | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/space-safety-web-interface) |
 | unchanged | Starlink Official Updates | Starlink Beam Switching | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/starlink-beam-switching) |
 | unchanged | Starlink Official Updates | Starlink Network Update | 未知 | direct | item_level | medium/0.8 | evidence, summary, title | [链接](https://starlink.com/updates/network-update) |
-| unchanged | SpaceX Official Launches | SDA’s Third Tranche 1 Mission | 未知 | incidental | item_level | medium/0.8 | evidence, mission_status, summary, title | [链接](https://www.spacex.com/launches/sda-t1tl-e) |
 
 ## 官方详情页解析诊断
 
@@ -437,4 +439,24 @@
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 16:19:36 中国标准时间+0800
+  - ISO 周编号：2026-W29
+  - 执行环境：Windows 10
+  - Python 版本：3.11.9
+  - 输出模式：dual
+  - 是否发送邮件：否
+  - 是否执行真实来源采集：否
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 16:19:57 中国标准时间+0800
+  - ISO 周编号：2026-W29
+  - 执行环境：Windows 10
+  - Python 版本：3.11.9
+  - 输出模式：dual
+  - 是否发送邮件：否
+  - 是否执行真实来源采集：否
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
   - 已接入来源数量：2

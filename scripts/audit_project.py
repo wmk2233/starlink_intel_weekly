@@ -13,7 +13,7 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "4B"
+CURRENT_STAGE = "4B.1"
 
 REQUIRED_FILES = [
     "README.md",
@@ -47,6 +47,7 @@ REQUIRED_FILES = [
     "tests/test_dynamic_report_wording.py",
     "tests/test_llm_dedup.py",
     "tests/test_llm_guardrails.py",
+    "tests/test_llm_reference_alignment.py",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
@@ -350,6 +351,8 @@ def check_phase4b_detail_extraction(report: dict[str, Any]) -> None:
         "llm": [
             "sources_with_item_level", 'item.get("starlink_relevance") != "direct"',
             "current_run_data_reused=true", "final_core_input_records", "reused_historical_records",
+            "allowed_reference_pairs", "final_core_records", "align_llm_references",
+            "invalid_record_ids_removed", "missing_urls_repaired", "reference_alignment_status",
         ],
         "weekly": [
             "## 结构化官方条目",
@@ -370,6 +373,13 @@ def check_phase4b_detail_extraction(report: dict[str, Any]) -> None:
     if missing:
         add_issue(report, section, "阶段 4B 实现线索缺失：" + "、".join(missing))
         return
+    prompt_start = llm.find("def build_user_prompt")
+    prompt_end = llm.find("def output_text_from_response", prompt_start)
+    prompt_block = llm[prompt_start:prompt_end]
+    for forbidden in ['"monitoring_context":', '"source_status":', '"source_based_notes": [']:
+        if forbidden in prompt_block:
+            add_issue(report, section, f"阶段 4B.1 模型 prompt 不应包含：{forbidden}")
+            return
     parser_text = f"{starlink}\n{spacex}"
     for forbidden in ["Last-Modified", "last-modified", "title_from_slug", "date_from_slug"]:
         if forbidden in parser_text:
@@ -400,6 +410,7 @@ def check_phase4b_detail_extraction(report: dict[str, Any]) -> None:
     for required_doc in [
         "baseline", "page-level fallback", "item-level", "Playwright",
         "detail_extraction_diagnostics.json", "semantic", "历史", "HTML", "HAR", "最终核心输入",
+        "allowed_reference_pairs", "source_based_notes", "引用对齐",
     ]:
         if required_doc not in docs:
             add_issue(report, section, f"阶段 4B 文档缺少：{required_doc}")
@@ -559,6 +570,8 @@ def check_data_files(report: dict[str, Any]) -> None:
             phase4b_fields = {
                 "raw_candidate_records", "records_after_url_dedup", "final_core_input_records",
                 "final_core_unique_urls", "reused_historical_records",
+                "invalid_record_ids_removed", "invalid_urls_removed", "missing_record_ids_repaired",
+                "missing_urls_repaired", "key_points_removed_without_sources", "reference_alignment_status",
             }
             if not records or not phase4b_fields <= set(records[-1]):
                 add_issue(report, section, "最新 llm_usage.jsonl 记录缺少 Phase 4B 输入统计")
@@ -619,6 +632,21 @@ def check_data_files(report: dict[str, Any]) -> None:
             after_url = data.get("records_after_url_dedup")
             if not isinstance(final_core, int) or not isinstance(after_url, int) or not 0 <= final_core <= after_url:
                 add_issue(report, section, "llm_audit.json 缺少有效最终核心输入统计")
+                return
+            alignment_count_fields = {
+                "invalid_record_ids_removed", "invalid_urls_removed", "missing_record_ids_repaired",
+                "missing_urls_repaired", "key_points_removed_without_sources",
+            }
+            if not all(
+                isinstance(data.get(field), int)
+                and not isinstance(data.get(field), bool)
+                and data.get(field) >= 0
+                for field in alignment_count_fields
+            ):
+                add_issue(report, section, "llm_audit.json 缺少有效引用对齐计数")
+                return
+            if data.get("reference_alignment_status") not in {"not_run", "passed", "repaired", "failed"}:
+                add_issue(report, section, "llm_audit.json 缺少有效 reference_alignment_status")
                 return
             if status == "generated":
                 summary_valid, _summary_data, summary_error = json_file(PROJECT_ROOT / "data/llm_summaries.json")

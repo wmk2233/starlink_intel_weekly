@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.4B.1：LLM 核心引用对齐
+
+- 模型输入仅保留 `final_core_records` 与逐字匹配的 `allowed_reference_pairs`；
+- `monitoring_context`、页面 hash、可达性和条目计数继续由代码确定性生成；
+- 模型输出 schema 移除 `source_based_notes`，只接受 `overall_summary` 与 `key_points`；
+- 新增 record ID/canonical URL 安全配对、缺失引用补齐、非法引用删除和无来源要点删除；
+- 无法安全修复时保持 `validation_failed`，不覆盖旧摘要；
+- 审计只保存对齐计数和状态，不保存完整 prompt 或完整原始 response。
+
 ## v0.4B：动态详情解析与失败恢复
 
 - 新增官方详情静态预检、稳定错误类型和同域 Playwright fallback；

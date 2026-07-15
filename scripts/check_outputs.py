@@ -327,6 +327,8 @@ def build_report(week_id: str) -> dict[str, Any]:
     phase4b_usage_fields = {
         "raw_candidate_records", "records_after_url_dedup", "final_core_input_records",
         "final_core_unique_urls", "reused_historical_records",
+        "invalid_record_ids_removed", "invalid_urls_removed", "missing_record_ids_repaired",
+        "missing_urls_repaired", "key_points_removed_without_sources", "reference_alignment_status",
     }
     add_check(
         report,
@@ -368,6 +370,23 @@ def build_report(week_id: str) -> dict[str, Any]:
         and 0 <= final_core_input_records <= records_after_url_dedup,
         "最终核心输入数量大于 URL 去重后记录",
     )
+    alignment_count_fields = {
+        "invalid_record_ids_removed", "invalid_urls_removed", "missing_record_ids_repaired",
+        "missing_urls_repaired", "key_points_removed_without_sources",
+    }
+    add_check(
+        report,
+        "llm_reference_alignment_fields_valid",
+        valid
+        and all(
+            isinstance(llm_audit.get(field), int)
+            and not isinstance(llm_audit.get(field), bool)
+            and int(llm_audit.get(field)) >= 0
+            for field in alignment_count_fields
+        )
+        and llm_audit.get("reference_alignment_status") in {"not_run", "passed", "repaired", "failed"},
+        "llm_audit.json 缺少有效引用对齐统计",
+    )
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     total_tokens = usage.get("total_tokens")
     latency_ms = usage.get("latency_ms")
@@ -406,17 +425,31 @@ def build_report(week_id: str) -> dict[str, Any]:
             "generated 状态下 validation_status 不是 passed",
         )
         summary = summary_data.get("summary", {}) if isinstance(summary_data.get("summary"), dict) else {}
+        allowed_pairs = summary_data.get("allowed_reference_pairs", [])
+        allowed_pair_set = {
+            (str(pair.get("record_id") or ""), str(pair.get("canonical_url") or ""))
+            for pair in allowed_pairs
+            if isinstance(pair, dict)
+        } if isinstance(allowed_pairs, list) else set()
         references_valid = True
-        for section_name in ["key_points", "source_based_notes"]:
-            section = summary.get(section_name, [])
-            for point in section if isinstance(section, list) else []:
-                if not isinstance(point, dict):
-                    references_valid = False
-                    continue
-                ids = [str(value) for value in point.get("source_record_ids", []) if value]
-                urls = [str(value) for value in point.get("source_urls", []) if value]
-                if not ids or not urls or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
-                    references_valid = False
+        section = summary.get("key_points", [])
+        if "source_based_notes" in summary or not isinstance(section, list) or not section:
+            references_valid = False
+        for point in section if isinstance(section, list) else []:
+            if not isinstance(point, dict):
+                references_valid = False
+                continue
+            ids = [str(value) for value in point.get("source_record_ids", []) if value]
+            urls = [str(value) for value in point.get("source_urls", []) if value]
+            pairs = list(zip(ids, urls))
+            if (
+                not ids
+                or len(ids) != len(urls)
+                or len(ids) != len(set(ids))
+                or len(urls) != len(set(urls))
+                or any(pair not in allowed_pair_set for pair in pairs)
+            ):
+                references_valid = False
         add_check(report, "llm_generated_references_valid", references_valid, "生成摘要存在缺失或重复来源引用")
     elif llm_summary_path.exists():
         valid_summary, error = valid_json_file(llm_summary_path)

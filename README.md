@@ -612,6 +612,14 @@ sources:
 
 `data/llm_audit.json` 记录阶段 3C 可选 LLM 摘要的 provider、模型、脱敏 base URL 类型、去重计数、token、耗时、校验状态和 guardrails。`data/llm_summaries.json` 仅在 LLM 启用、API 调用成功且来源约束校验通过后生成；它与原始采集数据分离，不覆盖 `data/items.jsonl`。`data/llm_usage.jsonl` 是最多 200 条的运行摘要，不保存费用、完整 prompt、完整 response 或 API Key。
 
+### 阶段 4B.1：LLM 核心引用对齐
+
+LLM prompt 只包含 `final_core_records` 和 `allowed_reference_pairs`。每个允许引用对由 `record_id` 与该记录的 `canonical_url` 组成；模型必须逐字使用同一对中的两个值。页面索引 URL、`monitoring_context`、页面 hash、可达性与条目计数不进入模型输入，页面级监测解释继续由代码确定性生成。
+
+模型只生成 `overall_summary` 和带来源的 `key_points`，不再自由生成 `source_based_notes`。`align_llm_references` 会规范化 URL、补齐可安全推导的缺失 ID/URL、删除输入外引用，并删除修复后没有合法来源的要点；合法但错配的 ID 和 URL 不会被强行组合。无法安全修复时仍记录 `validation_failed`，旧 `data/llm_summaries.json` 不会被覆盖。
+
+`data/llm_audit.json` 和 `data/llm_usage.jsonl` 记录移除/补齐数量、无来源要点删除数和 `reference_alignment_status`，但不保存完整 prompt、完整原始 LLM response 或 API Key。
+
 ## 配置 GitHub Variables 与 Secrets
 
 在 GitHub 仓库的 `Settings` → `Secrets and variables` → `Actions` 中分级配置。GitHub Variables 放非敏感配置：
