@@ -25,7 +25,7 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：skipped
+状态：generated
 
 说明：
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
@@ -42,8 +42,8 @@ LLM Provider：deepseek
 | 去重后输入记录 | 3 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 3 |
-| 输出 record ID 引用（前 / 后） | 0 / 0 |
-| 输出 URL 引用（前 / 后） | 0 / 0 |
+| 输出 record ID 引用（前 / 后） | 4 / 4 |
+| 输出 URL 引用（前 / 后） | 4 / 4 |
 
 ### 页面级监测解释
 
@@ -54,14 +54,20 @@ LLM Provider：deepseek
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | unknown |
-| Completion tokens | unknown |
-| Total tokens | unknown |
-| API 调用耗时 | unknown ms |
+| Prompt tokens | 5085 |
+| Completion tokens | 1243 |
+| Total tokens | 6328 |
+| API 调用耗时 | 12381.06 ms |
 
-跳过原因：LLM is disabled.
+### 总体摘要
 
-当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
+本周（2026-W29）监测周期内，两个官方来源均未检测到与 Starlink 直接相关的新增条目或内容变化。Starlink 官方 Updates 页面哈希发生变化，但规则未识别出可确认的新事件；现有条目 Stargaze 属于历史基线。SpaceX 官方 Launches 页面状态无变化，且来源质量为 low，未产生具体事件记录。
+
+### 来源约束要点
+
+| 要点 | 来源记录 | 来源链接 | 限制说明 |
+|---|---|---|---|
+| 本周未检测到新增或内容变化条目。 | 95bbf31b3a93d3e6、85aab698bd64b7d5 | https://starlink.com/updates/stargaze<br>https://www.spacex.com/launches | 本周 Starlink 官方更新来源页面 hash 发生变化，但规则未检测到新增或内容变化条目；现有条目（Stargaze）为历史基线，并非本周新增。 |
 
 
 ## 结构化官方条目
@@ -126,7 +132,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 06:12:06 UTC+0000
+- 运行时间：2026-07-15 06:21:20 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 是否发送邮件：是
@@ -137,4 +143,4 @@ LLM Provider：deepseek
 - 内容变化条目数：0
 - 未变化条目数：1
 - LLM Provider：deepseek
-- LLM 摘要状态：skipped
+- LLM 摘要状态：generated

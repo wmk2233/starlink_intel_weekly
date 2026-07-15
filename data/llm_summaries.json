@@ -1,9 +1,9 @@
 {
   "base_url_label": "deepseek_default",
-  "generated_at": "2026-07-14T05:59:19+00:00",
+  "generated_at": "2026-07-15T06:21:58+00:00",
   "input_records": 2,
-  "input_records_after_dedup": 2,
-  "input_records_before_dedup": 3,
+  "input_records_after_dedup": 3,
+  "input_records_before_dedup": 5,
   "llm_enabled": true,
   "llm_provider": "deepseek",
   "llm_status": "generated",
@@ -11,23 +11,15 @@
   "summary": {
     "key_points": [
       {
-        "caveat": "页面级hash未变化，无新增或更改条目",
-        "point": "SpaceX Official Launches 页面级hash未发生变化，当前规则未检测到新增或内容变化条目。",
+        "caveat": "本周 Starlink 官方更新来源页面 hash 发生变化，但规则未检测到新增或内容变化条目；现有条目（Stargaze）为历史基线，并非本周新增。",
+        "point": "本周未检测到新增或内容变化条目。",
         "source_record_ids": [
-          "e7e9456a75b0c4db"
+          "95bbf31b3a93d3e6",
+          "85aab698bd64b7d5"
         ],
         "source_urls": [
+          "https://starlink.com/updates/stargaze",
           "https://www.spacex.com/launches"
-        ]
-      },
-      {
-        "caveat": "页面级hash变化但未检测到条目级变化",
-        "point": "Starlink Official Updates 页面级hash发生变化，但当前规则未检测到可确认的新增或内容变化条目。",
-        "source_record_ids": [
-          "8abfee15687a5064"
-        ],
-        "source_urls": [
-          "https://www.starlink.com/updates"
         ]
       }
     ],
@@ -38,36 +30,38 @@
       "未生成载荷数量",
       "未生成未在来源中出现的技术判断"
     ],
-    "overall_summary_cn": "本周未检测到新增或内容变化条目。",
+    "overall_summary_cn": "本周（2026-W29）监测周期内，两个官方来源均未检测到与 Starlink 直接相关的新增条目或内容变化。Starlink 官方 Updates 页面哈希发生变化，但规则未识别出可确认的新事件；现有条目 Stargaze 属于历史基线。SpaceX 官方 Launches 页面状态无变化，且来源质量为 low，未产生具体事件记录。",
     "risk_warnings": [
-      "来源提取质量均为 'low'，当前规则无法识别独立条目，可能遗漏重要信息。"
+      "SpaceX Official Launches 来源仅记录页面级监测结果，不得据此推断发射时间、任务状态或载荷细节。",
+      "Starlink 的 Stargaze 条目为历史基线（2026-05-21），并非本周新增，避免误读为本周事件。",
+      "页面级哈希变化不代表存在可确认的新事件，仅说明页面内容可能出现细微调整。"
     ],
     "source_based_notes": [
       {
-        "extracted_level": "page_level",
-        "note": "页面可达，但静态规则未识别到稳定独立条目；保留页面级记录，不补写事实。",
-        "source_name": "SpaceX Official Launches",
-        "source_quality": "low",
+        "extracted_level": "item_level",
+        "note": "页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。现有条目（Stargaze）为历史基线，并非本周新增。",
+        "source_name": "Starlink Official Updates",
+        "source_quality": "high",
         "source_record_ids": [
-          "e7e9456a75b0c4db"
+          "95bbf31b3a93d3e6"
         ],
         "source_urls": [
-          "https://www.spacex.com/launches"
+          "https://starlink.com/updates/stargaze"
         ]
       },
       {
         "extracted_level": "page_level",
-        "note": "页面可达，但静态规则未识别到稳定独立条目；保留页面级记录，不补写事实。",
-        "source_name": "Starlink Official Updates",
+        "note": "页面可达，hash 未变化，来源质量为 low。当前规则未识别到稳定独立条目，不得扩展为具体发射事件。",
+        "source_name": "SpaceX Official Launches",
         "source_quality": "low",
         "source_record_ids": [
-          "8abfee15687a5064"
+          "85aab698bd64b7d5"
         ],
         "source_urls": [
-          "https://www.starlink.com/updates"
+          "https://www.spacex.com/launches"
         ]
       }
     ]
   },
-  "unique_source_urls": 2
+  "unique_source_urls": 3
 }
