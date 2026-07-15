@@ -33,6 +33,21 @@ from llm_summarize import (
     LLM_USAGE_FILE,
     run_llm_summary,
 )
+from item_lifecycle import (
+    DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD,
+    DEFAULT_LONG_ABSENCE_MIN_DAYS,
+    DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD,
+    DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
+    DEFAULT_MAX_LIFECYCLE_EVENTS,
+    ITEM_LIFECYCLE_STATE_FILE,
+    ITEM_VERSIONS_FILE,
+    LIFECYCLE_EVENTS_FILE,
+    LIFECYCLE_REPORT_FILE,
+    load_jsonl as load_lifecycle_jsonl,
+    load_lifecycle_report,
+    load_lifecycle_state,
+    safe_positive_int,
+)
 from send_email import send_weekly_email
 
 
@@ -93,6 +108,23 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "item_extraction_state_path": "data/item_extraction_state.json",
         "item_extraction_report_path": "data/item_extraction_report.json",
         "detail_extraction_diagnostics_path": "data/detail_extraction_diagnostics.json",
+        "item_lifecycle_state_path": "data/item_lifecycle_state.json",
+        "item_versions_path": "data/item_versions.jsonl",
+        "lifecycle_events_path": "data/lifecycle_events.jsonl",
+        "lifecycle_report_path": "data/lifecycle_report.json",
+        "lifecycle_initialized": "0",
+        "lifecycle_new_items": "0",
+        "lifecycle_changed_items": "0",
+        "lifecycle_extraction_improved": "0",
+        "lifecycle_temporarily_missing": "0",
+        "lifecycle_long_absent": "0",
+        "lifecycle_fetch_failed": "0",
+        "lifecycle_recovered": "0",
+        "lifecycle_reappeared": "0",
+        "lifecycle_attention_items": "0",
+        "lifecycle_new_semantic_versions": "0",
+        "lifecycle_new_extraction_revisions": "0",
+        "lifecycle_event_count": "0",
         "item_extraction_overview": "暂无官方条目抽取结果。",
         "detail_extraction_overview": "暂无官方详情解析结果。",
         "detail_failure_overview": "本轮没有详情解析失败。",
@@ -1154,6 +1186,268 @@ def render_evidence_sections(source_items: list[dict[str, object]], max_source_i
     return "\n\n".join(sections)
 
 
+def apply_lifecycle_to_meta(meta: dict[str, str], lifecycle_report: dict[str, object]) -> None:
+    totals = lifecycle_report.get("totals", {}) if isinstance(lifecycle_report, dict) else {}
+    totals = totals if isinstance(totals, dict) else {}
+    attention = lifecycle_report.get("attention_items", []) if isinstance(lifecycle_report, dict) else []
+    meta["lifecycle_initialized"] = str(totals.get("initialized") or 0)
+    meta["lifecycle_new_items"] = str(totals.get("new") or 0)
+    meta["lifecycle_changed_items"] = str(totals.get("changed") or 0)
+    meta["lifecycle_extraction_improved"] = str(totals.get("extraction_improved") or 0)
+    meta["lifecycle_temporarily_missing"] = str(totals.get("temporarily_missing") or 0)
+    meta["lifecycle_long_absent"] = str(totals.get("long_absent") or 0)
+    meta["lifecycle_fetch_failed"] = str(totals.get("detail_fetch_failed") or 0)
+    meta["lifecycle_recovered"] = str(totals.get("recovered_after_failure") or 0)
+    meta["lifecycle_reappeared"] = str(totals.get("reappeared") or 0)
+    meta["lifecycle_attention_items"] = str(len(attention) if isinstance(attention, list) else 0)
+    meta["lifecycle_new_semantic_versions"] = str(totals.get("new_semantic_versions") or 0)
+    meta["lifecycle_new_extraction_revisions"] = str(totals.get("new_extraction_revisions") or 0)
+    meta["lifecycle_event_count"] = str(totals.get("lifecycle_events") or 0)
+
+
+def _lifecycle_events(report: dict[str, object], event_types: set[str] | None = None) -> list[dict[str, object]]:
+    events = report.get("events_this_run", []) if isinstance(report, dict) else []
+    if not isinstance(events, list):
+        return []
+    selected = [event for event in events if isinstance(event, dict)]
+    if event_types is not None:
+        selected = [event for event in selected if str(event.get("event_type")) in event_types]
+    return selected
+
+
+def _event_link(event: dict[str, object]) -> str:
+    title = escape_table_cell(event.get("title") or event.get("record_id") or "未命名条目")
+    url = str(event.get("canonical_url") or "")
+    return f"[{title}]({url})" if url.startswith(("https://", "http://")) else title
+
+
+def render_lifecycle_summary(report: dict[str, object]) -> str:
+    sources = report.get("sources", {}) if isinstance(report, dict) else {}
+    sources = sources if isinstance(sources, dict) else {}
+    rows = [
+        "| 来源 | Active | New | Changed | Extraction Improved | Temporarily Missing | Long Absent | Fetch Failed | Recovered | Reappeared |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    if sources:
+        for source_id, source in sources.items():
+            source = source if isinstance(source, dict) else {}
+            rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        escape_table_cell(source.get("source_name") or source_id),
+                        str(source.get("active") or 0),
+                        str(source.get("new") or 0),
+                        str(source.get("changed") or 0),
+                        str(source.get("extraction_improved") or 0),
+                        str(source.get("temporarily_missing") or 0),
+                        str(source.get("long_absent") or 0),
+                        str(source.get("fetch_failed") or 0),
+                        str(source.get("recovered") or 0),
+                        str(source.get("reappeared") or 0),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        rows.append("| 暂无 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |")
+
+    events = _lifecycle_events(report)
+    no_event_note = ""
+    if not events:
+        no_event_note = "\n\n本轮未产生新增、语义变化、暂时消失、连续失败或恢复事件。"
+
+    new_events = _lifecycle_events(report, {"item_discovered"})
+    new_text = "\n".join(
+        f"- {_event_link(event)}：本轮首次发现，不自动等于官方本周首次发布。" for event in new_events
+    ) or "本轮没有首次发现的新条目。"
+
+    changed_events = _lifecycle_events(report, {"semantic_content_changed"})
+    changed_lines: list[str] = []
+    for event in changed_events:
+        fields = "、".join(str(field) for field in event.get("changed_fields", [])[:8]) or "未列出"
+        evidence = event.get("change_evidence", {})
+        evidence = evidence if isinstance(evidence, dict) else {}
+        snippets = []
+        for field, pair in list(evidence.items())[:2]:
+            pair = pair if isinstance(pair, dict) else {}
+            snippets.append(
+                f"{field}: {truncate_text(pair.get('before_excerpt') or '空', 90)} -> "
+                f"{truncate_text(pair.get('after_excerpt') or '空', 90)}"
+            )
+        evidence_text = "；".join(snippets) or "已保存有限字段级证据"
+        changed_lines.append(f"- {_event_link(event)}：变化字段 {fields}；{evidence_text}。")
+    changed_text = "\n".join(changed_lines) or "本轮没有检测到语义内容变化。"
+
+    improved_events = _lifecycle_events(report, {"extraction_improved"})
+    improved_text = "\n".join(
+        f"- {_event_link(event)}：{escape_table_cell('、'.join(str(field) for field in event.get('changed_fields', [])[:8]) or '解析字段更完整')}。"
+        for event in improved_events
+    ) or "本轮没有解析质量提升事件。"
+
+    missing_events = _lifecycle_events(report, {"temporarily_missing", "long_absence_reached", "reappeared"})
+    missing_text = "\n".join(
+        f"- {_event_link(event)}：{event.get('event_type')}。" for event in missing_events
+    ) or "本轮没有暂时消失、长期未见或重新出现事件。"
+
+    fetch_events = _lifecycle_events(report, {"detail_fetch_failed", "detail_fetch_recovered"})
+    fetch_text = "\n".join(
+        f"- {_event_link(event)}：{event.get('event_type')}。" for event in fetch_events
+    ) or "本轮没有详情抓取失败或恢复事件。"
+    totals = report.get("totals", {}) if isinstance(report, dict) else {}
+    totals = totals if isinstance(totals, dict) else {}
+
+    return "\n".join(rows) + f"""{no_event_note}
+
+### 本轮新增条目
+
+{new_text}
+
+### 本轮内容变化
+
+{changed_text}
+
+### 解析质量提升
+
+以下变化仅表示解析完整度提升，不代表官方内容发生变化。
+
+{improved_text}
+
+### 暂时消失与长期未见
+
+未在本轮索引中发现不代表官方删除。
+
+{missing_text}
+
+### 详情抓取失败与恢复
+
+抓取失败或恢复属于采集链路状态，不代表官方业务状态。
+
+{fetch_text}
+
+### 历史版本
+
+- 本轮新建 semantic versions：{totals.get("new_semantic_versions", 0)}
+- 本轮新建 extraction revisions：{totals.get("new_extraction_revisions", 0)}
+"""
+
+
+def render_lifecycle_details(
+    lifecycle_state: dict[str, object],
+    lifecycle_report: dict[str, object],
+    item_versions: list[dict[str, object]],
+) -> str:
+    states = lifecycle_state.get("items", {}) if isinstance(lifecycle_state, dict) else {}
+    states = states if isinstance(states, dict) else {}
+    state_rows = [
+        "| Record ID | 来源 | 标题 | 当前状态 | Change status | Extraction status | Semantic version | Extraction revision | Missing count | Failure count | Attention | 官方 URL |",
+        "|---|---|---|---|---|---|---:|---:|---:|---:|---|---|",
+    ]
+    for record_id, state in sorted(states.items(), key=lambda item: (str(item[1].get("source_id")), item[0])):
+        state = state if isinstance(state, dict) else {}
+        current_item = next(
+            (
+                item
+                for item in item_versions[::-1]
+                if item.get("record_id") == record_id
+            ),
+            {},
+        )
+        state_rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(record_id),
+                    escape_table_cell(state.get("source_id", "")),
+                    escape_table_cell(state.get("title") or current_item.get("title") or ""),
+                    escape_table_cell(state.get("lifecycle_state", "")),
+                    escape_table_cell(state.get("change_status", "unchanged")),
+                    escape_table_cell(state.get("extraction_change_status", "unchanged")),
+                    str(state.get("semantic_version") or 0),
+                    str(state.get("extraction_revision") or 0),
+                    str(state.get("consecutive_missing_observations") or 0),
+                    str(state.get("consecutive_detail_failures") or 0),
+                    "是" if state.get("attention_required") else "否",
+                    format_link(state.get("canonical_url")),
+                ]
+            )
+            + " |"
+        )
+    if len(state_rows) == 2:
+        state_rows.append("| 暂无 |  |  |  |  |  | 0 | 0 | 0 | 0 | 否 |  |")
+
+    event_rows = [
+        "| 事件 | 来源 | 条目 | 前一状态 | 当前状态 | 变化字段 | 发生时间 | 限制说明 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    limitation = {
+        "item_discovered": "本轮首次发现，不等于本周发布",
+        "semantic_content_changed": "仅表示结构化官方内容变化",
+        "extraction_improved": "仅表示解析提升，不是事实变化",
+        "temporarily_missing": "未判定删除",
+        "long_absence_reached": "长期未见，不代表删除",
+        "detail_fetch_failed": "采集失败，保留历史数据",
+        "detail_fetch_recovered": "采集恢复，不是服务恢复",
+        "reappeared": "重新出现，不是重新发布",
+        "extraction_degraded": "解析完整度下降",
+    }
+    for event in _lifecycle_events(lifecycle_report):
+        event_type = str(event.get("event_type") or "")
+        event_rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(event_type),
+                    escape_table_cell(event.get("source_name") or event.get("source_id") or ""),
+                    _event_link(event),
+                    escape_table_cell(event.get("previous_lifecycle_state", "")),
+                    escape_table_cell(event.get("current_lifecycle_state", "")),
+                    escape_table_cell("、".join(str(field) for field in event.get("changed_fields", [])[:8]) or "无"),
+                    escape_table_cell(event.get("occurred_at", "")),
+                    escape_table_cell(limitation.get(event_type, "采集系统内部事件")),
+                ]
+            )
+            + " |"
+        )
+    if len(event_rows) == 2:
+        event_rows.append("| 无 |  |  |  |  |  |  | 本轮没有需展示的生命周期事件 |")
+
+    version_rows = [
+        "| Record ID | Semantic version | Extraction revision | Version kind | Observed at | Changed fields |",
+        "|---|---:|---:|---|---|---|",
+    ]
+    for version in item_versions:
+        version_rows.append(
+            "| "
+            + " | ".join(
+                [
+                    escape_table_cell(version.get("record_id", "")),
+                    str(version.get("semantic_version") or 0),
+                    str(version.get("extraction_revision") or 0),
+                    escape_table_cell(version.get("version_kind", "")),
+                    escape_table_cell(version.get("observed_at", "")),
+                    escape_table_cell("、".join(str(field) for field in version.get("changed_fields", [])[:8]) or "无"),
+                ]
+            )
+            + " |"
+        )
+    if len(version_rows) == 2:
+        version_rows.append("| 暂无 | 0 | 0 |  |  |  |")
+
+    return f"""## 条目生命周期状态
+
+{chr(10).join(state_rows)}
+
+## 本轮生命周期事件
+
+{chr(10).join(event_rows)}
+
+## 结构化版本历史
+
+{chr(10).join(version_rows)}
+"""
+
+
 def build_weekly_summary_markdown(
     meta: dict[str, str],
     source_items: list[dict[str, object]],
@@ -1161,8 +1455,10 @@ def build_weekly_summary_markdown(
     quality_sources: dict[str, dict[str, object]],
     llm_summary_data: dict[str, object],
     item_report: dict[str, object],
+    lifecycle_report: dict[str, object] | None = None,
 ) -> str:
     week_id = meta["iso_week"]
+    lifecycle_report = lifecycle_report or {}
     return f"""# Starlink 情报周报总结版：{week_id}
 
 ## 1. 本周概览
@@ -1171,7 +1467,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4B.1：对齐 final core records 与允许引用对，页面监测解释继续由代码确定性生成。
+当前阶段为阶段 4C：使用确定性规则管理条目新增、语义变化、解析提升、暂时消失、详情失败与恢复；这些采集状态不代表官方业务状态。
 
 ## 2. 本周核心结论
 
@@ -1191,6 +1487,10 @@ def build_weekly_summary_markdown(
 ## 结构化官方条目
 
 {render_structured_official_items(source_items, item_report)}
+
+## 条目生命周期概览
+
+{render_lifecycle_summary(lifecycle_report)}
 
 ## 3. 来源状态概览
 
@@ -1240,11 +1540,17 @@ def build_weekly_details_markdown(
     item_report: dict[str, object],
     detail_diagnostics: dict[str, object],
     llm_audit: dict[str, object] | None = None,
+    lifecycle_state: dict[str, object] | None = None,
+    lifecycle_report: dict[str, object] | None = None,
+    item_versions: list[dict[str, object]] | None = None,
 ) -> str:
     error_note = ""
     if collection_errors:
         error_note = "\n\n采集提示：本次采集存在错误，脚本已优雅处理，未输出任何密钥。"
     week_id = meta["iso_week"]
+    lifecycle_state = lifecycle_state or {}
+    lifecycle_report = lifecycle_report or {}
+    item_versions = item_versions or []
     return f"""# Starlink 情报周报明细版：{week_id}
 
 ## 1. 文档说明
@@ -1261,6 +1567,10 @@ def build_weekly_details_markdown(
 | `data/item_extraction_state.json` | 条目 stable ID、baseline 与历史状态 |
 | `data/item_extraction_report.json` | 本次官方条目发现与详情解析报告 |
 | `data/detail_extraction_diagnostics.json` | 逐候选静态/渲染详情解析状态与有限错误类型 |
+| `data/item_lifecycle_state.json` | item-level 条目当前生命周期状态 |
+| `data/item_versions.jsonl` | 限长的结构化语义与解析版本历史 |
+| `data/lifecycle_events.jsonl` | 限长、去重的生命周期事件历史 |
+| `data/lifecycle_report.json` | 本轮生命周期统计、事件与版本摘要 |
 | `data/llm_audit.json` | 可选 LLM 摘要审计 |
 | `data/llm_summaries.json` | 可选 LLM 摘要输出 |
 | `data/llm_usage.jsonl` | 限长的 LLM 状态、token 与耗时记录 |
@@ -1298,6 +1608,8 @@ def build_weekly_details_markdown(
 ### 详情失败类型
 
 {render_detail_failure_overview(item_report)}
+
+{render_lifecycle_details(lifecycle_state, lifecycle_report, item_versions)}
 
 ## 8. 局限性
 
@@ -1394,13 +1706,16 @@ def write_weekly_outputs(
     llm_audit: dict[str, object],
     item_report: dict[str, object],
     detail_diagnostics: dict[str, object],
+    lifecycle_state: dict[str, object],
+    lifecycle_report: dict[str, object],
+    item_versions: list[dict[str, object]],
 ) -> None:
     history_records = load_existing_history([paths["details"], paths["index"]])
     history_records.append(meta)
     history_records = history_records[-max_records:]
 
     summary_content = build_weekly_summary_markdown(
-        meta, source_items, source_statuses, quality_sources, llm_summary_data, item_report
+        meta, source_items, source_statuses, quality_sources, llm_summary_data, item_report, lifecycle_report
     )
     details_content = build_weekly_details_markdown(
         meta,
@@ -1412,6 +1727,9 @@ def write_weekly_outputs(
         item_report,
         detail_diagnostics,
         llm_audit,
+        lifecycle_state,
+        lifecycle_report,
+        item_versions,
     )
 
     if output_mode in {"dual", "both"}:
@@ -1493,6 +1811,22 @@ def summarize_current_week_outputs(
         "llm_unique_source_urls": int(meta.get("llm_unique_source_urls") or 0),
         "llm_total_tokens": optional_number(meta.get("llm_total_tokens")),
         "llm_latency_ms": optional_number(meta.get("llm_latency_ms")),
+        "item_lifecycle_state_path": meta.get("item_lifecycle_state_path", "data/item_lifecycle_state.json"),
+        "item_versions_path": meta.get("item_versions_path", "data/item_versions.jsonl"),
+        "lifecycle_events_path": meta.get("lifecycle_events_path", "data/lifecycle_events.jsonl"),
+        "lifecycle_report_path": meta.get("lifecycle_report_path", "data/lifecycle_report.json"),
+        "lifecycle_new_items": int(meta.get("lifecycle_new_items") or 0),
+        "lifecycle_changed_items": int(meta.get("lifecycle_changed_items") or 0),
+        "lifecycle_extraction_improved": int(meta.get("lifecycle_extraction_improved") or 0),
+        "lifecycle_temporarily_missing": int(meta.get("lifecycle_temporarily_missing") or 0),
+        "lifecycle_long_absent": int(meta.get("lifecycle_long_absent") or 0),
+        "lifecycle_fetch_failed": int(meta.get("lifecycle_fetch_failed") or 0),
+        "lifecycle_recovered": int(meta.get("lifecycle_recovered") or 0),
+        "lifecycle_reappeared": int(meta.get("lifecycle_reappeared") or 0),
+        "lifecycle_attention_items": int(meta.get("lifecycle_attention_items") or 0),
+        "lifecycle_new_semantic_versions": int(meta.get("lifecycle_new_semantic_versions") or 0),
+        "lifecycle_new_extraction_revisions": int(meta.get("lifecycle_new_extraction_revisions") or 0),
+        "lifecycle_event_count": int(meta.get("lifecycle_event_count") or 0),
         "summary_exists": paths["summary"].exists(),
         "details_exists": paths["details"].exists(),
         "index_exists": paths["index"].exists(),
@@ -1654,6 +1988,19 @@ def append_run_history(
         "llm_input_records_after_dedup": int(meta.get("llm_input_records_after_dedup") or 0),
         "llm_total_tokens": optional_number(meta.get("llm_total_tokens")),
         "llm_latency_ms": optional_number(meta.get("llm_latency_ms")),
+        "lifecycle_initialized": int(meta.get("lifecycle_initialized") or 0),
+        "lifecycle_new_items": int(meta.get("lifecycle_new_items") or 0),
+        "lifecycle_changed_items": int(meta.get("lifecycle_changed_items") or 0),
+        "lifecycle_extraction_improved": int(meta.get("lifecycle_extraction_improved") or 0),
+        "lifecycle_temporarily_missing": int(meta.get("lifecycle_temporarily_missing") or 0),
+        "lifecycle_long_absent": int(meta.get("lifecycle_long_absent") or 0),
+        "lifecycle_fetch_failed": int(meta.get("lifecycle_fetch_failed") or 0),
+        "lifecycle_recovered": int(meta.get("lifecycle_recovered") or 0),
+        "lifecycle_reappeared": int(meta.get("lifecycle_reappeared") or 0),
+        "lifecycle_attention_items": int(meta.get("lifecycle_attention_items") or 0),
+        "lifecycle_new_semantic_versions": int(meta.get("lifecycle_new_semantic_versions") or 0),
+        "lifecycle_new_extraction_revisions": int(meta.get("lifecycle_new_extraction_revisions") or 0),
+        "lifecycle_event_count": int(meta.get("lifecycle_event_count") or 0),
         "notes": "输出质量检查由 scripts/check_outputs.py 执行；本记录不保存任何 Secrets。",
     }
     records = load_run_history()
@@ -1992,6 +2339,7 @@ def update_knowledge_base(
 def main() -> int:
     if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
         load_dotenv(PROJECT_ROOT / ".env", override=False)
+    config_warnings: list[str] = []
     parser = argparse.ArgumentParser(description="生成 Starlink 情报周报自动化测试文档。")
     parser.add_argument("--no-email", action="store_true", help="只生成 Markdown，不发送邮件。")
     parser.add_argument("--dry-run", action="store_true", help="打印将要执行的操作，不写文件、不发邮件。")
@@ -2071,7 +2419,61 @@ def main() -> int:
         help="data/llm_usage.jsonl 最多保留的记录条数，默认 200。",
     )
     parser.add_argument("--fail-on-llm-error", action="store_true", help="LLM 调用或校验失败时阻断主流程。")
+    parser.add_argument(
+        "--long-absence-observation-threshold",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("LONG_ABSENCE_OBSERVATION_THRESHOLD"),
+            DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD,
+            "LONG_ABSENCE_OBSERVATION_THRESHOLD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--long-absence-min-days",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("LONG_ABSENCE_MIN_DAYS"),
+            DEFAULT_LONG_ABSENCE_MIN_DAYS,
+            "LONG_ABSENCE_MIN_DAYS",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--detail-failure-attention-threshold",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("DETAIL_FAILURE_ATTENTION_THRESHOLD"),
+            DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD,
+            "DETAIL_FAILURE_ATTENTION_THRESHOLD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--max-item-versions-per-record",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("MAX_ITEM_VERSIONS_PER_RECORD"),
+            DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
+            "MAX_ITEM_VERSIONS_PER_RECORD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--max-lifecycle-events",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("MAX_LIFECYCLE_EVENTS"),
+            DEFAULT_MAX_LIFECYCLE_EVENTS,
+            "MAX_LIFECYCLE_EVENTS",
+            config_warnings,
+        ),
+    )
+    parser.add_argument("--lifecycle-dry-run", action="store_true", help="仅构建生命周期更新计划，不写入生命周期文件。")
     args = parser.parse_args()
+
+    for warning in config_warnings:
+        print(f"warning: {warning}")
 
     if args.max_history_records < 1:
         print("--max-history-records 必须是大于等于 1 的整数。")
@@ -2094,6 +2496,15 @@ def main() -> int:
     if args.detail_timeout_ms < 1 or args.detail_concurrency < 1:
         print("详情超时和并发参数必须大于等于 1。")
         return 2
+    if min(
+        args.long_absence_observation_threshold,
+        args.long_absence_min_days,
+        args.detail_failure_attention_threshold,
+        args.max_item_versions_per_record,
+        args.max_lifecycle_events,
+    ) < 1:
+        print("生命周期阈值必须是大于等于 1 的整数。")
+        return 2
 
     send_email_enabled = not args.no_email and not args.dry_run
     collect_enabled = not args.no_collect
@@ -2110,6 +2521,9 @@ def main() -> int:
     quality_sources: dict[str, dict[str, object]] = {}
     item_report: dict[str, object] = {}
     detail_diagnostics: dict[str, object] = {}
+    lifecycle_state: dict[str, object] = {}
+    lifecycle_report: dict[str, object] = {}
+    item_versions: list[dict[str, object]] = []
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
@@ -2117,7 +2531,7 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4B.1 LLM 核心引用与监测上下文边界对齐。")
+    print("当前阶段：4C 增量变化检测与条目生命周期管理。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -2130,6 +2544,9 @@ def main() -> int:
         quality_sources = load_quality_for_report()
         item_report = load_json_for_report(ITEM_EXTRACTION_REPORT_FILE)
         detail_diagnostics = load_json_for_report(DETAIL_EXTRACTION_DIAGNOSTICS_FILE)
+        lifecycle_state = load_lifecycle_state()
+        lifecycle_report = load_lifecycle_report()
+        item_versions = load_lifecycle_jsonl(ITEM_VERSIONS_FILE)
         apply_status_to_meta(meta, source_statuses)
         apply_quality_to_meta(meta, quality_sources, source_statuses)
         apply_item_report_to_meta(meta, item_report)
@@ -2152,6 +2569,12 @@ def main() -> int:
             detail_concurrency=args.detail_concurrency,
             bootstrap_mode="baseline",
             rebootstrap_source=args.rebootstrap_source,
+            long_absence_observation_threshold=args.long_absence_observation_threshold,
+            long_absence_min_days=args.long_absence_min_days,
+            detail_failure_attention_threshold=args.detail_failure_attention_threshold,
+            max_item_versions_per_record=args.max_item_versions_per_record,
+            max_lifecycle_events=args.max_lifecycle_events,
+            lifecycle_dry_run=args.lifecycle_dry_run,
         )
         collection_errors = collection_result.errors
         meta["source_names"] = "、".join(collection_result.sources) if collection_result.sources else "无"
@@ -2165,8 +2588,13 @@ def main() -> int:
         apply_quality_to_meta(meta, quality_sources, source_statuses)
         item_report = collection_result.item_extraction_report
         detail_diagnostics = collection_result.detail_extraction_diagnostics
+        lifecycle_state = collection_result.lifecycle_state
+        lifecycle_report = collection_result.lifecycle_report
+        item_versions = collection_result.lifecycle_versions
         apply_item_report_to_meta(meta, item_report)
         source_items = collection_result.items or latest_items_for_report(args.max_source_items, source_statuses)
+
+    apply_lifecycle_to_meta(meta, lifecycle_report)
 
     llm_return_code, llm_audit = run_llm_summary(
         enabled=args.enable_llm,
@@ -2202,6 +2630,9 @@ def main() -> int:
         llm_audit=llm_audit,
         item_report=item_report,
         detail_diagnostics=detail_diagnostics,
+        lifecycle_state=lifecycle_state,
+        lifecycle_report=lifecycle_report,
+        item_versions=item_versions,
     )
     manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
     update_weekly_archive_index(manifest, args.dry_run)
@@ -2217,6 +2648,8 @@ def main() -> int:
     print(f"LLM 审计文件：{meta['llm_audit_path']}")
     print(f"LLM 摘要文件：{meta['llm_summary_path']}")
     print(f"LLM 用量记录：{meta['llm_usage_path']}")
+    print(f"生命周期状态：{meta['item_lifecycle_state_path']}")
+    print(f"生命周期报告：{meta['lifecycle_report_path']}")
 
     if args.dry_run:
         print("[dry-run] 已完成演练，不会发送邮件。")
@@ -2228,7 +2661,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "4B",
+        "stage": "4C",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -2248,6 +2681,15 @@ def main() -> int:
         "detail_extraction_overview": meta["detail_extraction_overview"],
         "detail_failure_overview": meta["detail_failure_overview"],
         "historical_reuse_note": meta["historical_reuse_note"],
+        "lifecycle_new_items": meta["lifecycle_new_items"],
+        "lifecycle_changed_items": meta["lifecycle_changed_items"],
+        "lifecycle_extraction_improved": meta["lifecycle_extraction_improved"],
+        "lifecycle_temporarily_missing": meta["lifecycle_temporarily_missing"],
+        "lifecycle_long_absent": meta["lifecycle_long_absent"],
+        "lifecycle_fetch_failed": meta["lifecycle_fetch_failed"],
+        "lifecycle_recovered": meta["lifecycle_recovered"],
+        "lifecycle_reappeared": meta["lifecycle_reappeared"],
+        "lifecycle_attention_items": meta["lifecycle_attention_items"],
         "summary_file": paths["summary"].name,
         "details_file": paths["details"].name,
         "index_file": paths["index"].name,

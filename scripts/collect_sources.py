@@ -21,6 +21,25 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from item_lifecycle import (
+    DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD,
+    DEFAULT_LONG_ABSENCE_MIN_DAYS,
+    DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD,
+    DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
+    DEFAULT_MAX_LIFECYCLE_EVENTS,
+    ITEM_LIFECYCLE_STATE_FILE,
+    ITEM_VERSIONS_FILE,
+    LIFECYCLE_EVENTS_FILE,
+    LIFECYCLE_REPORT_FILE,
+    build_lifecycle_update_plan,
+    compare_semantic_versions,
+    load_jsonl as load_lifecycle_jsonl,
+    load_lifecycle_state,
+    now_iso as lifecycle_now_iso,
+    safe_positive_int,
+    write_lifecycle_transaction,
+)
+
 from parsers.common import (
     DETAIL_ERROR_TYPES,
     DETAIL_RENDERABLE_ERRORS,
@@ -54,7 +73,7 @@ ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json
 ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
 DETAIL_EXTRACTION_DIAGNOSTICS_FILE = PROJECT_ROOT / "data" / "detail_extraction_diagnostics.json"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
-USER_AGENT = "starlink-intel-weekly/phase4b (+official-source-monitoring)"
+USER_AGENT = "starlink-intel-weekly/phase4c (+official-source-monitoring)"
 COLLECTOR_NAME = "official_item_extraction_v2"
 PARSER_VERSION = COLLECTOR_NAME
 SUPPORTED_SOURCE_IDS = {"starlink_official_updates", "spacex_official_launches"}
@@ -141,6 +160,10 @@ class CollectResult:
     item_extraction_state: dict[str, Any] = field(default_factory=dict)
     item_extraction_report: dict[str, Any] = field(default_factory=dict)
     detail_extraction_diagnostics: dict[str, Any] = field(default_factory=dict)
+    lifecycle_state: dict[str, Any] = field(default_factory=dict)
+    lifecycle_report: dict[str, Any] = field(default_factory=dict)
+    lifecycle_events: list[dict[str, Any]] = field(default_factory=list)
+    lifecycle_versions: list[dict[str, Any]] = field(default_factory=list)
     baseline_count: int = 0
     new_count: int = 0
     changed_count: int = 0
@@ -152,6 +175,7 @@ class CollectResult:
     wrote_item_state: bool = False
     wrote_item_report: bool = False
     wrote_detail_diagnostics: bool = False
+    wrote_lifecycle: bool = False
 
     @property
     def page_change_status(self) -> str:
@@ -365,7 +389,7 @@ def write_item_extraction_state(state: dict[str, Any], path: Path = ITEM_EXTRACT
 
 def write_item_extraction_report(report: dict[str, Any], path: Path = ITEM_EXTRACTION_REPORT_FILE) -> None:
     report["version"] = 1
-    report["stage"] = "4B"
+    report["stage"] = "4C"
     report["generated_at"] = now_iso()
     write_json_atomic(path, report)
 
@@ -1340,6 +1364,8 @@ def extract_official_items(
 
     outcome.candidate_count_total = len(candidates)
     outcome.candidates = candidates[:max_source_items]
+    if outcome.candidate_count_total > len(outcome.candidates):
+        outcome.warnings.append("candidate_selection_truncated")
     existing_items = existing_items or {}
     parser = parse_starlink_update if source_id == "starlink_official_updates" else parse_spacex_launch
     session = _requests_session()
@@ -1657,7 +1683,7 @@ def apply_official_item_baseline_metadata(
                 new_date = item.get("published_at") or item.get("published_date_text")
                 semantic_changed = not title_compatible or bool(old_date and new_date and old_date != new_date)
             elif previous_semantic_hash:
-                semantic_changed = previous_semantic_hash != current_hash
+                semantic_changed = bool(compare_semantic_versions(existing, item)["semantic_changed"])
             elif existing.get("content_hash") and legacy_current_hash:
                 semantic_changed = existing.get("content_hash") != legacy_current_hash
             else:
@@ -1736,14 +1762,12 @@ def apply_official_item_baseline_metadata(
     return baseline_count, new_count, changed_count, unchanged_count
 
 
-def write_items_upsert(
+def merge_items_upsert(
     new_items: list[dict[str, Any]],
-    path: Path = ITEMS_FILE,
+    existing_items: list[dict[str, Any]],
     processed_source_ids: set[str] | None = None,
-) -> tuple[int, int, int, int, int]:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    existing_items = load_items(path)
-    by_id = {item.get("id"): item for item in existing_items if item.get("id")}
+) -> tuple[list[dict[str, Any]], int, int, int, int, int]:
+    by_id = {item.get("id"): deepcopy(item) for item in existing_items if item.get("id")}
 
     if processed_source_ids:
         for existing in by_id.values():
@@ -1769,13 +1793,39 @@ def write_items_upsert(
         key=lambda item: str(item.get("last_seen_at") or item.get("fetched_at") or ""),
         reverse=True,
     )
+    return ordered, baseline_count, new_count, changed_count, unchanged_count, len(ordered)
+
+
+def write_items_upsert(
+    new_items: list[dict[str, Any]],
+    path: Path = ITEMS_FILE,
+    processed_source_ids: set[str] | None = None,
+) -> tuple[int, int, int, int, int]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered, baseline_count, new_count, changed_count, unchanged_count, total = merge_items_upsert(
+        new_items,
+        load_items(path),
+        processed_source_ids,
+    )
     temporary = path.with_suffix(path.suffix + ".tmp")
     with temporary.open("w", encoding="utf-8", newline="\n") as file:
         for item in ordered:
             file.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
     os.replace(temporary, path)
 
-    return baseline_count, new_count, changed_count, unchanged_count, len(ordered)
+    return baseline_count, new_count, changed_count, unchanged_count, total
+
+
+def index_observation_is_complete(fetch: SourceFetch, outcome: OfficialExtractionOutcome | None) -> bool:
+    if not fetch.reachable or outcome is None:
+        return False
+    discovery_succeeded = outcome.static_candidate_count > 0 or outcome.render_fallback_status == "success"
+    candidates_not_truncated = outcome.candidate_count_total == len(outcome.candidates)
+    fatal_index_warning = any(
+        str(warning).startswith("index_render_") and str(warning) != "index_render_success"
+        for warning in outcome.warnings
+    )
+    return bool(discovery_succeeded and candidates_not_truncated and not fatal_index_warning)
 
 
 def dominant_value(values: list[str], rank: dict[str, int], default: str = "unknown") -> str:
@@ -1944,6 +1994,7 @@ def update_source_status(
         "page_level_fallback": outcome.page_level_fallback if outcome else True,
         "render_fallback_used": outcome.render_fallback_used if outcome else False,
         "render_fallback_status": outcome.render_fallback_status if outcome else "unknown",
+        "index_observation_complete": index_observation_is_complete(fetch, outcome),
         "bootstrap_completed": bool(bootstrap_completed),
         "error": fetch.error,
         "collector": COLLECTOR_NAME,
@@ -2021,6 +2072,7 @@ def collect_source(
             "page_level_fallback": True,
             "render_fallback_used": False,
             "render_fallback_status": "not_run",
+            "index_observation_complete": False,
             "dominant_extracted_level": "unknown",
             "dominant_source_quality": "unknown",
             "title_completeness": None,
@@ -2145,6 +2197,7 @@ def collect_source(
         "page_level_fallback": outcome.page_level_fallback,
         "render_fallback_used": outcome.render_fallback_used,
         "render_fallback_status": outcome.render_fallback_status,
+        "index_observation_complete": index_observation_is_complete(fetch, outcome),
         "dominant_extracted_level": quality["dominant_extracted_level"],
         "dominant_source_quality": quality["dominant_source_quality"],
         "title_completeness": quality["title_completeness"],
@@ -2215,6 +2268,12 @@ def collect_all_sources(
     detail_concurrency: int = 1,
     bootstrap_mode: str = "baseline",
     rebootstrap_source: str | None = None,
+    long_absence_observation_threshold: int = DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD,
+    long_absence_min_days: int = DEFAULT_LONG_ABSENCE_MIN_DAYS,
+    detail_failure_attention_threshold: int = DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD,
+    max_item_versions_per_record: int = DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
+    max_lifecycle_events: int = DEFAULT_MAX_LIFECYCLE_EVENTS,
+    lifecycle_dry_run: bool = False,
 ) -> CollectResult:
     try:
         sources = load_sources()
@@ -2234,12 +2293,16 @@ def collect_all_sources(
         print(message)
         return CollectResult(items=[], sources=[], errors=[message])
 
-    existing_items = {item.get("id"): item for item in load_items() if item.get("id")}
+    previous_items = load_items()
+    existing_items = {item.get("id"): deepcopy(item) for item in previous_items if item.get("id")}
     source_status = load_source_status()
     extraction_quality = load_extraction_quality()
     item_extraction_state = load_item_extraction_state()
     item_extraction_report = load_item_extraction_report()
     detail_extraction_diagnostics = load_detail_extraction_diagnostics()
+    lifecycle_state = load_lifecycle_state()
+    lifecycle_versions = load_lifecycle_jsonl(ITEM_VERSIONS_FILE)
+    lifecycle_events = load_lifecycle_jsonl(LIFECYCLE_EVENTS_FILE)
     detail_extraction_diagnostics["render_mode"] = detail_render_mode
     quality_sources = extraction_quality.setdefault("sources", {})
     all_items: list[dict[str, Any]] = []
@@ -2282,8 +2345,62 @@ def collect_all_sources(
             if fail_on_error:
                 break
 
+    observations = {
+        source_key: {
+            "index_observation_complete": bool(status.get("index_observation_complete")),
+            "reachable": bool(status.get("reachable")),
+            "checked_at": status.get("last_checked_at"),
+        }
+        for source_key, status in source_statuses.items()
+    }
+    complete_source_ids = {
+        source_key for source_key, observation in observations.items() if observation["index_observation_complete"]
+    }
+    merged_items, _baseline, _new, _changed, _unchanged, _total = merge_items_upsert(
+        all_items,
+        previous_items,
+        processed_source_ids=complete_source_ids,
+    )
+    observed_at = lifecycle_now_iso()
+    run_id = os.getenv("GITHUB_RUN_ID") or f"local-{compute_hash(observed_at)}"
+    lifecycle_plan = build_lifecycle_update_plan(
+        previous_items,
+        merged_items,
+        observations,
+        lifecycle_state=lifecycle_state,
+        existing_versions=lifecycle_versions,
+        existing_events=lifecycle_events,
+        run_id=run_id,
+        observed_at=observed_at,
+        long_absence_observation_threshold=long_absence_observation_threshold,
+        long_absence_min_days=long_absence_min_days,
+        detail_failure_attention_threshold=detail_failure_attention_threshold,
+        max_item_versions_per_record=max_item_versions_per_record,
+        max_lifecycle_events=max_lifecycle_events,
+    )
+    updated_by_id = {item.get("id"): item for item in lifecycle_plan.updated_items if item.get("id")}
+    current_items = [updated_by_id.get(item.get("id"), item) for item in all_items]
+    lifecycle_totals = lifecycle_plan.lifecycle_report.get("totals", {})
+
+    for source_key, status in source_statuses.items():
+        source_current = [
+            item
+            for item in current_items
+            if item.get("source_id") == source_key and item.get("record_scope") == "item"
+        ]
+        status["baseline_items"] = 0
+        status["new_items"] = sum(item.get("change_status") == "new" for item in source_current)
+        status["changed_items"] = sum(item.get("change_status") == "changed" for item in source_current)
+        status["unchanged_items"] = sum(item.get("change_status") == "unchanged" for item in source_current)
+        report_source = item_extraction_report.get("sources", {}).get(source_key, {})
+        if isinstance(report_source, dict):
+            report_source["baseline_items"] = 0
+            report_source["new_items"] = status["new_items"]
+            report_source["changed_items"] = status["changed_items"]
+            report_source["unchanged_items"] = status["unchanged_items"]
+
     result = CollectResult(
-        items=all_items,
+        items=current_items,
         sources=source_names,
         errors=errors,
         source_statuses=source_statuses,
@@ -2291,48 +2408,39 @@ def collect_all_sources(
         item_extraction_state=item_extraction_state,
         item_extraction_report=item_extraction_report,
         detail_extraction_diagnostics=detail_extraction_diagnostics,
+        lifecycle_state=lifecycle_plan.updated_lifecycle_state,
+        lifecycle_report=lifecycle_plan.lifecycle_report,
+        lifecycle_events=lifecycle_plan.new_lifecycle_events,
+        lifecycle_versions=lifecycle_plan.all_versions,
     )
-    result.baseline_count = sum(
-        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "baseline"
-    )
-    result.new_count = sum(
-        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "new"
-    )
-    result.changed_count = sum(
-        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "changed"
-    )
-    result.unchanged_count = sum(
-        1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "unchanged"
-    )
-    result.total_items = len(existing_items)
+    result.baseline_count = 0
+    result.new_count = int(lifecycle_totals.get("new") or 0)
+    result.changed_count = int(lifecycle_totals.get("changed") or 0)
+    result.unchanged_count = int(lifecycle_totals.get("unchanged") or 0)
+    result.total_items = len(lifecycle_plan.updated_items)
 
-    if dry_run:
+    if dry_run or lifecycle_dry_run:
         print(f"[dry-run] 本次解析 {len(all_items)} 条记录，不写入 {ITEMS_FILE}。")
         print(f"[dry-run] 不写入 {SOURCE_STATUS_FILE}。")
         print(f"[dry-run] 不写入 {EXTRACTION_QUALITY_FILE}。")
         print(f"[dry-run] 不写入 {ITEM_EXTRACTION_STATE_FILE}。")
         print(f"[dry-run] 不写入 {ITEM_EXTRACTION_REPORT_FILE}。")
         print(f"[dry-run] 不写入 {DETAIL_EXTRACTION_DIAGNOSTICS_FILE}。")
+        print(f"[dry-run] 不写入 {ITEM_LIFECYCLE_STATE_FILE}。")
+        print(f"[dry-run] 不写入 {ITEM_VERSIONS_FILE}。")
+        print(f"[dry-run] 不写入 {LIFECYCLE_EVENTS_FILE}。")
+        print(f"[dry-run] 不写入 {LIFECYCLE_REPORT_FILE}。")
         return result
 
-    if all_items:
-        baseline_count, new_count, changed_count, unchanged_count, total_items = write_items_upsert(
-            all_items,
-            processed_source_ids=set(source_statuses),
-        )
-        result.baseline_count = baseline_count
-        result.new_count = new_count
-        result.changed_count = changed_count
-        result.unchanged_count = unchanged_count
-        result.total_items = total_items
-        result.wrote_items = True
-        print(
-            f"{ITEMS_FILE} 已更新：baseline {baseline_count} 条，新增 {new_count} 条，"
-            f"变化 {changed_count} 条，未变化 {unchanged_count} 条，当前总计 {total_items} 条。"
-        )
-    else:
-        result.total_items = len(load_items())
-        print("本次未采集到有效条目，未更新 data/items.jsonl。")
+    write_lifecycle_transaction(lifecycle_plan)
+    result.wrote_items = True
+    result.wrote_lifecycle = True
+    print(
+        f"阶段 4C 事务已完成：baseline 0 条，新增 {result.new_count} 条，"
+        f"变化 {result.changed_count} 条，未变化 {result.unchanged_count} 条，"
+        f"生命周期事件 {lifecycle_totals.get('lifecycle_events', 0)} 条。"
+    )
+    print(f"{ITEM_LIFECYCLE_STATE_FILE}、{ITEM_VERSIONS_FILE}、{LIFECYCLE_EVENTS_FILE}、{LIFECYCLE_REPORT_FILE} 已更新。")
 
     write_source_status(source_status)
     result.wrote_status = True
@@ -2357,6 +2465,7 @@ def collect_all_sources(
 
 
 def main() -> int:
+    config_warnings: list[str] = []
     parser = argparse.ArgumentParser(description="采集官方来源页面并写入 JSONL。")
     parser.add_argument("--source-id", help="只采集指定来源。")
     parser.add_argument(
@@ -2385,6 +2494,57 @@ def main() -> int:
     parser.add_argument("--bootstrap-mode", choices=["baseline"], default="baseline")
     parser.add_argument("--rebootstrap-source", choices=sorted(SUPPORTED_SOURCE_IDS))
     parser.add_argument(
+        "--long-absence-observation-threshold",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("LONG_ABSENCE_OBSERVATION_THRESHOLD"),
+            DEFAULT_LONG_ABSENCE_OBSERVATION_THRESHOLD,
+            "LONG_ABSENCE_OBSERVATION_THRESHOLD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--long-absence-min-days",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("LONG_ABSENCE_MIN_DAYS"),
+            DEFAULT_LONG_ABSENCE_MIN_DAYS,
+            "LONG_ABSENCE_MIN_DAYS",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--detail-failure-attention-threshold",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("DETAIL_FAILURE_ATTENTION_THRESHOLD"),
+            DEFAULT_DETAIL_FAILURE_ATTENTION_THRESHOLD,
+            "DETAIL_FAILURE_ATTENTION_THRESHOLD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--max-item-versions-per-record",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("MAX_ITEM_VERSIONS_PER_RECORD"),
+            DEFAULT_MAX_ITEM_VERSIONS_PER_RECORD,
+            "MAX_ITEM_VERSIONS_PER_RECORD",
+            config_warnings,
+        ),
+    )
+    parser.add_argument(
+        "--max-lifecycle-events",
+        type=int,
+        default=safe_positive_int(
+            os.getenv("MAX_LIFECYCLE_EVENTS"),
+            DEFAULT_MAX_LIFECYCLE_EVENTS,
+            "MAX_LIFECYCLE_EVENTS",
+            config_warnings,
+        ),
+    )
+    parser.add_argument("--lifecycle-dry-run", action="store_true", help="构建生命周期更新计划但不写文件。")
+    parser.add_argument(
         "--dry-run",
         "--no-write",
         dest="dry_run",
@@ -2394,6 +2554,9 @@ def main() -> int:
     parser.add_argument("--save-raw", action="store_true", help="保存原始 HTML 到 data/raw/，该目录不提交。")
     parser.add_argument("--fail-on-error", action="store_true", help="任一来源采集失败时返回非 0。")
     args = parser.parse_args()
+
+    for warning in config_warnings:
+        print(f"warning: {warning}")
 
     if args.limit < 1:
         print("--limit 必须是大于等于 1 的整数。")
@@ -2406,6 +2569,15 @@ def main() -> int:
         return 2
     if args.detail_concurrency < 1:
         print("--detail-concurrency 必须大于等于 1；阶段 4B 当前按顺序执行。")
+        return 2
+    if min(
+        args.long_absence_observation_threshold,
+        args.long_absence_min_days,
+        args.detail_failure_attention_threshold,
+        args.max_item_versions_per_record,
+        args.max_lifecycle_events,
+    ) < 1:
+        print("生命周期阈值必须是大于等于 1 的整数。")
         return 2
 
     result = collect_all_sources(
@@ -2423,6 +2595,12 @@ def main() -> int:
         detail_concurrency=args.detail_concurrency,
         bootstrap_mode=args.bootstrap_mode,
         rebootstrap_source=args.rebootstrap_source,
+        long_absence_observation_threshold=args.long_absence_observation_threshold,
+        long_absence_min_days=args.long_absence_min_days,
+        detail_failure_attention_threshold=args.detail_failure_attention_threshold,
+        max_item_versions_per_record=args.max_item_versions_per_record,
+        max_lifecycle_events=args.max_lifecycle_events,
+        lifecycle_dry_run=args.lifecycle_dry_run,
     )
 
     print(

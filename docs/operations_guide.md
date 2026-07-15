@@ -1,5 +1,21 @@
 # Starlink 情报周报自动化运维指南
 
+## 18. 阶段 4C 生命周期运维
+
+日常诊断使用只读命令：
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED="1"
+$env:LLM_ENABLED="false"
+python scripts/diagnose_item_lifecycle.py --all --json --no-write
+```
+
+`change_status`、`extraction_change_status` 与 `lifecycle_state` 是三条独立轴。new 仅表示本轮首次发现；extraction improved 仅表示字段或证据更完整；`temporarily_missing`/`long_absent` 不代表删除；`fetch_failed` 不代表官方故障；`detail_fetch_recovered` 不代表官方服务恢复；`reappeared` 不代表重新发布。
+
+missing 只在来源索引可达且候选发现完整时累计。候选因 `MAX_SOURCE_ITEMS` 截断、索引渲染失败或索引请求失败时，不得人工递增 missing。连续缺失默认同时满足 4 次与 14 天才进入 `long_absent`。连续详情失败达到 3 次会设置 attention，但主流程继续运行并保留最近一次成功数据。
+
+版本历史每条默认保留 20 个结构化快照，事件历史默认保留 1000 条；event/version ID 去重，unchanged 不追加版本。字段级变化证据仅保留有限 before/after excerpt，不保存完整 HTML。调整阈值后先运行全量离线测试、`check_outputs.py --strict` 和 `audit_project.py --strict`。
+
 本指南用于阶段 2G 稳定版的日常维护。当前系统只处理两个官方来源的规则化采集与周报输出，不做大模型总结，不新增来源，不编造事实。
 
 ## 1. 每周自动运行机制

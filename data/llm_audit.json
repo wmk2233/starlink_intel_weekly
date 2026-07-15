@@ -1,6 +1,6 @@
 {
   "allowed_reference_pair_count": 4,
-  "api_called": true,
+  "api_called": false,
   "base_url_label": "deepseek_default",
   "dedup_strategy": "source_id+normalized_url_latest_record",
   "duplicate_records_removed": 2,
@@ -8,7 +8,7 @@
   "errors": [],
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T08:29:10+00:00",
+  "generated_at": "2026-07-15T17:32:39+08:00",
   "guardrails": {
     "monitoring_context_model_generated": false,
     "no_external_knowledge": true,
@@ -24,9 +24,9 @@
   "invalid_record_ids_removed": 0,
   "invalid_urls_removed": 0,
   "key_points_removed_without_sources": 0,
-  "llm_enabled": true,
+  "llm_enabled": false,
   "llm_provider": "deepseek",
-  "llm_status": "generated",
+  "llm_status": "skipped",
   "mismatched_reference_pairs_removed": 0,
   "missing_record_ids_repaired": 0,
   "missing_urls_repaired": 0,
@@ -59,24 +59,24 @@
       "unchanged_items": 4
     }
   ],
-  "output_record_references_after_dedup": 4,
-  "output_record_references_before_dedup": 4,
-  "output_url_references_after_dedup": 4,
-  "output_url_references_before_dedup": 4,
+  "output_record_references_after_dedup": 0,
+  "output_record_references_before_dedup": 0,
+  "output_url_references_after_dedup": 0,
+  "output_url_references_before_dedup": 0,
   "raw_candidate_records": 9,
-  "reason": "LLM summary generated and validated.",
+  "reason": "LLM is disabled.",
   "records_after_url_dedup": 7,
-  "reference_alignment_status": "passed",
-  "reused_historical_records": 0,
+  "reference_alignment_status": "not_run",
+  "reused_historical_records": 1,
   "source_based_notes_removed": 0,
-  "summary_generated": true,
+  "summary_generated": false,
   "unique_source_urls": 7,
   "usage": {
-    "completion_tokens": 886,
-    "latency_ms": 10795.5,
-    "prompt_tokens": 3194,
-    "total_tokens": 4080
+    "completion_tokens": null,
+    "latency_ms": null,
+    "prompt_tokens": null,
+    "total_tokens": null
   },
-  "validation_status": "passed",
+  "validation_status": "skipped",
   "warnings": []
 }

@@ -68,26 +68,32 @@ jobs:
           DETAIL_WAIT_MS: ${{ vars.DETAIL_WAIT_MS || '1500' }}
           DETAIL_MAX_SCROLLS: ${{ vars.DETAIL_MAX_SCROLLS || '3' }}
           DETAIL_CONCURRENCY: ${{ vars.DETAIL_CONCURRENCY || '1' }}
+          LONG_ABSENCE_OBSERVATION_THRESHOLD: ${{ vars.LONG_ABSENCE_OBSERVATION_THRESHOLD || '4' }}
+          LONG_ABSENCE_MIN_DAYS: ${{ vars.LONG_ABSENCE_MIN_DAYS || '14' }}
+          DETAIL_FAILURE_ATTENTION_THRESHOLD: ${{ vars.DETAIL_FAILURE_ATTENTION_THRESHOLD || '3' }}
+          MAX_ITEM_VERSIONS_PER_RECORD: ${{ vars.MAX_ITEM_VERSIONS_PER_RECORD || '20' }}
+          MAX_LIFECYCLE_EVENTS: ${{ vars.MAX_LIFECYCLE_EVENTS || '1000' }}
         run: |
           llm_provider="${LLM_PROVIDER:-deepseek}"
           detail_args="--detail-render-mode ${DETAIL_RENDER_MODE} --max-rendered-details-per-source ${MAX_RENDERED_DETAILS_PER_SOURCE} --detail-timeout-ms ${DETAIL_TIMEOUT_MS} --detail-wait-ms ${DETAIL_WAIT_MS} --detail-max-scrolls ${DETAIL_MAX_SCROLLS} --detail-concurrency ${DETAIL_CONCURRENCY}"
+          lifecycle_args="--long-absence-observation-threshold ${LONG_ABSENCE_OBSERVATION_THRESHOLD} --long-absence-min-days ${LONG_ABSENCE_MIN_DAYS} --detail-failure-attention-threshold ${DETAIL_FAILURE_ATTENTION_THRESHOLD} --max-item-versions-per-record ${MAX_ITEM_VERSIONS_PER_RECORD} --max-lifecycle-events ${MAX_LIFECYCLE_EVENTS}"
           if [ "${LLM_ENABLED}" = "true" ]; then
             if [ "${llm_provider}" = "deepseek" ]; then
               if [ -z "${DEEPSEEK_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 DEEPSEEK_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider deepseek ${detail_args}
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider deepseek ${detail_args} ${lifecycle_args}
             elif [ "${llm_provider}" = "openai" ]; then
               if [ -z "${OPENAI_API_KEY}" ]; then
                 echo "::warning::LLM 已启用，但 OPENAI_API_KEY 未配置；本次将记录 skipped_no_api_key。"
               fi
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider openai ${detail_args}
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider openai ${detail_args} ${lifecycle_args}
             else
               echo "::warning::LLM_PROVIDER 无效；本次将记录 skipped_invalid_provider。"
-              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider "${llm_provider}" ${detail_args}
+              python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 --enable-llm --llm-provider "${llm_provider}" ${detail_args} ${lifecycle_args}
             fi
           else
-            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 ${detail_args}
+            python scripts/run_weekly.py --output-mode dual --max-source-items 10 --max-history-records 20 --max-llm-usage-records 200 ${detail_args} ${lifecycle_args}
           fi
 
       - name: Check weekly outputs
@@ -104,7 +110,7 @@ jobs:
         run: |
           git config user.name "starlink-intel-bot"
           git config user.email "starlink-intel-bot@example.com"
-          git add README.md RELEASE_NOTES.md .gitignore .github scripts tests docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/item_extraction_state.json data/item_extraction_report.json data/detail_extraction_diagnostics.json data/weekly_manifest.json data/run_history.jsonl data/llm_audit.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
+          git add README.md RELEASE_NOTES.md .gitignore .github scripts tests docs weekly data/items.jsonl data/source_status.json data/extraction_quality.json data/item_extraction_state.json data/item_extraction_report.json data/detail_extraction_diagnostics.json data/item_lifecycle_state.json data/item_versions.jsonl data/lifecycle_events.jsonl data/lifecycle_report.json data/weekly_manifest.json data/run_history.jsonl data/llm_audit.json outputs/logs/.gitkeep sources.yml requirements.txt .env.example
           if [ -f data/llm_summaries.json ]; then
             git add data/llm_summaries.json
           fi
@@ -112,7 +118,7 @@ jobs:
             git add data/llm_usage.jsonl
           fi
           if git diff --cached --quiet; then
-            echo "阶段 4B 自动化输出没有变化，跳过提交。"
+            echo "阶段 4C 自动化输出没有变化，跳过提交。"
           else
             git commit -m "chore: update weekly Starlink automation output"
             git push origin main

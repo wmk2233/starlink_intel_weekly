@@ -19,6 +19,10 @@ RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 LLM_AUDIT_FILE = PROJECT_ROOT / "data" / "llm_audit.json"
 LLM_SUMMARY_FILE = PROJECT_ROOT / "data" / "llm_summaries.json"
 LLM_USAGE_FILE = PROJECT_ROOT / "data" / "llm_usage.jsonl"
+ITEM_LIFECYCLE_STATE_FILE = PROJECT_ROOT / "data" / "item_lifecycle_state.json"
+ITEM_VERSIONS_FILE = PROJECT_ROOT / "data" / "item_versions.jsonl"
+LIFECYCLE_EVENTS_FILE = PROJECT_ROOT / "data" / "lifecycle_events.jsonl"
+LIFECYCLE_REPORT_FILE = PROJECT_ROOT / "data" / "lifecycle_report.json"
 
 
 def _yes_no(value: bool) -> str:
@@ -112,6 +116,16 @@ def _item_extraction_report() -> dict[str, dict[str, object]]:
     return sources if isinstance(sources, dict) else {}
 
 
+def _lifecycle_report() -> dict[str, object]:
+    if not LIFECYCLE_REPORT_FILE.exists():
+        return {}
+    try:
+        data = json.loads(LIFECYCLE_REPORT_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _week_id() -> str:
     now = datetime.now().astimezone()
     iso = now.isocalendar()
@@ -127,13 +141,42 @@ def main() -> int:
     project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
     llm_audit = _llm_audit()
     item_reports = _item_extraction_report()
+    lifecycle_report = _lifecycle_report()
+    lifecycle_sources = lifecycle_report.get("sources", {}) if isinstance(lifecycle_report, dict) else {}
+    lifecycle_sources = lifecycle_sources if isinstance(lifecycle_sources, dict) else {}
+    lifecycle_totals = lifecycle_report.get("totals", {}) if isinstance(lifecycle_report, dict) else {}
+    lifecycle_totals = lifecycle_totals if isinstance(lifecycle_totals, dict) else {}
+    lifecycle_rows = []
+    for source_id, source in lifecycle_sources.items():
+        source = source if isinstance(source, dict) else {}
+        lifecycle_rows.append(
+            "| "
+            + " | ".join(
+                [
+                    _escape_table_cell(source.get("source_name") or source_id),
+                    _escape_table_cell(source.get("active", 0)),
+                    _escape_table_cell(source.get("new", 0)),
+                    _escape_table_cell(source.get("changed", 0)),
+                    _escape_table_cell(source.get("extraction_improved", 0)),
+                    _escape_table_cell(source.get("temporarily_missing", 0)),
+                    _escape_table_cell(source.get("long_absent", 0)),
+                    _escape_table_cell(source.get("fetch_failed", 0)),
+                    _escape_table_cell(source.get("recovered", 0)),
+                    _escape_table_cell(source.get("reappeared", 0)),
+                    _escape_table_cell(source.get("attention", 0)),
+                ]
+            )
+            + " |"
+        )
+    if not lifecycle_rows:
+        lifecycle_rows.append("| unknown | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |")
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     week_id = _week_id()
 
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：4B.1",
+        "- 阶段：4C",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -148,6 +191,10 @@ def main() -> int:
         "- item_extraction_report.json 路径：data/item_extraction_report.json",
         "- detail_extraction_diagnostics.json 路径：data/detail_extraction_diagnostics.json",
         "- llm_audit.json 路径：data/llm_audit.json",
+        "- item_lifecycle_state.json 路径：data/item_lifecycle_state.json",
+        "- item_versions.jsonl 路径：data/item_versions.jsonl",
+        "- lifecycle_events.jsonl 路径：data/lifecycle_events.jsonl",
+        "- lifecycle_report.json 路径：data/lifecycle_report.json",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
         f"- source_status.json 是否存在：{_yes_no(status_exists)}",
@@ -159,8 +206,22 @@ def main() -> int:
         f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
         f"- llm_audit.json 是否存在：{_yes_no(LLM_AUDIT_FILE.exists())}",
         f"- llm_usage.jsonl 是否存在：{_yes_no(LLM_USAGE_FILE.exists())}",
+        f"- item_lifecycle_state.json 是否存在：{_yes_no(ITEM_LIFECYCLE_STATE_FILE.exists())}",
+        f"- item_versions.jsonl 是否存在：{_yes_no(ITEM_VERSIONS_FILE.exists())}",
+        f"- lifecycle_events.jsonl 是否存在：{_yes_no(LIFECYCLE_EVENTS_FILE.exists())}",
+        f"- lifecycle_report.json 是否存在：{_yes_no(LIFECYCLE_REPORT_FILE.exists())}",
         f"- Gitee 同步是否配置：{_yes_no(gitee_configured)}",
         f"- Gitee 同步状态：{gitee_sync_status}",
+        "",
+        "### 条目生命周期",
+        "",
+        "| 来源 | Active | New | Changed | Improved | Temporarily Missing | Long Absent | Fetch Failed | Recovered | Reappeared | Attention |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        *lifecycle_rows,
+        "",
+        f"- Semantic versions：{_escape_table_cell(lifecycle_totals.get('new_semantic_versions', 0))}",
+        f"- Extraction revisions：{_escape_table_cell(lifecycle_totals.get('new_extraction_revisions', 0))}",
+        f"- Lifecycle events：{_escape_table_cell(lifecycle_totals.get('lifecycle_events', 0))}",
         "",
         "### 官方条目抽取",
         "",

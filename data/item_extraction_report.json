@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T08:28:59+00:00",
+  "generated_at": "2026-07-15T17:29:14+08:00",
   "sources": {
     "spacex_official_launches": {
       "baseline_items": 0,
@@ -7,7 +7,7 @@
       "candidate_count": 1,
       "candidate_count_total": 1,
       "changed_items": 0,
-      "checked_at": "2026-07-15T08:28:43+00:00",
+      "checked_at": "2026-07-15T17:28:51+08:00",
       "date_completeness": 0.0,
       "detail_fetch_failed": 0,
       "detail_fetch_success": 1,
@@ -20,6 +20,7 @@
       "final_detail_failed": 0,
       "final_detail_success": 1,
       "final_success_rate": 1.0,
+      "index_observation_complete": true,
       "index_url": "https://www.spacex.com/launches",
       "item_level_items": 1,
       "new_items": 0,
@@ -50,19 +51,22 @@
       "candidate_count": 4,
       "candidate_count_total": 4,
       "changed_items": 0,
-      "checked_at": "2026-07-15T08:28:11+00:00",
+      "checked_at": "2026-07-15T17:27:33+08:00",
       "date_completeness": 0.0,
-      "detail_fetch_failed": 0,
-      "detail_fetch_success": 4,
+      "detail_fetch_failed": 1,
+      "detail_fetch_success": 3,
       "dominant_detail_parse_method": "rendered",
       "dominant_extracted_level": "item_level",
       "dominant_source_quality": "medium",
       "evidence_completeness": 1.0,
-      "failure_types": {},
+      "failure_types": {
+        "render_timeout": 1
+      },
       "field_evidence_completeness": 1.0,
-      "final_detail_failed": 0,
-      "final_detail_success": 4,
-      "final_success_rate": 1.0,
+      "final_detail_failed": 1,
+      "final_detail_success": 3,
+      "final_success_rate": 0.75,
+      "index_observation_complete": true,
       "index_url": "https://www.starlink.com/updates",
       "item_level_items": 4,
       "new_items": 0,
@@ -76,8 +80,8 @@
       "render_fallback_used": true,
       "rendered_candidate_count": 4,
       "rendered_detail_attempted": 4,
-      "rendered_detail_success": 4,
-      "reused_previous_success": 0,
+      "rendered_detail_success": 3,
+      "reused_previous_success": 1,
       "selected_candidate_count": 4,
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
@@ -85,9 +89,11 @@
       "static_detail_success": 0,
       "title_completeness": 1.0,
       "unchanged_items": 4,
-      "warnings": []
+      "warnings": [
+        "detail_failure:render_timeout"
+      ]
     }
   },
-  "stage": "4B",
+  "stage": "4C",
   "version": 1
 }

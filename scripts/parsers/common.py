@@ -16,6 +16,14 @@ try:
 except ImportError:  # pragma: no cover - package import in tests
     from scripts.llm_summarize import normalize_source_url
 
+try:
+    from item_lifecycle import extraction_content_hash, semantic_content_hash as lifecycle_semantic_content_hash
+except ImportError:  # pragma: no cover - package import in tests
+    from scripts.item_lifecycle import (
+        extraction_content_hash,
+        semantic_content_hash as lifecycle_semantic_content_hash,
+    )
+
 
 SOURCE_RULES = {
     "starlink_official_updates": ("starlink.com", "/updates/"),
@@ -173,31 +181,11 @@ def _hash_payload(fields: dict[str, Any]) -> str:
 
 
 def semantic_content_hash(item: dict[str, Any]) -> str:
-    fields = {
-        "title": item.get("title"),
-        "published_at": item.get("published_at"),
-        "published_date_text": item.get("published_date_text"),
-        "modified_at": item.get("modified_at"),
-        "modified_date_text": item.get("modified_date_text"),
-        "summary": item.get("summary"),
-        "evidence": item.get("evidence"),
-        "structured_fields": item.get("structured_fields") or {},
-        "starlink_relevance": item.get("starlink_relevance"),
-    }
-    return _hash_payload(fields)
+    return lifecycle_semantic_content_hash(item)
 
 
 def extraction_hash(item: dict[str, Any]) -> str:
-    return _hash_payload(
-        {
-            "parser_version": item.get("parser_version"),
-            "field_evidence": item.get("field_evidence") or {},
-            "extraction_warnings": item.get("extraction_warnings") or [],
-            "source_quality": item.get("source_quality"),
-            "extraction_confidence": item.get("extraction_confidence"),
-            "detail_parse_method": item.get("detail_parse_method"),
-        }
-    )
+    return extraction_content_hash(item)
 
 
 def detail_page_hash(html: str) -> str | None:

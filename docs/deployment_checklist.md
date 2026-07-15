@@ -1,5 +1,15 @@
 # Starlink 情报周报自动化部署检查清单
 
+## 18. 阶段 4C 生命周期部署清单
+
+- [ ] 确认 `data/item_lifecycle_state.json` 的 `phase4c_initialized=true` 且初始化只发生一次。
+- [ ] 确认已有 item 未被标为 new、changed 或重新 baseline。
+- [ ] 确认 `data/item_versions.jsonl` 与 `data/lifecycle_events.jsonl` 的 ID 唯一，`data/lifecycle_report.json` 与 state 的 `run_id` 一致。
+- [ ] 在 GitHub Variables 中按需配置 `LONG_ABSENCE_OBSERVATION_THRESHOLD=4`、`LONG_ABSENCE_MIN_DAYS=14`、`DETAIL_FAILURE_ATTENTION_THRESHOLD=3`、`MAX_ITEM_VERSIONS_PER_RECORD=20`、`MAX_LIFECYCLE_EVENTS=1000`；这些不是 Secret。
+- [ ] 先以 `LLM_ENABLED=false` 验证生命周期、双文档、邮件、自动提交和非阻塞 Gitee 同步。
+- [ ] 再以 `LLM_ENABLED=true` 验证 new 不等于本周发布、extraction improved 不等于内容变化、missing 不代表删除、recovery 不代表官方服务恢复、reappeared 不代表重新发布。
+- [ ] 确认只接入 `sources.yml` 中两个官方来源，Chromium 安装仍为单浏览器，未保存完整 HTML、截图、HAR、视频或 trace。
+
 本清单用于阶段 3C 部署前复查。当前系统仍只使用两个官方来源，可选 LLM 摘要默认关闭；本阶段不新增来源，不编造 Starlink 或 SpaceX 事实。
 
 ## 1. 部署目标

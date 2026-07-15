@@ -1,5 +1,15 @@
 # Release Notes
 
+## v0.4C：增量变化与条目生命周期
+
+- 新增 `active / temporarily_missing / fetch_failed / long_absent` 当前状态，以及 new、semantic changed、extraction improved、missing、failure、recovery、reappeared 的确定性事件。
+- 对既有 item-level 记录执行一次性幂等迁移，不产生 new、changed 或新 baseline；page-level 记录不迁移。
+- 新增结构化版本历史、有限字段级变化证据、event/version 稳定 ID 去重和五文件事务化替换。
+- missing 仅在完整索引观测后递增；索引失败不改变 missing。`temporarily_missing` 与 `long_absent` 不代表删除。
+- 详情失败保留历史成功数据；`detail_fetch_recovered` 仅表示采集链路恢复，不代表官方服务恢复；`reappeared` 不代表重新发布。
+- 周报、邮件和 GitHub Actions Summary 增加生命周期统计；LLM 增加严格语义约束，默认仍关闭。
+- 未新增来源，未保存完整 HTML、DOM、截图、HAR、视频或 trace。
+
 ## v0.4B.1：LLM 核心引用对齐
 
 - 模型输入仅保留 `final_core_records` 与逐字匹配的 `allowed_reference_pairs`；

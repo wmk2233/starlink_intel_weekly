@@ -1,5 +1,14 @@
 # 官方页面解析侦察记录
 
+## 2026-07-15 阶段 4C 生命周期观察边界
+
+- 两个现有官方索引继续沿用 Phase 4A/4B 的 stable ID、canonical URL、静态解析和受控 Playwright fallback，不新增来源。
+- 索引观测只有在请求成功、候选解析成功、没有 fatal error 且候选未截断时才视为完整；否则不产生 missing。
+- semantic payload 仅包含官方正文事实字段，parser version、quality、confidence、method、采集时间和页面 hash 不进入 semantic hash。
+- null 到非空、field evidence 增长和 parser enrichment 归为 extraction improved；已有非空事实变为不同事实才进入 semantic changed，并保存有限字段级变化证据。
+- `temporarily_missing` 与 `long_absent` 不代表删除，详情 fetch_failed 不代表官方故障，采集 recovery 不代表官方服务恢复，reappeared 不代表重新发布。
+- 历史文件不保存完整 HTML、DOM、截图、HAR、视频或 trace。
+
 ## 范围与边界
 
 本记录只针对 `sources.yml` 中两个既有官方索引页，不使用搜索引擎、第三方发射日程网站或外部事实。诊断不保存完整 HTML、截图、视频、HAR、Cookie 或 Secrets。

@@ -78,6 +78,12 @@ ALLOWED_ITEM_FIELDS = [
     "summary",
     "evidence",
     "change_status",
+    "extraction_change_status",
+    "lifecycle_state",
+    "current_run_data_reused",
+    "lifecycle_events_this_run",
+    "semantic_change_evidence",
+    "attention_required",
     "extracted_level",
     "source_quality",
     "extraction_confidence",
@@ -352,6 +358,10 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     normalized["candidate_links"] = normalize_candidate_links(normalized.get("candidate_links"))
     if not isinstance(normalized.get("matched_keywords"), list):
         normalized["matched_keywords"] = []
+    if not isinstance(normalized.get("lifecycle_events_this_run"), list):
+        normalized["lifecycle_events_this_run"] = []
+    if not isinstance(normalized.get("semantic_change_evidence"), dict):
+        normalized["semantic_change_evidence"] = {}
     return normalized
 
 
@@ -383,15 +393,22 @@ def select_items(
             return 0
         if item_status == "changed":
             return 1
-        if item_status == "baseline":
+        lifecycle_events = set(str(value) for value in item.get("lifecycle_events_this_run", []) if value)
+        if "detail_fetch_recovered" in lifecycle_events:
             return 2
+        if "reappeared" in lifecycle_events:
+            return 3
+        if item.get("attention_required") is True:
+            return 4
+        if item_status == "baseline":
+            return 5
         source_id = str(item.get("source_id") or "")
         page_status = source_statuses.get(source_id, {}) if isinstance(source_statuses, dict) else {}
         if item_status == "unchanged" and str(page_status.get("change_status") or "").lower() == "changed":
-            return 3
+            return 6
         if item_status == "unchanged":
-            return 4
-        return 5
+            return 7
+        return 8
 
     sorted_items = sorted(
         preferred,
@@ -690,11 +707,20 @@ def system_prompt() -> str:
         "不得编造发射时间、任务状态、载荷数量、技术细节、商业服务状态。\n"
         "页面可达性、页面 hash、页面变化状态和条目计数由代码确定性生成，不属于你的输出范围。\n"
         "不得生成 source_based_notes，也不得引用索引页或 monitoring context URL。\n"
-        "baseline 表示首次成功条目抽取形成的历史基线，不是本周新增，禁止写成 new 或本周新事件。\n"
+        "baseline 只用于兼容旧阶段；已有历史记录且本轮无变化时，禁止写成本周新增。\n"
         "同一来源存在 item_level 时，应以条目级记录为核心，不得把 page_level 当作核心事实。\n"
         "SpaceX 条目只有 starlink_relevance=direct 时才能进入 Starlink 核心结论。\n"
         "如果 current_run_data_reused=true，本轮未重新确认详情正文。只能说明该记录来自最近一次成功解析，"
         "不得描述为本轮新确认内容。\n"
+        "change_status=new 表示系统本轮首次发现该 URL，不一定表示官方本周发布；只有输入中存在明确官方发布日期证据时才能写本周发布。\n"
+        "change_status=changed 仅表示本轮检测到结构化官方内容变化。\n"
+        "extraction_change_status=improved 只表示解析完整度提升，不代表官方事实变化，也不得写成内容更新。\n"
+        "lifecycle_state=temporarily_missing 表示成功解析索引时未发现历史条目，不代表官方删除。\n"
+        "lifecycle_state=long_absent 表示连续多次未在索引中发现，不代表官方删除或下线。\n"
+        "detail_fetch_failed 表示采集器未成功解析详情，不代表官方页面或业务故障。\n"
+        "detail_fetch_recovered 表示采集链路恢复，不代表官方服务恢复。\n"
+        "reappeared 表示历史条目重新出现在索引中，不代表重新发布。\n"
+        "不得将 parser enrichment 或字段补全描述为官方内容更新。\n"
         "如果没有 new 或 changed 条目，必须明确写“本周未检测到新增或内容变化条目”。\n"
         "每个 key point 必须逐字使用 allowed_reference_pairs 中属于同一记录的 record_id 和 canonical_url。\n"
         "不得使用相对 URL、改写 URL、索引页 URL 或外部 URL。\n"
@@ -750,6 +776,12 @@ def build_user_prompt(
             "item_level_preferred": True,
             "spacex_core_requires_direct_starlink_relevance": True,
             "reused_history_is_not_current_confirmation": True,
+            "new_is_first_observed_not_weekly_publication": True,
+            "semantic_change_is_distinct_from_extraction_improvement": True,
+            "missing_is_not_deletion": True,
+            "fetch_failure_is_not_official_failure": True,
+            "collector_recovery_is_not_service_recovery": True,
+            "reappeared_is_not_republication": True,
             "monitoring_context_is_not_model_input": True,
         },
         "allowed_reference_pairs": allowed_pairs,
@@ -1048,6 +1080,38 @@ def validate_llm_output(raw_text: str, input_records: list[dict[str, Any]]) -> t
         for phrase in FACT_EXPANSION_PHRASES:
             if phrase in generated_text:
                 errors.append(f"page_level / low 记录疑似被扩展成事实：{phrase}")
+
+    new_without_date = any(
+        str(item.get("change_status") or "").lower() == "new" and not item.get("published_at")
+        for item in input_records
+    )
+    if new_without_date and any(phrase in generated_text for phrase in ["本周发布", "本周首次发布"]):
+        errors.append("new 条目缺少明确发布日期证据，不得描述为本周发布。")
+    improved_only = any(
+        str(item.get("extraction_change_status") or "").lower() == "improved"
+        and str(item.get("change_status") or "").lower() != "changed"
+        for item in input_records
+    )
+    if improved_only and any(phrase in generated_text for phrase in ["官方内容更新", "内容发生更新"]):
+        errors.append("解析质量提升不得描述为官方内容更新。")
+    if any(str(item.get("lifecycle_state") or "") in {"temporarily_missing", "long_absent"} for item in input_records):
+        if any(phrase in generated_text for phrase in ["官方删除", "已经删除", "已经下线"]):
+            errors.append("暂时消失或长期未见不得描述为官方删除或下线。")
+    all_events = {
+        str(event)
+        for item in input_records
+        for event in item.get("lifecycle_events_this_run", [])
+        if event
+    }
+    if "detail_fetch_failed" in all_events and any(phrase in generated_text for phrase in ["官方故障", "服务故障"]):
+        errors.append("详情抓取失败不得描述为官方或业务故障。")
+    if "detail_fetch_recovered" in all_events and any(phrase in generated_text for phrase in ["服务已恢复", "官方服务恢复"]):
+        errors.append("采集恢复不得描述为官方服务恢复。")
+    if "reappeared" in all_events and "重新发布" in generated_text:
+        errors.append("重新出现不得描述为官方重新发布。")
+    if any(item.get("current_run_data_reused") is True for item in input_records):
+        if any(phrase in generated_text for phrase in ["本轮重新确认", "本轮确认"]):
+            errors.append("复用历史成功记录不得描述为本轮重新确认。")
 
     return not errors, summary, errors, warnings
 

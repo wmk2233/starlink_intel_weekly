@@ -1,5 +1,39 @@
 # Starlink 情报周报自动化项目
 
+## 阶段 4C：增量变化与条目生命周期
+
+阶段 4C 在既有两个官方来源、stable record ID 和详情失败复用机制之上，增加确定性的 item-level 生命周期管理，不新增正式来源，也不使用 LLM 判断变化。
+
+三个状态轴彼此独立：
+
+- `change_status`：`new` 表示系统本轮首次发现 source ID 与 canonical URL 的稳定组合，不自动等于官方本周发布；`changed` 只表示已有非空事实字段发生可确认的语义变化。
+- `extraction_change_status`：`improved`（extraction improved）表示空字段补全、field evidence 增加、parser 能力变化或解析质量提升，不代表官方事实变化；`degraded` 和 `failed` 也只描述采集质量。
+- `lifecycle_state`：`active`、`temporarily_missing`、`fetch_failed`、`long_absent` 描述采集器当前观测。`temporarily_missing` 和 `long_absent` 不代表删除，`fetch_failed` 不代表官方故障。
+
+只有索引请求成功、静态或 Playwright 候选发现成功、没有 fatal error 且候选集合未因上限截断时，系统才允许递增 missing。详情失败会保留最近一次成功的 title、summary、evidence 和 semantic hash；后续 `detail_fetch_recovered` 只表示采集链路恢复，不代表官方服务恢复。`reappeared` 只表示历史条目重新出现在索引中，不代表重新发布。
+
+首次升级会对已有 item-level 记录执行幂等迁移：设为 `active`、建立 semantic version 1 / extraction revision 1、写入 `initial_snapshot` 和内部 `lifecycle_initialized` 事件，但不会产生 `new`、`changed` 或新的 baseline。page-level 记录不参与生命周期。
+
+新增数据文件：
+
+| 文件 | 用途 |
+|---|---|
+| `data/item_lifecycle_state.json` | 当前生命周期、连续缺失/失败计数和 attention 状态 |
+| `data/item_versions.jsonl` | 限长、去重的结构化版本历史 |
+| `data/lifecycle_events.jsonl` | 限长、去重的确定性生命周期事件 |
+| `data/lifecycle_report.json` | 本轮来源统计、事件和版本增量 |
+
+语义比较对 Unicode、HTML entity 和空白进行规范化，只将 title、published/modified time、summary、evidence 和事实型 `structured_fields` 纳入 semantic hash。parser version、field evidence、质量、置信度、解析方法、采集时间和页面 hash 均被排除。语义变化事件只保存有限 before/after 字段级变化证据；版本历史不保存完整 HTML、DOM、截图、HAR、视频或 trace。
+
+默认阈值为连续 4 次且至少 14 天进入 `long_absent`，连续 3 次详情失败进入 attention；单条最多保留 20 个版本，事件历史最多保留 1000 条。可通过 `.env` 的公开非敏感变量或 GitHub Variables 调整。LLM 默认关闭；启用后仍受严格生命周期语义约束，SpaceX `incidental` 记录继续排除在 Starlink 核心事实之外。
+
+只读诊断：
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED="1"
+python scripts/diagnose_item_lifecycle.py --all --json --no-write
+```
+
 本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持官方条目发现、动态详情解析、逐候选诊断、失败恢复、稳定 ID、首次 baseline、页面级 fallback、双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
 
 ## 当前阶段目标

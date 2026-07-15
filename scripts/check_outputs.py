@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from parsers.common import DETAIL_ERROR_TYPES
+from item_lifecycle import ALLOWED_EVENT_TYPES, ALLOWED_LIFECYCLE_STATES, ALLOWED_VERSION_KINDS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +107,10 @@ def build_report(week_id: str) -> dict[str, Any]:
     llm_audit_path = DATA_DIR / "llm_audit.json"
     llm_summary_path = DATA_DIR / "llm_summaries.json"
     llm_usage_path = DATA_DIR / "llm_usage.jsonl"
+    lifecycle_state_path = DATA_DIR / "item_lifecycle_state.json"
+    item_versions_path = DATA_DIR / "item_versions.jsonl"
+    lifecycle_events_path = DATA_DIR / "lifecycle_events.jsonl"
+    lifecycle_report_path = DATA_DIR / "lifecycle_report.json"
 
     report: dict[str, Any] = {"week_id": week_id, "status": "unknown", "checks": {}, "errors": []}
 
@@ -127,6 +132,10 @@ def build_report(week_id: str) -> dict[str, Any]:
         "date_text", "discovery_method",
         "semantic_content_hash", "extraction_hash", "extraction_change_status", "change_reason",
         "detail_parse_method", "detail_fetch_status", "current_run_data_reused",
+        "lifecycle_state", "semantic_version", "extraction_revision",
+        "last_semantic_change_at", "last_extraction_improvement_at", "missing_since",
+        "consecutive_missing_observations", "consecutive_detail_failures",
+        "last_lifecycle_event", "attention_required",
     }
     add_check(
         report,
@@ -457,6 +466,135 @@ def build_report(week_id: str) -> dict[str, Any]:
     else:
         add_check(report, "llm_summary_optional", True)
 
+    valid_lifecycle_state, lifecycle_state, error = load_json_file(lifecycle_state_path)
+    add_check(report, "item_lifecycle_state_valid", valid_lifecycle_state, error)
+    state_items = lifecycle_state.get("items", {}) if valid_lifecycle_state else {}
+    state_items = state_items if isinstance(state_items, dict) else {}
+    add_check(
+        report,
+        "lifecycle_migration_initialized",
+        valid_lifecycle_state and lifecycle_state.get("migration", {}).get("phase4c_initialized") is True,
+        "阶段 4C 幂等迁移标记缺失",
+    )
+    add_check(
+        report,
+        "lifecycle_states_allowed",
+        valid_lifecycle_state
+        and all(isinstance(value, dict) and value.get("lifecycle_state") in ALLOWED_LIFECYCLE_STATES for value in state_items.values()),
+        "lifecycle state 包含非法状态",
+    )
+    item_level_ids = {str(record.get("id")) for record in item_records if record.get("id")}
+    add_check(
+        report,
+        "lifecycle_only_item_level_records",
+        valid_lifecycle_state and set(state_items) == item_level_ids,
+        "生命周期状态与 item-level stable ID 集合不一致",
+    )
+
+    valid_versions, versions, error = load_jsonl_records(item_versions_path)
+    add_check(report, "item_versions_valid", valid_versions, error)
+    version_ids = [str(value.get("version_id") or "") for value in versions]
+    add_check(
+        report,
+        "item_version_ids_unique",
+        valid_versions and bool(version_ids) and len(version_ids) == len(set(version_ids)) and all(version_ids),
+        "item_versions.jsonl 存在重复或空 version_id",
+    )
+    add_check(
+        report,
+        "item_version_kinds_allowed",
+        valid_versions and all(value.get("version_kind") in ALLOWED_VERSION_KINDS for value in versions),
+        "item_versions.jsonl 包含非法 version_kind",
+    )
+    versions_monotonic = True
+    version_groups: dict[str, list[dict[str, Any]]] = {}
+    for value in versions:
+        version_groups.setdefault(str(value.get("record_id") or ""), []).append(value)
+    for group in version_groups.values():
+        semantic_versions = [int(value.get("semantic_version") or 0) for value in group]
+        extraction_revisions = [int(value.get("extraction_revision") or 0) for value in group]
+        if semantic_versions != sorted(semantic_versions) or extraction_revisions != sorted(extraction_revisions):
+            versions_monotonic = False
+    add_check(report, "item_versions_monotonic", valid_versions and versions_monotonic, "版本号不是单调非递减")
+    add_check(
+        report,
+        "item_versions_no_full_html",
+        valid_versions and "<html" not in read_text(item_versions_path).lower() and "<!doctype html" not in read_text(item_versions_path).lower(),
+        "版本历史疑似保存完整 HTML",
+    )
+
+    valid_events, events, error = load_jsonl_records(lifecycle_events_path)
+    add_check(report, "lifecycle_events_valid", valid_events, error)
+    event_ids = [str(value.get("event_id") or "") for value in events]
+    add_check(
+        report,
+        "lifecycle_event_ids_unique",
+        valid_events and len(event_ids) == len(set(event_ids)) and all(event_ids),
+        "lifecycle_events.jsonl 存在重复或空 event_id",
+    )
+    add_check(
+        report,
+        "lifecycle_event_types_allowed",
+        valid_events and all(value.get("event_type") in ALLOWED_EVENT_TYPES for value in events),
+        "lifecycle_events.jsonl 包含非法 event_type",
+    )
+    add_check(
+        report,
+        "extraction_improvement_not_semantic_change",
+        valid_events
+        and all(
+            value.get("event_type") != "extraction_improved" or value.get("change_status") == "unchanged"
+            for value in events
+        ),
+        "extraction improved 被误标为 changed",
+    )
+    add_check(
+        report,
+        "missing_requires_complete_index",
+        valid_events
+        and all(
+            value.get("event_type") not in {"temporarily_missing", "long_absence_reached"}
+            or value.get("index_observation_complete") is True
+            for value in events
+        ),
+        "missing 事件缺少成功完整索引观测证据",
+    )
+    add_check(
+        report,
+        "recovery_has_prior_failure",
+        valid_events
+        and all(
+            value.get("event_type") != "detail_fetch_recovered"
+            or value.get("previous_lifecycle_state") == "fetch_failed"
+            for value in events
+        ),
+        "detail fetch recovery 缺少此前失败状态",
+    )
+    add_check(
+        report,
+        "reappearance_has_prior_missing",
+        valid_events
+        and all(
+            value.get("event_type") != "reappeared"
+            or value.get("previous_lifecycle_state") in {"temporarily_missing", "long_absent"}
+            for value in events
+        ),
+        "reappeared 缺少此前 missing 状态",
+    )
+    lifecycle_text = read_text(lifecycle_state_path) + read_text(item_versions_path) + read_text(lifecycle_events_path)
+    add_check(report, "lifecycle_never_marks_deleted", "\"deleted\"" not in lifecycle_text.lower(), "生命周期数据不得判断 deleted")
+
+    valid_lifecycle_report, lifecycle_report, error = load_json_file(lifecycle_report_path)
+    add_check(report, "lifecycle_report_valid", valid_lifecycle_report, error)
+    add_check(
+        report,
+        "lifecycle_run_id_consistent",
+        valid_lifecycle_report
+        and valid_lifecycle_state
+        and lifecycle_report.get("run_id") == lifecycle_state.get("run_id"),
+        "生命周期关键文件 run_id 不一致",
+    )
+
     summary_text = read_text(summary_path)
     add_check(report, "summary_has_core_conclusions", "本周核心结论" in summary_text, "summary 缺少“本周核心结论”")
     add_check(report, "summary_has_source_overview", "来源状态概览" in summary_text, "summary 缺少“来源状态概览”")
@@ -466,6 +604,9 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_page_monitoring", "页面级监测解释" in summary_text, "summary 缺少页面级监测解释")
     add_check(report, "summary_has_input_dedup", "原始候选记录" in summary_text, "summary 缺少三层输入统计")
     add_check(report, "summary_has_structured_official_items", "## 结构化官方条目" in summary_text, "summary 缺少结构化官方条目")
+    add_check(report, "summary_has_lifecycle_overview", "## 条目生命周期概览" in summary_text, "summary 缺少条目生命周期概览")
+    for heading in ["本轮新增条目", "本轮内容变化", "解析质量提升", "暂时消失与长期未见", "详情抓取失败与恢复", "历史版本"]:
+        add_check(report, f"summary_has_lifecycle_{hashlib.sha256(heading.encode()).hexdigest()[:8]}", heading in summary_text, f"summary 缺少{heading}")
     baseline_total = sum(int(value.get("baseline_items") or 0) for value in extraction_sources.values() if isinstance(value, dict)) if isinstance(extraction_sources, dict) else 0
     add_check(
         report,
@@ -499,6 +640,20 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "details_has_official_item_diagnostics", "## 官方条目解析诊断" in details_text, "details 缺少官方条目解析诊断")
     add_check(report, "details_has_detail_diagnostics", "## 官方详情页解析诊断" in details_text, "details 缺少官方详情页解析诊断")
     add_check(report, "details_has_detail_failure_types", "### 详情失败类型" in details_text, "details 缺少详情失败类型")
+    add_check(report, "details_has_lifecycle_state", "## 条目生命周期状态" in details_text, "details 缺少条目生命周期状态")
+    add_check(report, "details_has_lifecycle_events", "## 本轮生命周期事件" in details_text, "details 缺少本轮生命周期事件")
+    add_check(report, "details_has_version_history", "## 结构化版本历史" in details_text, "details 缺少结构化版本历史")
+
+    llm_source = read_text(PROJECT_ROOT / "scripts" / "llm_summarize.py")
+    for phrase in ["不一定表示官方本周发布", "不代表官方事实变化", "不代表官方删除", "不代表官方服务恢复", "不代表重新发布"]:
+        add_check(report, f"llm_lifecycle_guardrail_{hashlib.sha256(phrase.encode()).hexdigest()[:8]}", phrase in llm_source, f"LLM 缺少生命周期约束：{phrase}")
+    email_source = read_text(PROJECT_ROOT / "scripts" / "send_email.py")
+    add_check(
+        report,
+        "email_recovery_wording_safe",
+        "采集链路恢复，不代表官方服务恢复" in email_source,
+        "邮件模板未区分采集恢复与官方服务恢复",
+    )
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")

@@ -1,0 +1,117 @@
+{
+  "attention_items": [],
+  "events_this_run": [],
+  "generated_at": "2026-07-15T17:29:14+08:00",
+  "run_id": "local-125e91d1ae55a9a0",
+  "sources": {
+    "spacex_official_launches": {
+      "active": 1,
+      "attention": 0,
+      "changed": 0,
+      "extraction_improved": 0,
+      "fetch_failed": 0,
+      "long_absent": 0,
+      "new": 0,
+      "reappeared": 0,
+      "recovered": 0,
+      "source_id": "spacex_official_launches",
+      "source_name": "SpaceX Official Launches",
+      "temporarily_missing": 0
+    },
+    "starlink_official_updates": {
+      "active": 4,
+      "attention": 0,
+      "changed": 0,
+      "extraction_improved": 0,
+      "fetch_failed": 0,
+      "long_absent": 0,
+      "new": 0,
+      "reappeared": 0,
+      "recovered": 0,
+      "source_id": "starlink_official_updates",
+      "source_name": "Starlink Official Updates",
+      "temporarily_missing": 0
+    }
+  },
+  "stage": "4C",
+  "thresholds": {
+    "detail_failure_attention_threshold": 3,
+    "long_absence_min_days": 14,
+    "long_absence_observation_threshold": 4,
+    "max_item_versions_per_record": 20,
+    "max_lifecycle_events": 1000
+  },
+  "totals": {
+    "changed": 0,
+    "detail_fetch_failed": 0,
+    "extraction_improved": 0,
+    "initialized": 5,
+    "lifecycle_events": 0,
+    "long_absent": 0,
+    "new": 0,
+    "new_extraction_revisions": 5,
+    "new_semantic_versions": 5,
+    "reappeared": 0,
+    "recovered_after_failure": 0,
+    "temporarily_missing": 0,
+    "unchanged": 5
+  },
+  "version": 1,
+  "versions_this_run": [
+    {
+      "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
+      "changed_fields": [],
+      "extraction_revision": 1,
+      "observed_at": "2026-07-15T17:29:14+08:00",
+      "record_id": "044bafcf1089533d",
+      "semantic_version": 1,
+      "source_id": "starlink_official_updates",
+      "version_id": "04623c20e0a2fed741a1",
+      "version_kind": "initial_snapshot"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
+      "changed_fields": [],
+      "extraction_revision": 1,
+      "observed_at": "2026-07-15T17:29:14+08:00",
+      "record_id": "495a49c7d5c93cbc",
+      "semantic_version": 1,
+      "source_id": "starlink_official_updates",
+      "version_id": "cd77aeca1295e370eafd",
+      "version_kind": "initial_snapshot"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/stargaze",
+      "changed_fields": [],
+      "extraction_revision": 1,
+      "observed_at": "2026-07-15T17:29:14+08:00",
+      "record_id": "95bbf31b3a93d3e6",
+      "semantic_version": 1,
+      "source_id": "starlink_official_updates",
+      "version_id": "64b30a86481ccb634583",
+      "version_kind": "initial_snapshot"
+    },
+    {
+      "canonical_url": "https://www.spacex.com/launches/sda-t1tl-e",
+      "changed_fields": [],
+      "extraction_revision": 1,
+      "observed_at": "2026-07-15T17:29:14+08:00",
+      "record_id": "c6060f6415f8c377",
+      "semantic_version": 1,
+      "source_id": "spacex_official_launches",
+      "version_id": "05eb6ff92effb6dc4eee",
+      "version_kind": "initial_snapshot"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/network-update",
+      "changed_fields": [],
+      "extraction_revision": 1,
+      "observed_at": "2026-07-15T17:29:14+08:00",
+      "record_id": "d3b89bb9510b1b9a",
+      "semantic_version": 1,
+      "source_id": "starlink_official_updates",
+      "version_id": "d0aa2d20e875f3d11353",
+      "version_kind": "initial_snapshot"
+    }
+  ]
+}

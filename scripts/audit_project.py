@@ -11,9 +11,11 @@ from typing import Any
 
 import yaml
 
+from item_lifecycle import ALLOWED_EVENT_TYPES, ALLOWED_LIFECYCLE_STATES, ALLOWED_VERSION_KINDS
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "4B.1"
+CURRENT_STAGE = "4C"
 
 REQUIRED_FILES = [
     "README.md",
@@ -33,6 +35,8 @@ REQUIRED_FILES = [
     "scripts/llm_summarize.py",
     "scripts/diagnose_official_pages.py",
     "scripts/diagnose_official_details.py",
+    "scripts/item_lifecycle.py",
+    "scripts/diagnose_item_lifecycle.py",
     "scripts/parsers/__init__.py",
     "scripts/parsers/common.py",
     "scripts/parsers/starlink_updates.py",
@@ -48,6 +52,13 @@ REQUIRED_FILES = [
     "tests/test_llm_dedup.py",
     "tests/test_llm_guardrails.py",
     "tests/test_llm_reference_alignment.py",
+    "tests/test_lifecycle_initialization.py",
+    "tests/test_lifecycle_new_and_changed.py",
+    "tests/test_lifecycle_missing_and_reappearance.py",
+    "tests/test_lifecycle_failure_and_recovery.py",
+    "tests/test_item_version_history.py",
+    "tests/test_lifecycle_reporting.py",
+    "tests/test_lifecycle_llm_guardrails.py",
     "docs/starlink_knowledge_base.md",
     "docs/deployment_checklist.md",
     "docs/operations_guide.md",
@@ -60,6 +71,10 @@ REQUIRED_FILES = [
     "data/item_extraction_state.json",
     "data/item_extraction_report.json",
     "data/detail_extraction_diagnostics.json",
+    "data/item_lifecycle_state.json",
+    "data/item_versions.jsonl",
+    "data/lifecycle_events.jsonl",
+    "data/lifecycle_report.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -84,6 +99,10 @@ SENSITIVE_SCAN_TARGETS = [
     "data/item_extraction_state.json",
     "data/item_extraction_report.json",
     "data/detail_extraction_diagnostics.json",
+    "data/item_lifecycle_state.json",
+    "data/item_versions.jsonl",
+    "data/lifecycle_events.jsonl",
+    "data/lifecycle_report.json",
     "data/weekly_manifest.json",
     "data/run_history.jsonl",
     "data/llm_audit.json",
@@ -238,6 +257,14 @@ def check_workflow(report: dict[str, Any]) -> None:
         "python -m playwright install --with-deps chromium",
         'python -m unittest discover -s tests -p "test_*.py" -v',
         "data/item_extraction_state.json",
+        "data/item_lifecycle_state.json",
+        "data/item_versions.jsonl",
+        "data/lifecycle_events.jsonl",
+        "data/lifecycle_report.json",
+        "LONG_ABSENCE_OBSERVATION_THRESHOLD",
+        "DETAIL_FAILURE_ATTENTION_THRESHOLD",
+        "MAX_ITEM_VERSIONS_PER_RECORD",
+        "MAX_LIFECYCLE_EVENTS",
         "data/item_extraction_report.json",
         "data/detail_extraction_diagnostics.json",
         "DETAIL_RENDER_MODE: ${{ vars.DETAIL_RENDER_MODE || 'auto' }}",
@@ -418,6 +445,146 @@ def check_phase4b_detail_extraction(report: dict[str, Any]) -> None:
     mark_passed_if_clean(report, section)
 
 
+def check_phase4c_lifecycle(report: dict[str, Any]) -> None:
+    section = "phase4c_lifecycle"
+    lifecycle = read_text("scripts/item_lifecycle.py")
+    collector = read_text("scripts/collect_sources.py")
+    weekly = read_text("scripts/run_weekly.py")
+    llm = read_text("scripts/llm_summarize.py")
+    email = read_text("scripts/send_email.py")
+    summary = read_text("scripts/print_action_summary.py")
+    workflow = read_text(".github/workflows/weekly.yml")
+    required = {
+        "lifecycle": [
+            "normalize_semantic_text", "build_semantic_payload", "compare_semantic_versions",
+            "build_lifecycle_update_plan", "write_lifecycle_transaction", "os.replace",
+            "lifecycle_initialized", "item_discovered", "semantic_content_changed",
+            "extraction_improved", "temporarily_missing", "long_absence_reached",
+            "detail_fetch_failed", "detail_fetch_recovered", "reappeared",
+        ],
+        "collector": ["index_observation_complete", "candidate_selection_truncated", "lifecycle_dry_run"],
+        "weekly": [
+            "## 条目生命周期概览", "## 条目生命周期状态", "## 本轮生命周期事件",
+            "## 结构化版本历史", "本轮首次发现，不自动等于官方本周首次发布",
+        ],
+        "llm": [
+            "不一定表示官方本周发布", "不代表官方事实变化", "不代表官方删除",
+            "不代表官方页面或业务故障", "不代表官方服务恢复", "不代表重新发布",
+            'item.get("starlink_relevance") != "direct"', "align_llm_references",
+        ],
+        "email": ["条目生命周期情况", "采集链路恢复，不代表官方服务恢复", "attachment_paths"],
+        "summary": ["### 条目生命周期", "Semantic versions", "Extraction revisions", "Lifecycle events"],
+        "workflow": [
+            "actions/checkout@v5", "actions/setup-python@v6", "playwright install --with-deps chromium",
+            "data/item_lifecycle_state.json", "data/item_versions.jsonl", "data/lifecycle_events.jsonl",
+            "data/lifecycle_report.json", "LONG_ABSENCE_OBSERVATION_THRESHOLD", "MAX_LIFECYCLE_EVENTS",
+        ],
+    }
+    texts = {
+        "lifecycle": lifecycle,
+        "collector": collector,
+        "weekly": weekly,
+        "llm": llm,
+        "email": email,
+        "summary": summary,
+        "workflow": workflow,
+    }
+    missing = [f"{name}:{snippet}" for name, snippets in required.items() for snippet in snippets if snippet not in texts[name]]
+    if missing:
+        add_issue(report, section, "阶段 4C 实现线索缺失：" + "、".join(missing))
+        return
+
+    semantic_start = lifecycle.find("def build_semantic_payload")
+    semantic_end = lifecycle.find("def _canonical_hash", semantic_start)
+    semantic_block = lifecycle[semantic_start:semantic_end]
+    for forbidden in ["parser_version", "field_evidence", "extraction_confidence", "detail_parse_method", "page_hash"]:
+        if forbidden in semantic_block:
+            add_issue(report, section, f"生命周期 semantic payload 不应包含：{forbidden}")
+            return
+
+    valid_state, state, error = json_file(PROJECT_ROOT / "data/item_lifecycle_state.json")
+    if not valid_state or not isinstance(state, dict):
+        add_issue(report, section, f"item_lifecycle_state.json 异常：{error}")
+        return
+    state_items = state.get("items", {})
+    if not isinstance(state_items, dict) or any(
+        not isinstance(value, dict) or value.get("lifecycle_state") not in ALLOWED_LIFECYCLE_STATES
+        for value in state_items.values()
+    ):
+        add_issue(report, section, "生命周期当前状态非法")
+        return
+    migration = state.get("migration", {})
+    if not isinstance(migration, dict) or migration.get("phase4c_initialized") is not True:
+        add_issue(report, section, "阶段 4C 幂等迁移标记缺失")
+        return
+
+    valid_versions, versions, error = jsonl_file(PROJECT_ROOT / "data/item_versions.jsonl")
+    valid_events, events, event_error = jsonl_file(PROJECT_ROOT / "data/lifecycle_events.jsonl")
+    valid_report, lifecycle_report, report_error = json_file(PROJECT_ROOT / "data/lifecycle_report.json")
+    if not valid_versions or not valid_events or not valid_report:
+        add_issue(report, section, f"生命周期历史文件异常：{error or event_error or report_error}")
+        return
+    version_ids = [str(value.get("version_id") or "") for value in versions]
+    event_ids = [str(value.get("event_id") or "") for value in events]
+    if len(version_ids) != len(set(version_ids)) or len(event_ids) != len(set(event_ids)):
+        add_issue(report, section, "生命周期 event/version ID 未去重")
+        return
+    if any(value.get("version_kind") not in ALLOWED_VERSION_KINDS for value in versions):
+        add_issue(report, section, "版本历史包含非法 version_kind")
+        return
+    if any(value.get("event_type") not in ALLOWED_EVENT_TYPES for value in events):
+        add_issue(report, section, "生命周期历史包含非法 event_type")
+        return
+    if any(
+        value.get("event_type") in {"temporarily_missing", "long_absence_reached"}
+        and value.get("index_observation_complete") is not True
+        for value in events
+    ):
+        add_issue(report, section, "missing 事件没有完整索引观测证据")
+        return
+    if any(
+        value.get("event_type") == "detail_fetch_recovered"
+        and value.get("previous_lifecycle_state") != "fetch_failed"
+        for value in events
+    ):
+        add_issue(report, section, "采集恢复事件没有此前 fetch_failed 状态")
+        return
+    if any(
+        value.get("event_type") == "reappeared"
+        and value.get("previous_lifecycle_state") not in {"temporarily_missing", "long_absent"}
+        for value in events
+    ):
+        add_issue(report, section, "reappeared 事件没有此前 missing 状态")
+        return
+    serialized_history = (
+        (PROJECT_ROOT / "data/item_versions.jsonl").read_text(encoding="utf-8").lower()
+        + (PROJECT_ROOT / "data/lifecycle_events.jsonl").read_text(encoding="utf-8").lower()
+    )
+    if "<html" in serialized_history or "<!doctype html" in serialized_history:
+        add_issue(report, section, "生命周期历史疑似保存完整 HTML")
+        return
+    if isinstance(lifecycle_report, dict) and lifecycle_report.get("run_id") != state.get("run_id"):
+        add_issue(report, section, "生命周期关键文件 run_id 不一致")
+        return
+
+    docs = "\n".join(
+        read_text(path)
+        for path in [
+            "README.md", "RELEASE_NOTES.md", "docs/deployment_checklist.md", "docs/operations_guide.md",
+            "docs/parser_reconnaissance.md", "docs/starlink_knowledge_base.md",
+        ]
+    )
+    for required_doc in [
+        "阶段 4C", "temporarily_missing", "long_absent", "fetch_failed", "reappeared",
+        "extraction improved", "不代表删除", "不代表官方服务恢复", "item_versions.jsonl",
+        "lifecycle_events.jsonl", "字段级变化证据",
+    ]:
+        if required_doc not in docs:
+            add_issue(report, section, f"阶段 4C 文档缺少：{required_doc}")
+            return
+    mark_passed_if_clean(report, section)
+
+
 def check_llm_config_docs(report: dict[str, Any]) -> None:
     section = "llm_config"
     env_example = read_text(".env.example") if (PROJECT_ROOT / ".env.example").exists() else ""
@@ -432,6 +599,11 @@ def check_llm_config_docs(report: dict[str, Any]) -> None:
         "LLM_MAX_ITEMS=10",
         "LLM_STRICT_SOURCE=true",
         "LLM_MAX_USAGE_RECORDS=200",
+        "LONG_ABSENCE_OBSERVATION_THRESHOLD=4",
+        "LONG_ABSENCE_MIN_DAYS=14",
+        "DETAIL_FAILURE_ATTENTION_THRESHOLD=3",
+        "MAX_ITEM_VERSIONS_PER_RECORD=20",
+        "MAX_LIFECYCLE_EVENTS=1000",
     ]
     missing_env = [item for item in required_env if item not in env_example]
     if missing_env:
@@ -526,7 +698,13 @@ def jsonl_file(path: Path) -> tuple[bool, list[dict[str, Any]], str | None]:
 
 def check_data_files(report: dict[str, Any]) -> None:
     section = "data_files"
-    for relative in ["data/items.jsonl", "data/run_history.jsonl", "data/llm_usage.jsonl"]:
+    for relative in [
+        "data/items.jsonl",
+        "data/run_history.jsonl",
+        "data/llm_usage.jsonl",
+        "data/item_versions.jsonl",
+        "data/lifecycle_events.jsonl",
+    ]:
         valid, records, error = jsonl_file(PROJECT_ROOT / relative)
         if not valid:
             add_issue(report, section, f"{relative} 异常：{error}")
@@ -583,6 +761,8 @@ def check_data_files(report: dict[str, Any]) -> None:
         "data/item_extraction_state.json",
         "data/item_extraction_report.json",
         "data/detail_extraction_diagnostics.json",
+        "data/item_lifecycle_state.json",
+        "data/lifecycle_report.json",
         "data/weekly_manifest.json",
         "data/llm_audit.json",
     ]:
@@ -830,6 +1010,7 @@ def build_report() -> dict[str, Any]:
     check_workflow(report)
     check_sources(report)
     check_phase4b_detail_extraction(report)
+    check_phase4c_lifecycle(report)
     check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)
@@ -847,6 +1028,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         ("workflow", "GitHub Actions"),
         ("sources", "sources.yml"),
         ("phase4b_detail_extraction", "Phase 4B 详情解析与失败恢复"),
+        ("phase4c_lifecycle", "Phase 4C 增量变化与生命周期"),
         ("llm_config", "LLM 配置与文档"),
         ("data_files", "数据文件"),
         ("weekly_outputs", "weekly 输出"),
