@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T17:29:14+08:00",
+  "generated_at": "2026-07-15T09:48:04+00:00",
   "parser_version": "official_item_extraction_v2",
   "sources": {
     "spacex_official_launches": {
@@ -18,7 +18,7 @@
       "http_status": 200,
       "item_level_count": 1,
       "items_collected": 1,
-      "last_checked_at": "2026-07-15T17:28:51+08:00",
+      "last_checked_at": "2026-07-15T09:47:49+00:00",
       "level_counts": {
         "item_level": 1
       },
@@ -51,13 +51,13 @@
       "dominant_source_quality": "medium",
       "evidence_completeness": 1.0,
       "field_evidence_completeness": 1.0,
-      "final_detail_failed": 1,
-      "final_detail_success": 3,
+      "final_detail_failed": 0,
+      "final_detail_success": 4,
       "health_status": "reachable",
       "http_status": 200,
       "item_level_count": 4,
       "items_collected": 4,
-      "last_checked_at": "2026-07-15T17:27:33+08:00",
+      "last_checked_at": "2026-07-15T09:47:16+00:00",
       "level_counts": {
         "item_level": 4
       },
@@ -71,7 +71,7 @@
       },
       "rendered_candidate_count": 4,
       "rendered_detail_attempted": 4,
-      "rendered_detail_success": 3,
+      "rendered_detail_success": 4,
       "selected_candidate_count": 4,
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",

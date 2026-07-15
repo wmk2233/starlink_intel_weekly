@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T17:29:14+08:00",
+  "generated_at": "2026-07-15T09:48:04+00:00",
   "sources": {
     "spacex_official_launches": {
       "bootstrap_completed": true,
@@ -11,22 +11,22 @@
           "content_hash": "59cceb914691430c",
           "extraction_hash": "d8b5b75787bceefa",
           "first_seen_at": "2026-07-15T15:31:12+08:00",
-          "last_attempt_at": "2026-07-15T17:28:51+08:00",
+          "last_attempt_at": "2026-07-15T09:47:49+00:00",
           "last_error_type": null,
           "last_parser_version": "spacex_launches_item_v2",
-          "last_seen_at": "2026-07-15T17:28:51+08:00",
-          "last_success_at": "2026-07-15T17:28:51+08:00",
+          "last_seen_at": "2026-07-15T09:47:49+00:00",
+          "last_success_at": "2026-07-15T09:47:49+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "59cceb914691430c"
         }
       },
       "known_item_count": 1,
-      "last_attempt_at": "2026-07-15T17:29:14+08:00",
+      "last_attempt_at": "2026-07-15T09:48:04+00:00",
       "last_candidate_count": 1,
       "last_error_type": null,
       "last_failure_at": "2026-07-15T06:21:46+00:00",
       "last_item_count": 1,
-      "last_success_at": "2026-07-15T17:29:14+08:00",
+      "last_success_at": "2026-07-15T09:48:04+00:00",
       "parser_version": "spacex_launches_item_v2"
     },
     "starlink_official_updates": {
@@ -35,18 +35,18 @@
       "items": {
         "044bafcf1089533d": {
           "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
-          "consecutive_failures": 1,
-          "content_hash": "15031e9924949a65",
-          "extraction_hash": "30c343f6d2e02b70",
+          "consecutive_failures": 0,
+          "content_hash": "782864df0d71359e",
+          "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-07-15T17:27:33+08:00",
-          "last_error_type": "render_timeout",
+          "last_attempt_at": "2026-07-15T09:47:16+00:00",
+          "last_error_type": null,
           "last_failure_at": "2026-07-15T17:27:33+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-07-15T08:28:11+00:00",
-          "last_success_at": "2026-07-15T08:28:11+00:00",
+          "last_seen_at": "2026-07-15T09:47:16+00:00",
+          "last_success_at": "2026-07-15T09:47:16+00:00",
           "last_success_method": "rendered",
-          "semantic_content_hash": "15031e9924949a65"
+          "semantic_content_hash": "782864df0d71359e"
         },
         "495a49c7d5c93cbc": {
           "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
@@ -54,11 +54,11 @@
           "content_hash": "bbda025dc135eb82",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-07-15T17:27:33+08:00",
+          "last_attempt_at": "2026-07-15T09:47:16+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-07-15T17:27:33+08:00",
-          "last_success_at": "2026-07-15T17:27:33+08:00",
+          "last_seen_at": "2026-07-15T09:47:16+00:00",
+          "last_success_at": "2026-07-15T09:47:16+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "bbda025dc135eb82"
         },
@@ -68,11 +68,11 @@
           "content_hash": "a4a8dfdee687fbe2",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-14T14:54:30+08:00",
-          "last_attempt_at": "2026-07-15T17:27:33+08:00",
+          "last_attempt_at": "2026-07-15T09:47:16+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-07-15T17:27:33+08:00",
-          "last_success_at": "2026-07-15T17:27:33+08:00",
+          "last_seen_at": "2026-07-15T09:47:16+00:00",
+          "last_success_at": "2026-07-15T09:47:16+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a4a8dfdee687fbe2"
         },
@@ -82,22 +82,22 @@
           "content_hash": "a73aef78a8f128de",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:34:13+08:00",
-          "last_attempt_at": "2026-07-15T17:27:33+08:00",
+          "last_attempt_at": "2026-07-15T09:47:16+00:00",
           "last_error_type": null,
           "last_failure_at": "2026-07-15T15:30:05+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-07-15T17:27:33+08:00",
-          "last_success_at": "2026-07-15T17:27:33+08:00",
+          "last_seen_at": "2026-07-15T09:47:16+00:00",
+          "last_success_at": "2026-07-15T09:47:16+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a73aef78a8f128de"
         }
       },
       "known_item_count": 4,
-      "last_attempt_at": "2026-07-15T17:28:51+08:00",
+      "last_attempt_at": "2026-07-15T09:47:49+00:00",
       "last_candidate_count": 4,
       "last_error_type": null,
       "last_item_count": 4,
-      "last_success_at": "2026-07-15T17:28:51+08:00",
+      "last_success_at": "2026-07-15T09:47:49+00:00",
       "parser_version": "starlink_updates_item_v2"
     }
   },

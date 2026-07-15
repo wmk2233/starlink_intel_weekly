@@ -43,7 +43,7 @@ LLM Provider：deepseek
 | URL 去重后记录 | 7 |
 | 最终核心输入记录 | 4 |
 | 最终核心唯一 URL | 4 |
-| 复用历史记录 | 1 |
+| 复用历史记录 | 0 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 7 |
 | 输出 record ID 引用（前 / 后） | 0 / 0 |
@@ -81,20 +81,18 @@ LLM Provider：deepseek
 | 来源 | 候选 | 详情成功 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 |
 |---|---:|---:|---:|---:|---:|---:|---|---|
 | SpaceX Official Launches | 1 | 1 | 0 | 0 | 0 | 1 | item_level | medium |
-| Starlink Official Updates | 4 | 3 | 0 | 0 | 0 | 4 | item_level | medium |
+| Starlink Official Updates | 4 | 4 | 0 | 0 | 0 | 4 | item_level | medium |
 
 ### 详情解析情况
 
 | 来源 | 静态候选 | 渲染候选 | 候选总数 | 静态详情成功 | 渲染详情成功 | 最终成功 | 失败 | 成功率 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SpaceX Official Launches | 0 | 1 | 1 | 0 | 1 | 1 | 0 | 100% |
-| Starlink Official Updates | 0 | 4 | 4 | 0 | 3 | 3 | 1 | 75% |
+| Starlink Official Updates | 0 | 4 | 4 | 0 | 4 | 4 | 0 | 100% |
 
 ### 详情失败概览
 
-| 来源 | 失败类型 | 数量 |
-|---|---|---:|
-| Starlink Official Updates | render_timeout | 1 |
+本轮没有详情解析失败。
 
 ### 本周新增或变化条目
 
@@ -107,18 +105,12 @@ LLM Provider：deepseek
 | SpaceX Official Launches | 1 | 1.0 | 0.0 | 1.0 | 否 |
 | Starlink Official Updates | 4 | 1.0 | 0.0 | 1.0 | 否 |
 
-### 历史有效记录复用
-
-本轮部分详情页重新获取失败，系统保留最近一次成功解析的结构化记录。复用记录不代表本轮重新确认，也不计为新增或内容变化。
-
 ## 条目生命周期概览
 
 | 来源 | Active | New | Changed | Extraction Improved | Temporarily Missing | Long Absent | Fetch Failed | Recovered | Reappeared |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | SpaceX Official Launches | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Starlink Official Updates | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-
-本轮未产生新增、语义变化、暂时消失、连续失败或恢复事件。
+| Starlink Official Updates | 4 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
 
 ### 本轮新增条目
 
@@ -132,7 +124,7 @@ LLM Provider：deepseek
 
 以下变化仅表示解析完整度提升，不代表官方内容发生变化。
 
-本轮没有解析质量提升事件。
+- [044bafcf1089533d](https://starlink.com/updates/space-safety-web-interface)：detail_parse_method。
 
 ### 暂时消失与长期未见
 
@@ -148,16 +140,16 @@ LLM Provider：deepseek
 
 ### 历史版本
 
-- 本轮新建 semantic versions：5
-- 本轮新建 extraction revisions：5
+- 本轮新建 semantic versions：0
+- 本轮新建 extraction revisions：1
 
 
 ## 3. 来源状态概览
 
 | 来源 | 可达性 | 页面变化状态 | 新增 | 变化 | 未变化 | 主导解析层级 | 主导质量 |
 |---|---|---|---:|---:|---:|---|---|
-| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | item_level | medium |
 | Starlink Official Updates | reachable | changed | 0 | 0 | 4 | item_level | medium |
+| SpaceX Official Launches | reachable | unchanged | 0 | 0 | 1 | item_level | medium |
 
 ## 4. 本周值得关注的信息
 
@@ -167,16 +159,16 @@ LLM Provider：deepseek
 
 ### 4.2 页面级变化说明
 
-- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 - Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
+- SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 页面变化状态与条目变化状态是两个检测层级，不能相互替代。
 
 ## 5. 解析质量概览
 
 | 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |
 |---|---|---|---:|---:|---:|---:|
-| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 | Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
+| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 
 说明：解析质量只表示规则化抽取完整度，不表示事实重要性或事实可信度。
 
@@ -194,11 +186,11 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 17:32:39 中国标准时间+0800
+- 运行时间：2026-07-15 09:47:16 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：否
-- 是否执行真实来源采集：否
+- 是否发送邮件：是
+- 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2
 - 新增条目数：0

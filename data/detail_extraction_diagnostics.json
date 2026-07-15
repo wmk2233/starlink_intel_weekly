@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T17:29:14+08:00",
+  "generated_at": "2026-07-15T09:48:04+00:00",
   "render_mode": "auto",
   "sources": {
     "spacex_official_launches": {
@@ -7,7 +7,7 @@
       "details": [
         {
           "canonical_url": "https://www.spacex.com/launches/sda-t1tl-e",
-          "checked_at": "2026-07-15T17:28:51+08:00",
+          "checked_at": "2026-07-15T09:47:49+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -17,7 +17,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 54627,
+            "dom_length": 54632,
             "evidence_length": 430,
             "final_host": "www.spacex.com",
             "navigation_status": "success",
@@ -55,7 +55,7 @@
       "details": [
         {
           "canonical_url": "https://starlink.com/updates/stargaze",
-          "checked_at": "2026-07-15T17:27:33+08:00",
+          "checked_at": "2026-07-15T09:47:16+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -65,7 +65,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 40902,
+            "dom_length": 166749,
             "evidence_length": 86,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -88,22 +88,22 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
-          "checked_at": "2026-07-15T17:27:33+08:00",
-          "current_run_data_reused": true,
+          "checked_at": "2026-07-15T09:47:16+00:00",
+          "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
-          "error_type": "render_timeout",
-          "final_method": "reused_previous_success",
-          "final_status": "reused_previous_success",
+          "error_type": null,
+          "final_method": "rendered",
+          "final_status": "success",
           "record_id": "044bafcf1089533d",
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 0,
-            "evidence_length": 0,
-            "final_host": null,
-            "navigation_status": "timeout",
-            "parse_status": "render_timeout",
-            "title_found": false
+            "dom_length": 165764,
+            "evidence_length": 942,
+            "final_host": "starlink.com",
+            "navigation_status": "success",
+            "parse_status": "success",
+            "title_found": true
           },
           "static": {
             "attempted": true,
@@ -121,7 +121,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
-          "checked_at": "2026-07-15T17:27:33+08:00",
+          "checked_at": "2026-07-15T09:47:16+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -131,7 +131,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 38427,
+            "dom_length": 164278,
             "evidence_length": 1200,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -154,7 +154,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/network-update",
-          "checked_at": "2026-07-15T17:27:33+08:00",
+          "checked_at": "2026-07-15T09:47:16+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -164,7 +164,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 172445,
+            "dom_length": 171020,
             "evidence_length": 1141,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -186,18 +186,16 @@
           }
         }
       ],
-      "failure_types": {
-        "render_timeout": 1
-      },
-      "final_failed": 1,
-      "final_success": 3,
+      "failure_types": {},
+      "final_failed": 0,
+      "final_success": 4,
       "render_attempted": 4,
-      "render_success": 3,
-      "reused_previous_success": 1,
+      "render_success": 4,
+      "reused_previous_success": 0,
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "static_success": 0,
-      "success_rate": 0.75
+      "success_rate": 1.0
     }
   },
   "stage": "4B",

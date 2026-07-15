@@ -8,7 +8,7 @@
   "errors": [],
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T17:32:39+08:00",
+  "generated_at": "2026-07-15T09:48:04+00:00",
   "guardrails": {
     "monitoring_context_model_generated": false,
     "no_external_knowledge": true,
@@ -67,7 +67,7 @@
   "reason": "LLM is disabled.",
   "records_after_url_dedup": 7,
   "reference_alignment_status": "not_run",
-  "reused_historical_records": 1,
+  "reused_historical_records": 0,
   "source_based_notes_removed": 0,
   "summary_generated": false,
   "unique_source_urls": 7,
