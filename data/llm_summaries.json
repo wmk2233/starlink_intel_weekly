@@ -1,16 +1,16 @@
 {
   "allowed_reference_pairs": [
     {
+      "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
+      "record_id": "044bafcf1089533d"
+    },
+    {
       "canonical_url": "https://starlink.com/updates/network-update",
       "record_id": "d3b89bb9510b1b9a"
     },
     {
       "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
       "record_id": "495a49c7d5c93cbc"
-    },
-    {
-      "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
-      "record_id": "044bafcf1089533d"
     },
     {
       "canonical_url": "https://starlink.com/updates/stargaze",
@@ -20,7 +20,7 @@
   "base_url_label": "deepseek_default",
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T08:29:10+00:00",
+  "generated_at": "2026-07-15T09:56:20+00:00",
   "input_records": 4,
   "input_records_after_dedup": 7,
   "input_records_before_dedup": 9,
@@ -34,24 +34,48 @@
   "summary": {
     "key_points": [
       {
-        "caveat": "以下信息来自历史基线记录，并非本周新确认内容。",
-        "point": "本周未检测到新增或内容变化条目。已有条目涵盖网络速度与覆盖更新、波束切换技术、空间安全网络界面以及 Stargaze 空间态势感知系统。",
+        "caveat": "无",
+        "point": "Starlink发布了一款新的基于网页的工具，简化了卫星交会筛查和星历共享。",
         "source_record_ids": [
-          "d3b89bb9510b1b9a",
-          "495a49c7d5c93cbc",
-          "044bafcf1089533d",
+          "044bafcf1089533d"
+        ],
+        "source_urls": [
+          "https://starlink.com/updates/space-safety-web-interface"
+        ]
+      },
+      {
+        "caveat": "无",
+        "point": "Starlink在过去一年扩展到42个新国家，活跃客户增长270万以上，总数超过600万，并发射了2300多颗卫星。",
+        "source_record_ids": [
+          "d3b89bb9510b1b9a"
+        ],
+        "source_urls": [
+          "https://starlink.com/updates/network-update"
+        ]
+      },
+      {
+        "caveat": "无",
+        "point": "Starlink使用波束切换技术自动绕过障碍物，确保可靠的高速互联网连接。",
+        "source_record_ids": [
+          "495a49c7d5c93cbc"
+        ],
+        "source_urls": [
+          "https://starlink.com/updates/starlink-beam-switching"
+        ]
+      },
+      {
+        "caveat": "无",
+        "point": "Stargaze是SpaceX开发的太空态势感知系统，旨在增强低地球轨道卫星运营的安全性和可持续性。",
+        "source_record_ids": [
           "95bbf31b3a93d3e6"
         ],
         "source_urls": [
-          "https://starlink.com/updates/network-update",
-          "https://starlink.com/updates/starlink-beam-switching",
-          "https://starlink.com/updates/space-safety-web-interface",
           "https://starlink.com/updates/stargaze"
         ]
       }
     ],
     "llm_summary_version": "llm_reference_aligned_v2",
-    "overall_summary": "本周未检测到新增或内容变化条目。所有 Starlink 官方更新条目均为历史基线记录，本周内容未发生变化。"
+    "overall_summary": "本周未检测到新增或内容变化条目。Starlink官方更新页面现有4篇条目：太空安全网页界面、网络更新、波束切换和Stargaze态势感知系统。"
   },
   "unique_source_urls": 7
 }

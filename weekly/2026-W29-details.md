@@ -26,9 +26,9 @@
 
 | 字段 | 内容 |
 |---|---|
-| LLM 是否启用 | false |
+| LLM 是否启用 | true |
 | LLM Provider | deepseek |
-| LLM 状态 | skipped |
+| LLM 状态 | generated |
 | 模型 | deepseek-v4-flash |
 | Base URL 类型 | deepseek_default |
 | 输入记录数 | 4 |
@@ -41,21 +41,21 @@
 | 最终核心输入记录 | 4 |
 | 最终核心唯一 URL | 4 |
 | 复用历史记录 | 0 |
-| 输出 record ID 去重前数量 | 0 |
-| 输出 record ID 去重后数量 | 0 |
-| 输出 URL 去重前数量 | 0 |
-| 输出 URL 去重后数量 | 0 |
+| 输出 record ID 去重前数量 | 4 |
+| 输出 record ID 去重后数量 | 4 |
+| 输出 URL 去重前数量 | 4 |
+| 输出 URL 去重后数量 | 4 |
 | 移除非法 record ID | 0 |
 | 移除非法 URL | 0 |
 | 补齐缺失 record ID | 0 |
 | 补齐缺失 URL | 0 |
 | 删除无来源要点 | 0 |
-| 引用对齐状态 | not_run |
-| Prompt tokens | unknown |
-| Completion tokens | unknown |
-| Total tokens | unknown |
-| API 调用耗时 | unknown ms |
-| 校验状态 | skipped |
+| 引用对齐状态 | passed |
+| Prompt tokens | 3694 |
+| Completion tokens | 1216 |
+| Total tokens | 4910 |
+| API 调用耗时 | 14076.35 ms |
+| 校验状态 | passed |
 | 严格来源约束 | true |
 | 页面级记录禁止事实扩展 | true |
 | 审计文件 | data/llm_audit.json |
@@ -67,21 +67,21 @@
 - SpaceX Official Launches：页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。
 - Starlink Official Updates：页面级 hash 发生变化，但当前规则未检测到可确认的新增或内容变化条目。
 
-- 原因：LLM is disabled.
+- 原因：LLM summary generated and validated.
 
 
 ## 3. 来源状态诊断
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T09:47:16+00:00 | 067aa2f00157e9f1 |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T09:47:49+00:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T09:55:19+00:00 | 0c35d72a32b4d706 |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T09:55:50+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T09:47:16+00:00 |
+| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T09:55:19+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
 
 ## 5. 解析质量诊断
@@ -109,7 +109,7 @@
 | content_hash | a4a8dfdee687fbe2 |
 | previous_content_hash | a4a8dfdee687fbe2 |
 | first_seen_at | 2026-07-14T14:54:30+08:00 |
-| last_seen_at | 2026-07-15T09:47:16+00:00 |
+| last_seen_at | 2026-07-15T09:55:19+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -129,7 +129,7 @@
 | content_hash | 782864df0d71359e |
 | previous_content_hash | 782864df0d71359e |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T09:47:16+00:00 |
+| last_seen_at | 2026-07-15T09:55:19+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -149,7 +149,7 @@
 | content_hash | bbda025dc135eb82 |
 | previous_content_hash | bbda025dc135eb82 |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T09:47:16+00:00 |
+| last_seen_at | 2026-07-15T09:55:19+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -169,7 +169,7 @@
 | content_hash | a73aef78a8f128de |
 | previous_content_hash | a73aef78a8f128de |
 | first_seen_at | 2026-07-15T15:34:13+08:00 |
-| last_seen_at | 2026-07-15T09:47:16+00:00 |
+| last_seen_at | 2026-07-15T09:55:19+00:00 |
 | last_changed_at | 2026-07-15T15:34:13+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -191,7 +191,7 @@
 | content_hash | 59cceb914691430c |
 | previous_content_hash | 59cceb914691430c |
 | first_seen_at | 2026-07-15T15:31:12+08:00 |
-| last_seen_at | 2026-07-15T09:47:49+00:00 |
+| last_seen_at | 2026-07-15T09:55:50+00:00 |
 | last_changed_at | 2026-07-15T15:31:12+08:00 |
 | matched_keywords | [] |
 | candidate_links | [] |
@@ -268,7 +268,7 @@
 | Record ID | 来源 | 标题 | 当前状态 | Change status | Extraction status | Semantic version | Extraction revision | Missing count | Failure count | Attention | 官方 URL |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|---|
 | c6060f6415f8c377 | spacex_official_launches | SDA's Third Tranche 1 Mission | active | unchanged | unchanged | 1 | 1 | 0 | 0 | 否 | [链接](https://www.spacex.com/launches/sda-t1tl-e) |
-| 044bafcf1089533d | starlink_official_updates | Space Safety Web Interface | active | unchanged | improved | 1 | 2 | 0 | 0 | 否 | [链接](https://starlink.com/updates/space-safety-web-interface) |
+| 044bafcf1089533d | starlink_official_updates | Space Safety Web Interface | active | unchanged | unchanged | 1 | 2 | 0 | 0 | 否 | [链接](https://starlink.com/updates/space-safety-web-interface) |
 | 495a49c7d5c93cbc | starlink_official_updates | Starlink Beam Switching | active | unchanged | unchanged | 1 | 1 | 0 | 0 | 否 | [链接](https://starlink.com/updates/starlink-beam-switching) |
 | 95bbf31b3a93d3e6 | starlink_official_updates | Stargaze: SpaceX's Space Situational Awareness System | active | unchanged | unchanged | 1 | 1 | 0 | 0 | 否 | [链接](https://starlink.com/updates/stargaze) |
 | d3b89bb9510b1b9a | starlink_official_updates | Starlink Network Update | active | unchanged | unchanged | 1 | 1 | 0 | 0 | 否 | [链接](https://starlink.com/updates/network-update) |
@@ -277,7 +277,7 @@
 
 | 事件 | 来源 | 条目 | 前一状态 | 当前状态 | 变化字段 | 发生时间 | 限制说明 |
 |---|---|---|---|---|---|---|---|
-| extraction_improved | starlink_official_updates | [044bafcf1089533d](https://starlink.com/updates/space-safety-web-interface) | active | active | detail_parse_method | 2026-07-15T09:48:04+00:00 | 仅表示解析提升，不是事实变化 |
+| 无 |  |  |  |  |  |  | 本轮没有需展示的生命周期事件 |
 
 ## 结构化版本历史
 
@@ -302,16 +302,6 @@
 
 ## 9. 自动化测试记录
 
-- 运行时间：2026-07-14 12:26:25 中国标准时间+0800
-  - ISO 周编号：2026-W29
-  - 执行环境：Windows 10
-  - Python 版本：3.11.9
-  - 输出模式：dual
-  - 是否发送邮件：否
-  - 是否执行真实来源采集：是
-  - 是否生成解析质量诊断：是
-  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
-  - 已接入来源数量：2
 - 运行时间：2026-07-14 04:42:57 UTC+0000
   - ISO 周编号：2026-W29
   - 执行环境：Linux 6.17.0-1018-azure
@@ -493,6 +483,16 @@
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
   - 已接入来源数量：2
 - 运行时间：2026-07-15 09:47:16 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 09:55:19 UTC+0000
   - ISO 周编号：2026-W29
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15

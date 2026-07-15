@@ -25,10 +25,10 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：skipped
+状态：generated
 
 说明：
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
 - 未配置当前 provider 对应的 API Key 时会自动跳过；
 - 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
@@ -46,14 +46,14 @@ LLM Provider：deepseek
 | 复用历史记录 | 0 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 7 |
-| 输出 record ID 引用（前 / 后） | 0 / 0 |
-| 输出 URL 引用（前 / 后） | 0 / 0 |
+| 输出 record ID 引用（前 / 后） | 4 / 4 |
+| 输出 URL 引用（前 / 后） | 4 / 4 |
 | 移除非法 record ID | 0 |
 | 移除非法 URL | 0 |
 | 补齐缺失 record ID | 0 |
 | 补齐缺失 URL | 0 |
 | 删除无来源要点 | 0 |
-| 引用对齐状态 | not_run |
+| 引用对齐状态 | passed |
 
 ### 页面级监测解释
 
@@ -64,14 +64,23 @@ LLM Provider：deepseek
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | unknown |
-| Completion tokens | unknown |
-| Total tokens | unknown |
-| API 调用耗时 | unknown ms |
+| Prompt tokens | 3694 |
+| Completion tokens | 1216 |
+| Total tokens | 4910 |
+| API 调用耗时 | 14076.35 ms |
 
-跳过原因：LLM is disabled.
+### 总体摘要
 
-当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
+本周未检测到新增或内容变化条目。Starlink官方更新页面现有4篇条目：太空安全网页界面、网络更新、波束切换和Stargaze态势感知系统。
+
+### 来源约束要点
+
+| 要点 | 来源记录 | 来源链接 | 限制说明 |
+|---|---|---|---|
+| Starlink发布了一款新的基于网页的工具，简化了卫星交会筛查和星历共享。 | 044bafcf1089533d | https://starlink.com/updates/space-safety-web-interface | 无 |
+| Starlink在过去一年扩展到42个新国家，活跃客户增长270万以上，总数超过600万，并发射了2300多颗卫星。 | d3b89bb9510b1b9a | https://starlink.com/updates/network-update | 无 |
+| Starlink使用波束切换技术自动绕过障碍物，确保可靠的高速互联网连接。 | 495a49c7d5c93cbc | https://starlink.com/updates/starlink-beam-switching | 无 |
+| Stargaze是SpaceX开发的太空态势感知系统，旨在增强低地球轨道卫星运营的安全性和可持续性。 | 95bbf31b3a93d3e6 | https://starlink.com/updates/stargaze | 无 |
 
 
 ## 结构化官方条目
@@ -110,7 +119,9 @@ LLM Provider：deepseek
 | 来源 | Active | New | Changed | Extraction Improved | Temporarily Missing | Long Absent | Fetch Failed | Recovered | Reappeared |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | SpaceX Official Launches | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Starlink Official Updates | 4 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| Starlink Official Updates | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+本轮未产生新增、语义变化、暂时消失、连续失败或恢复事件。
 
 ### 本轮新增条目
 
@@ -124,7 +135,7 @@ LLM Provider：deepseek
 
 以下变化仅表示解析完整度提升，不代表官方内容发生变化。
 
-- [044bafcf1089533d](https://starlink.com/updates/space-safety-web-interface)：detail_parse_method。
+本轮没有解析质量提升事件。
 
 ### 暂时消失与长期未见
 
@@ -141,7 +152,7 @@ LLM Provider：deepseek
 ### 历史版本
 
 - 本轮新建 semantic versions：0
-- 本轮新建 extraction revisions：1
+- 本轮新建 extraction revisions：0
 
 
 ## 3. 来源状态概览
@@ -177,7 +188,7 @@ LLM Provider：deepseek
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 
 ## 7. 本周文档
 
@@ -186,7 +197,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 09:47:16 UTC+0000
+- 运行时间：2026-07-15 09:55:19 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 是否发送邮件：是
@@ -197,4 +208,4 @@ LLM Provider：deepseek
 - 内容变化条目数：0
 - 未变化条目数：5
 - LLM Provider：deepseek
-- LLM 摘要状态：skipped
+- LLM 摘要状态：generated
