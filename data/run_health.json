@@ -7,14 +7,14 @@
   "component_status_source": {
     "candidate_discovery": "internal_result",
     "detail_extraction": "internal_result",
-    "email": "workflow_step_outcome",
-    "gitee_sync": "workflow_step_outcome",
+    "email": "pending_at_render_time",
+    "gitee_sync": "pending_at_render_time",
     "lifecycle": "internal_result",
-    "llm": "not_applicable",
-    "output_validation": "workflow_step_outcome",
-    "project_audit": "workflow_step_outcome",
+    "llm": "internal_result",
+    "output_validation": "pending_at_render_time",
+    "project_audit": "pending_at_render_time",
     "source_collection": "internal_result",
-    "workflow_core": "workflow_step_outcome"
+    "workflow_core": "pending_at_render_time"
   },
   "components": {
     "candidate_discovery": {
@@ -31,34 +31,34 @@
       "success_rate": 1.0
     },
     "email": {
-      "component_status_source": "workflow_step_outcome",
-      "result": "success",
-      "status": "healthy"
+      "component_status_source": "pending_at_render_time",
+      "result": "pending_at_render_time",
+      "status": "pending_at_render_time"
     },
     "gitee_sync": {
-      "component_status_source": "workflow_step_outcome",
-      "result": "success",
-      "status": "healthy"
+      "component_status_source": "pending_at_render_time",
+      "result": "pending_at_render_time",
+      "status": "pending_at_render_time"
     },
     "lifecycle": {
       "component_status_source": "internal_result",
       "status": "healthy"
     },
     "llm": {
-      "component_status_source": "not_applicable",
-      "enabled": false,
-      "result": "skipped_disabled",
+      "component_status_source": "internal_result",
+      "enabled": true,
+      "result": "generated",
       "status": "healthy"
     },
     "output_validation": {
-      "component_status_source": "workflow_step_outcome",
-      "result": "success",
-      "status": "healthy"
+      "component_status_source": "pending_at_render_time",
+      "result": "pending_at_render_time",
+      "status": "pending_at_render_time"
     },
     "project_audit": {
-      "component_status_source": "workflow_step_outcome",
-      "result": "success",
-      "status": "healthy"
+      "component_status_source": "pending_at_render_time",
+      "result": "pending_at_render_time",
+      "status": "pending_at_render_time"
     },
     "source_collection": {
       "component_status_source": "internal_result",
@@ -67,24 +67,24 @@
       "total_sources": 2
     },
     "workflow_core": {
-      "component_status_source": "workflow_step_outcome",
-      "result": "success",
-      "status": "healthy"
+      "component_status_source": "pending_at_render_time",
+      "result": "pending_at_render_time",
+      "status": "pending_at_render_time"
     }
   },
-  "duration_seconds": 60.0,
-  "finalized_at": "2026-07-15T14:22:02+00:00",
-  "finished_at": "2026-07-15T14:22:02+00:00",
-  "generated_at": "2026-07-15T14:22:02+00:00",
-  "health_phase": "final",
-  "is_final": true,
-  "last_applied_run_id": "29423099967",
-  "last_applied_started_at": "2026-07-15T14:21:02+00:00",
+  "duration_seconds": 54.0,
+  "finalized_at": null,
+  "finished_at": "2026-07-15T14:25:13+00:00",
+  "generated_at": "2026-07-15T14:25:13+00:00",
+  "health_phase": "provisional",
+  "is_final": false,
+  "last_applied_run_id": "29423345480",
+  "last_applied_started_at": "2026-07-15T14:24:19+00:00",
   "overall_health": "healthy",
-  "run_id": "29423099967",
+  "run_id": "29423345480",
   "severity_safety_note": "告警等级只表示自动化系统中的人工复查优先级，不表示 Starlink、SpaceX 或相关事件的战略重要性、影响程度或安全等级。",
   "stage": "4D.1",
-  "started_at": "2026-07-15T14:21:02+00:00",
+  "started_at": "2026-07-15T14:24:19+00:00",
   "version": 2,
   "warnings": []
 }

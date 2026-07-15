@@ -25,10 +25,10 @@
 
 LLM Provider：deepseek
 模型：deepseek-v4-flash
-状态：skipped
+状态：generated
 
 说明：
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 - 本节仅在显式启用 LLM 且通过来源约束校验后生成；
 - 未配置当前 provider 对应的 API Key 时会自动跳过；
 - 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；
@@ -46,14 +46,14 @@ LLM Provider：deepseek
 | 复用历史记录 | 0 |
 | 删除重复记录 | 2 |
 | 唯一来源 URL | 7 |
-| 输出 record ID 引用（前 / 后） | 0 / 0 |
-| 输出 URL 引用（前 / 后） | 0 / 0 |
+| 输出 record ID 引用（前 / 后） | 4 / 4 |
+| 输出 URL 引用（前 / 后） | 4 / 4 |
 | 移除非法 record ID | 0 |
 | 移除非法 URL | 0 |
 | 补齐缺失 record ID | 0 |
 | 补齐缺失 URL | 0 |
 | 删除无来源要点 | 0 |
-| 引用对齐状态 | not_run |
+| 引用对齐状态 | passed |
 
 ### 页面级监测解释
 
@@ -64,14 +64,23 @@ LLM Provider：deepseek
 
 | 指标 | 数值 |
 |---|---:|
-| Prompt tokens | unknown |
-| Completion tokens | unknown |
-| Total tokens | unknown |
-| API 调用耗时 | unknown ms |
+| Prompt tokens | 4043 |
+| Completion tokens | 584 |
+| Total tokens | 4627 |
+| API 调用耗时 | 6895.81 ms |
 
-跳过原因：LLM is disabled.
+### 总体摘要
 
-当前主流程仍会继续生成周报、邮件、GitHub 提交和 Gitee 同步。
+本周未检测到新增或内容变化条目。现有的官方 Starlink 更新条目包括：空间安全网络界面、网络更新、波束切换和 Stargaze 空间态势感知系统。
+
+### 来源约束要点
+
+| 要点 | 来源记录 | 来源链接 | 限制说明 |
+|---|---|---|---|
+| 现有官方条目介绍了一个新的基于网络的工具，用于简化卫星交会筛查和星历共享。 | 044bafcf1089533d | https://starlink.com/updates/space-safety-web-interface | 该条目内容在本轮监测中未发生变化。 |
+| 现有官方条目介绍了 Starlink 网络速度、延迟、弹性、可扩展性和容量的最新更新。 | d3b89bb9510b1b9a | https://starlink.com/updates/network-update | 该条目内容在本轮监测中未发生变化。 |
+| 现有官方条目说明 Starlink 使用波束切换自动绕开障碍物，以提供可靠的高速互联网。 | 495a49c7d5c93cbc | https://starlink.com/updates/starlink-beam-switching | 该条目内容在本轮监测中未发生变化。 |
+| 现有官方条目介绍了 Stargaze，即 SpaceX 的空间态势感知系统，旨在提高低地球轨道卫星操作的安全性和可持续性。 | 95bbf31b3a93d3e6 | https://starlink.com/updates/stargaze | 该条目内容在本轮监测中未发生变化。 |
 
 
 ## 结构化官方条目
@@ -157,7 +166,7 @@ LLM Provider：deepseek
 | 候选发现 | healthy |
 | 详情解析 | healthy |
 | 生命周期处理 | healthy |
-| LLM | disabled |
+| LLM | healthy |
 | 输出检查 | pending_at_render_time |
 | 项目审计 | pending_at_render_time |
 | 邮件 | pending_at_render_time |
@@ -211,7 +220,7 @@ LLM Provider：deepseek
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- 代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。
+- 代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。只有 API 调用成功且通过来源约束校验后，摘要才会展示。
 
 ## 7. 本周文档
 
@@ -220,7 +229,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 14:21:02 UTC+0000
+- 运行时间：2026-07-15 14:24:19 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 是否发送邮件：否
@@ -231,4 +240,4 @@ LLM Provider：deepseek
 - 内容变化条目数：0
 - 未变化条目数：5
 - LLM Provider：deepseek
-- LLM 摘要状态：skipped
+- LLM 摘要状态：generated
