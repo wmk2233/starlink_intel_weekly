@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from collect_sources import (
+    DETAIL_EXTRACTION_DIAGNOSTICS_FILE,
     EXTRACTION_QUALITY_FILE,
     ITEMS_FILE,
     ITEM_EXTRACTION_REPORT_FILE,
@@ -91,7 +92,11 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "quality_path": str(EXTRACTION_QUALITY_FILE),
         "item_extraction_state_path": "data/item_extraction_state.json",
         "item_extraction_report_path": "data/item_extraction_report.json",
+        "detail_extraction_diagnostics_path": "data/detail_extraction_diagnostics.json",
         "item_extraction_overview": "暂无官方条目抽取结果。",
+        "detail_extraction_overview": "暂无官方详情解析结果。",
+        "detail_failure_overview": "本轮没有详情解析失败。",
+        "historical_reuse_note": "",
         "connected_source_count": "0",
         "reachable_source_count": "0",
         "page_changed_source_count": "0",
@@ -116,6 +121,12 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "llm_input_records_after_dedup": "0",
         "llm_duplicate_records_removed": "0",
         "llm_unique_source_urls": "0",
+        "llm_raw_candidate_records": "0",
+        "llm_records_after_url_dedup": "0",
+        "llm_final_core_input_records": "0",
+        "llm_final_core_unique_urls": "0",
+        "llm_reused_historical_records": "0",
+        "llm_current_status_text": "代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。",
         "llm_output_record_references_before_dedup": "0",
         "llm_output_record_references_after_dedup": "0",
         "llm_output_url_references_before_dedup": "0",
@@ -329,8 +340,8 @@ def render_summary_quality_table(
         return "本次没有解析质量诊断记录。"
 
     rows = [
-        "| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |",
-        "|---|---|---|---:|---:|",
+        "| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |",
+        "|---|---|---|---:|---:|---:|---:|",
     ]
     ordered_ids = list(source_statuses.keys()) or list(quality_sources.keys())
     for source_id in ordered_ids:
@@ -344,7 +355,9 @@ def render_summary_quality_table(
                     escape_table_cell(quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"),
                     escape_table_cell(quality.get("dominant_source_quality") or status.get("dominant_source_quality") or "unknown"),
                     escape_table_cell(quality.get("average_confidence") or status.get("average_confidence") or 0),
-                    escape_table_cell(quality.get("candidate_links_total") or status.get("candidate_links_total") or 0),
+                    escape_table_cell(quality.get("static_candidate_count") or status.get("static_candidate_count") or 0),
+                    escape_table_cell(quality.get("rendered_candidate_count") or status.get("rendered_candidate_count") or 0),
+                    escape_table_cell(quality.get("candidate_count_total") or status.get("candidate_count_total") or 0),
                 ]
             )
             + " |"
@@ -360,8 +373,8 @@ def render_detail_quality_table(
         return "本次没有解析质量诊断记录。"
 
     rows = [
-        "| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 页面级 | 链接级 | 条目级 | 候选链接数 | 解析器版本 |",
-        "|---|---|---|---:|---:|---:|---:|---:|---|",
+        "| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 页面级 | 链接级 | 条目级 | 静态候选 | 渲染候选 | 候选总数 | 解析器版本 |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     ordered_ids = list(source_statuses.keys()) or list(quality_sources.keys())
     for source_id in ordered_ids:
@@ -379,7 +392,9 @@ def render_detail_quality_table(
                     escape_table_cell(level_counts.get("page_level", 0)),
                     escape_table_cell(level_counts.get("link_level", 0)),
                     escape_table_cell(level_counts.get("item_level", 0)),
-                    escape_table_cell(quality.get("candidate_links_total") or status.get("candidate_links_total") or 0),
+                    escape_table_cell(quality.get("static_candidate_count") or status.get("static_candidate_count") or 0),
+                    escape_table_cell(quality.get("rendered_candidate_count") or status.get("rendered_candidate_count") or 0),
+                    escape_table_cell(quality.get("candidate_count_total") or status.get("candidate_count_total") or 0),
                     escape_table_cell(quality.get("parser_version") or status.get("parser_version") or "unknown"),
                 ]
             )
@@ -440,8 +455,8 @@ def render_official_item_quality_table(item_report: dict[str, object]) -> str:
     if not isinstance(sources, dict) or not sources:
         return "本次没有官方条目抽取报告。"
     rows = [
-        "| 来源 | 解析器 | 静态候选 | 浏览器候选 | 选中候选 | 详情成功/失败 | baseline/new/changed/unchanged | item/page | 层级 | 质量 | 渲染 fallback | warning |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| 来源 | 解析器 | 静态候选 | 渲染候选 | 候选总数 | 静态详情成功 | 渲染详情成功 | 最终成功 | 失败 | 成功率 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for source_id, raw in sources.items():
         report = raw if isinstance(raw, dict) else {}
@@ -453,19 +468,99 @@ def render_official_item_quality_table(item_report: dict[str, object]) -> str:
                     escape_table_cell(report.get("parser_version") or "unknown"),
                     escape_table_cell(report.get("static_candidate_count", 0)),
                     escape_table_cell(report.get("rendered_candidate_count", 0)),
-                    escape_table_cell(report.get("selected_candidate_count", report.get("candidate_count", 0))),
-                    f"{report.get('detail_fetch_success', 0)}/{report.get('detail_fetch_failed', 0)}",
-                    f"{report.get('baseline_items', 0)}/{report.get('new_items', 0)}/{report.get('changed_items', 0)}/{report.get('unchanged_items', 0)}",
-                    f"{report.get('item_level_items', 0)}/{report.get('page_level_items', 0)}",
+                    escape_table_cell(report.get("candidate_count_total", report.get("candidate_count", 0))),
+                    escape_table_cell(report.get("static_detail_success", 0)),
+                    escape_table_cell(report.get("rendered_detail_success", 0)),
+                    escape_table_cell(report.get("final_detail_success", report.get("detail_fetch_success", 0))),
+                    escape_table_cell(report.get("final_detail_failed", report.get("detail_fetch_failed", 0))),
+                    "unknown" if report.get("final_success_rate") is None else f"{float(report.get('final_success_rate')):.0%}",
+                    escape_table_cell(report.get("baseline_items", 0)),
+                    escape_table_cell(report.get("new_items", 0)),
+                    escape_table_cell(report.get("changed_items", 0)),
+                    escape_table_cell(report.get("unchanged_items", 0)),
                     escape_table_cell(report.get("dominant_extracted_level", "unknown")),
                     escape_table_cell(report.get("dominant_source_quality", "unknown")),
-                    f"{'是' if report.get('render_fallback_used') else '否'} / {escape_table_cell(report.get('render_fallback_status', 'unknown'))}",
-                    escape_table_cell(", ".join(report.get("warnings", [])) if isinstance(report.get("warnings"), list) else ""),
                 ]
             )
             + " |"
         )
     return "\n".join(rows)
+
+
+def render_detail_parsing_overview(item_report: dict[str, object]) -> str:
+    sources = item_report.get("sources", {}) if isinstance(item_report, dict) else {}
+    if not isinstance(sources, dict) or not sources:
+        return "本次没有官方详情解析报告。"
+    rows = [
+        "| 来源 | 静态候选 | 渲染候选 | 候选总数 | 静态详情成功 | 渲染详情成功 | 最终成功 | 失败 | 成功率 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for source_id, raw in sources.items():
+        report = raw if isinstance(raw, dict) else {}
+        rate = report.get("final_success_rate")
+        rate_text = "unknown" if rate is None else f"{float(rate):.0%}"
+        rows.append(
+            f"| {escape_table_cell(report.get('source_name') or source_id)} | "
+            f"{report.get('static_candidate_count', 0)} | {report.get('rendered_candidate_count', 0)} | "
+            f"{report.get('candidate_count_total', report.get('candidate_count', 0))} | "
+            f"{report.get('static_detail_success', 0)} | {report.get('rendered_detail_success', 0)} | "
+            f"{report.get('final_detail_success', 0)} | {report.get('final_detail_failed', 0)} | {rate_text} |"
+        )
+    return "\n".join(rows)
+
+
+def render_detail_failure_overview(item_report: dict[str, object]) -> str:
+    sources = item_report.get("sources", {}) if isinstance(item_report, dict) else {}
+    rows = ["| 来源 | 失败类型 | 数量 |", "|---|---|---:|"]
+    if isinstance(sources, dict):
+        for source_id, raw in sources.items():
+            report = raw if isinstance(raw, dict) else {}
+            failure_types = report.get("failure_types", {})
+            if not isinstance(failure_types, dict):
+                continue
+            for error_type, count in sorted(failure_types.items()):
+                rows.append(
+                    f"| {escape_table_cell(report.get('source_name') or source_id)} | "
+                    f"{escape_table_cell(error_type)} | {int(count or 0)} |"
+                )
+    return "本轮没有详情解析失败。" if len(rows) == 2 else "\n".join(rows)
+
+
+def render_detail_diagnostics_table(diagnostics: dict[str, object], max_records: int) -> str:
+    sources = diagnostics.get("sources", {}) if isinstance(diagnostics, dict) else {}
+    rows = [
+        "| 来源 | 详情 URL | 静态状态 | 是否渲染 | 渲染状态 | 最终状态 | 最终方法 | 错误类型 | 是否复用历史记录 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    if isinstance(sources, dict):
+        for source_id, raw in sources.items():
+            source = raw if isinstance(raw, dict) else {}
+            details = source.get("details", [])
+            if not isinstance(details, list):
+                continue
+            for detail in details:
+                if not isinstance(detail, dict) or len(rows) - 2 >= max_records:
+                    break
+                static = detail.get("static", {}) if isinstance(detail.get("static"), dict) else {}
+                render = detail.get("render", {}) if isinstance(detail.get("render"), dict) else {}
+                rows.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            escape_table_cell(source.get("source_name") or source_id),
+                            format_link(detail.get("canonical_url"), "详情"),
+                            escape_table_cell(static.get("parse_status", "unknown")),
+                            "是" if render.get("attempted") else "否",
+                            escape_table_cell(render.get("parse_status", "not_attempted")),
+                            escape_table_cell(detail.get("final_status", "unknown")),
+                            escape_table_cell(detail.get("final_method") or "none"),
+                            escape_table_cell(detail.get("error_type") or "none"),
+                            "是" if detail.get("current_run_data_reused") else "否",
+                        ]
+                    )
+                    + " |"
+                )
+    return "当前没有逐候选详情诊断。" if len(rows) == 2 else "\n".join(rows)
 
 
 def render_structured_official_items(source_items: list[dict[str, object]], item_report: dict[str, object]) -> str:
@@ -498,6 +593,8 @@ def render_structured_official_items(source_items: list[dict[str, object]], item
 
     sections = [
         "### 抽取概览\n\n" + "\n".join(overview),
+        "### 详情解析情况\n\n" + render_detail_parsing_overview(item_report),
+        "### 详情失败概览\n\n" + render_detail_failure_overview(item_report),
         "### 本周新增或变化条目\n\n" + render_changed_items_summary(source_items),
     ]
     if baseline_count:
@@ -516,6 +613,17 @@ def render_structured_official_items(source_items: list[dict[str, object]], item
             + "\n".join(baseline_rows)
         )
     sections.append("### 条目抽取质量\n\n" + "\n".join(quality_rows))
+    reused_count = sum(
+        int(report.get("reused_previous_success") or 0)
+        for report in reports
+        if isinstance(report, dict)
+    )
+    if reused_count:
+        sections.append(
+            "### 历史有效记录复用\n\n"
+            "本轮部分详情页重新获取失败，系统保留最近一次成功解析的结构化记录。"
+            "复用记录不代表本轮重新确认，也不计为新增或内容变化。"
+        )
     return "\n\n".join(sections)
 
 
@@ -594,7 +702,11 @@ def apply_item_report_to_meta(meta: dict[str, str], item_report: dict[str, objec
     meta["item_level_items"] = str(item_level)
     meta["page_level_items"] = str(page_level)
     lines = [
-        f"- {report.get('source_name') or report.get('source_id')}：候选 {report.get('candidate_count', 0)} / "
+        f"- {report.get('source_name') or report.get('source_id')}：静态候选 {report.get('static_candidate_count', 0)} / "
+        f"渲染候选 {report.get('rendered_candidate_count', 0)} / "
+        f"候选总数 {report.get('candidate_count_total', report.get('candidate_count', 0))} / "
+        f"最终详情成功 {report.get('final_detail_success', report.get('detail_fetch_success', 0))} / "
+        f"失败 {report.get('final_detail_failed', report.get('detail_fetch_failed', 0))} / "
         f"条目级 {report.get('item_level_items', 0)} / 页面级 {report.get('page_level_items', 0)} / "
         f"baseline {report.get('baseline_items', 0)} / fallback "
         f"{'是' if report.get('page_level_fallback') else '否'} / 直接 Starlink "
@@ -604,6 +716,32 @@ def apply_item_report_to_meta(meta: dict[str, str], item_report: dict[str, objec
     if baseline:
         lines.append("本次为条目级解析首次建库，baseline 条目不等同于本周新增。")
     meta["item_extraction_overview"] = "\n".join(lines) if lines else "暂无官方条目抽取结果。"
+    detail_lines: list[str] = []
+    failure_lines: list[str] = []
+    reused = 0
+    for report in reports:
+        rate = report.get("final_success_rate")
+        rate_text = "unknown" if rate is None else f"{float(rate):.0%}"
+        detail_lines.append(
+            f"- {report.get('source_name') or report.get('source_id')}：静态候选 {report.get('static_candidate_count', 0)} / "
+            f"渲染候选 {report.get('rendered_candidate_count', 0)} / "
+            f"候选总数 {report.get('candidate_count_total', report.get('candidate_count', 0))} / "
+            f"静态详情成功 {report.get('static_detail_success', 0)} / "
+            f"渲染详情成功 {report.get('rendered_detail_success', 0)} / "
+            f"最终详情成功 {report.get('final_detail_success', 0)} / "
+            f"失败 {report.get('final_detail_failed', 0)} / 成功率 {rate_text}"
+        )
+        failure_types = report.get("failure_types", {})
+        if isinstance(failure_types, dict):
+            failure_lines.extend(f"- {error_type}：{count}" for error_type, count in sorted(failure_types.items()))
+        reused += int(report.get("reused_previous_success") or 0)
+    meta["detail_extraction_overview"] = "\n".join(detail_lines) if detail_lines else "暂无官方详情解析结果。"
+    meta["detail_failure_overview"] = "\n".join(failure_lines) if failure_lines else "本轮没有详情解析失败。"
+    meta["historical_reuse_note"] = (
+        "本轮部分详情解析失败，系统保留最近一次成功的结构化记录。该记录不代表本轮重新确认。"
+        if reused
+        else ""
+    )
 
 
 def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
@@ -623,6 +761,11 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     meta["llm_input_records_after_dedup"] = str(audit.get("input_records_after_dedup") or 0)
     meta["llm_duplicate_records_removed"] = str(audit.get("duplicate_records_removed") or 0)
     meta["llm_unique_source_urls"] = str(audit.get("unique_source_urls") or 0)
+    meta["llm_raw_candidate_records"] = str(audit.get("raw_candidate_records") or audit.get("input_records_before_dedup") or 0)
+    meta["llm_records_after_url_dedup"] = str(audit.get("records_after_url_dedup") or audit.get("input_records_after_dedup") or 0)
+    meta["llm_final_core_input_records"] = str(audit.get("final_core_input_records") or audit.get("input_records") or 0)
+    meta["llm_final_core_unique_urls"] = str(audit.get("final_core_unique_urls") or 0)
+    meta["llm_reused_historical_records"] = str(audit.get("reused_historical_records") or 0)
     meta["llm_output_record_references_before_dedup"] = str(audit.get("output_record_references_before_dedup") or 0)
     meta["llm_output_record_references_after_dedup"] = str(audit.get("output_record_references_after_dedup") or 0)
     meta["llm_output_url_references_before_dedup"] = str(audit.get("output_url_references_before_dedup") or 0)
@@ -640,6 +783,15 @@ def apply_llm_to_meta(meta: dict[str, str], audit: dict[str, object]) -> None:
     meta["llm_page_level_no_fact_expansion"] = str(bool(guardrails.get("page_level_no_fact_expansion"))).lower()
     meta["llm_errors"] = "；".join(str(error) for error in errors) if isinstance(errors, list) else ""
     meta["llm_warnings"] = "；".join(str(warning) for warning in warnings) if isinstance(warnings, list) else ""
+    if bool(audit.get("llm_enabled")) and audit.get("llm_status") == "skipped_no_api_key":
+        meta["llm_current_status_text"] = "当前自动化已请求启用 LLM，但未检测到对应 provider 的 API Key，因此本次自动跳过。"
+    elif bool(audit.get("llm_enabled")):
+        meta["llm_current_status_text"] = (
+            "代码层面 LLM 默认关闭；当前自动化运行已显式启用 LLM。"
+            "只有 API 调用成功且通过来源约束校验后，摘要才会展示。"
+        )
+    else:
+        meta["llm_current_status_text"] = "代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。"
     if isinstance(monitoring_context, list) and monitoring_context:
         meta["llm_monitoring_overview"] = "\n".join(
             f"- {entry.get('source_name') or entry.get('source_id') or 'unknown'}：{entry.get('interpretation') or '暂无解释。'}"
@@ -657,6 +809,7 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
         f"状态：{meta.get('llm_status', 'unknown')}",
         "",
         "说明：",
+        f"- {meta.get('llm_current_status_text', '')}",
         "- 本节仅在显式启用 LLM 且通过来源约束校验后生成；",
         "- 未配置当前 provider 对应的 API Key 时会自动跳过；",
         "- 大模型摘要只基于 `data/items.jsonl` 等本地结构化来源数据；",
@@ -667,8 +820,11 @@ def render_llm_summary_section(meta: dict[str, str], llm_summary_data: dict[str,
         "",
         "| 指标 | 数量 |",
         "|---|---:|",
-        f"| 去重前输入记录 | {meta.get('llm_input_records_before_dedup', '0')} |",
-        f"| 去重后输入记录 | {meta.get('llm_input_records_after_dedup', '0')} |",
+        f"| 原始候选记录 | {meta.get('llm_raw_candidate_records', '0')} |",
+        f"| URL 去重后记录 | {meta.get('llm_records_after_url_dedup', '0')} |",
+        f"| 最终核心输入记录 | {meta.get('llm_final_core_input_records', '0')} |",
+        f"| 最终核心唯一 URL | {meta.get('llm_final_core_unique_urls', '0')} |",
+        f"| 复用历史记录 | {meta.get('llm_reused_historical_records', '0')} |",
         f"| 删除重复记录 | {meta.get('llm_duplicate_records_removed', '0')} |",
         f"| 唯一来源 URL | {meta.get('llm_unique_source_urls', '0')} |",
         f"| 输出 record ID 引用（前 / 后） | {meta.get('llm_output_record_references_before_dedup', '0')} / {meta.get('llm_output_record_references_after_dedup', '0')} |",
@@ -740,6 +896,11 @@ def render_llm_audit_section(meta: dict[str, str]) -> str:
         ("去重后输入记录", meta.get("llm_input_records_after_dedup", "0")),
         ("删除重复记录", meta.get("llm_duplicate_records_removed", "0")),
         ("唯一来源 URL", meta.get("llm_unique_source_urls", "0")),
+        ("原始候选记录", meta.get("llm_raw_candidate_records", "0")),
+        ("URL 去重后记录", meta.get("llm_records_after_url_dedup", "0")),
+        ("最终核心输入记录", meta.get("llm_final_core_input_records", "0")),
+        ("最终核心唯一 URL", meta.get("llm_final_core_unique_urls", "0")),
+        ("复用历史记录", meta.get("llm_reused_historical_records", "0")),
         ("输出 record ID 去重前数量", meta.get("llm_output_record_references_before_dedup", "0")),
         ("输出 record ID 去重后数量", meta.get("llm_output_record_references_after_dedup", "0")),
         ("输出 URL 去重前数量", meta.get("llm_output_url_references_before_dedup", "0")),
@@ -986,7 +1147,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4A：完成两个官方索引页的条目发现、详情解析、稳定 ID、baseline 与页面级 fallback。
+当前阶段为阶段 4B：增强官方详情静态解析、受控浏览器 fallback、逐候选诊断与历史失败恢复。
 
 ## 2. 本周核心结论
 
@@ -1032,7 +1193,7 @@ def build_weekly_summary_markdown(
 - 对 `new` 或 `changed` 条目，建议人工打开来源链接复核；
 - 对 `page_level / low` 记录，不应直接当作具体情报事实；
 - 当前阶段不编造发布时间、发射时间、任务状态、载荷数量或技术细节；
-- LLM 摘要默认关闭，只有显式启用且通过来源约束校验后才展示。
+- {meta.get("llm_current_status_text", "代码层面 LLM 默认关闭；当前自动化运行未启用 LLM，因此不会调用外部模型。")}
 
 ## 7. 本周文档
 
@@ -1053,6 +1214,7 @@ def build_weekly_details_markdown(
     quality_sources: dict[str, dict[str, object]],
     history_records: list[dict[str, str]],
     item_report: dict[str, object],
+    detail_diagnostics: dict[str, object],
     llm_audit: dict[str, object] | None = None,
 ) -> str:
     error_note = ""
@@ -1074,6 +1236,7 @@ def build_weekly_details_markdown(
 | `data/extraction_quality.json` | 解析质量诊断 |
 | `data/item_extraction_state.json` | 条目 stable ID、baseline 与历史状态 |
 | `data/item_extraction_report.json` | 本次官方条目发现与详情解析报告 |
+| `data/detail_extraction_diagnostics.json` | 逐候选静态/渲染详情解析状态与有限错误类型 |
 | `data/llm_audit.json` | 可选 LLM 摘要审计 |
 | `data/llm_summaries.json` | 可选 LLM 摘要输出 |
 | `data/llm_usage.jsonl` | 限长的 LLM 状态、token 与耗时记录 |
@@ -1103,6 +1266,14 @@ def build_weekly_details_markdown(
 ## 官方条目解析诊断
 
 {render_official_item_diagnostics(source_items, item_report)}
+
+## 官方详情页解析诊断
+
+{render_detail_diagnostics_table(detail_diagnostics, int(meta.get("max_history_records", "20")))}
+
+### 详情失败类型
+
+{render_detail_failure_overview(item_report)}
 
 ## 8. 局限性
 
@@ -1161,6 +1332,7 @@ def build_legacy_markdown(
     quality_sources: dict[str, dict[str, object]],
     history_records: list[dict[str, str]],
     item_report: dict[str, object],
+    detail_diagnostics: dict[str, object],
 ) -> str:
     # Legacy mode keeps the old single-file shape but rewrites bounded content instead of appending forever.
     return build_weekly_details_markdown(
@@ -1171,6 +1343,7 @@ def build_legacy_markdown(
         quality_sources=quality_sources,
         history_records=history_records,
         item_report=item_report,
+        detail_diagnostics=detail_diagnostics,
     ).replace("Starlink 情报周报明细版", "Starlink 情报周报")
 
 
@@ -1196,6 +1369,7 @@ def write_weekly_outputs(
     llm_summary_data: dict[str, object],
     llm_audit: dict[str, object],
     item_report: dict[str, object],
+    detail_diagnostics: dict[str, object],
 ) -> None:
     history_records = load_existing_history([paths["details"], paths["index"]])
     history_records.append(meta)
@@ -1212,6 +1386,7 @@ def write_weekly_outputs(
         quality_sources,
         history_records,
         item_report,
+        detail_diagnostics,
         llm_audit,
     )
 
@@ -1236,6 +1411,7 @@ def write_weekly_outputs(
             quality_sources,
             history_records,
             item_report,
+            detail_diagnostics,
         )
         write_text_file(paths["index"], legacy_content, dry_run)
 
@@ -1513,8 +1689,13 @@ def build_quality_overview(
         level = quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"
         source_quality = quality.get("dominant_source_quality") or status.get("dominant_source_quality") or "unknown"
         confidence = quality.get("average_confidence") or status.get("average_confidence") or 0
-        links = quality.get("candidate_links_total") or status.get("candidate_links_total") or 0
-        lines.append(f"- {source_name}：{level} / {source_quality} / 平均置信度 {confidence} / 候选链接 {links}")
+        static_candidates = quality.get("static_candidate_count") or status.get("static_candidate_count") or 0
+        rendered_candidates = quality.get("rendered_candidate_count") or status.get("rendered_candidate_count") or 0
+        total_candidates = quality.get("candidate_count_total") or status.get("candidate_count_total") or 0
+        lines.append(
+            f"- {source_name}：{level} / {source_quality} / 平均置信度 {confidence} / "
+            f"静态候选 {static_candidates} / 渲染候选 {rendered_candidates} / 候选总数 {total_candidates}"
+        )
     return "\n".join(lines)
 
 
@@ -1785,7 +1966,8 @@ def update_knowledge_base(
 
 
 def main() -> int:
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
+        load_dotenv(PROJECT_ROOT / ".env", override=False)
     parser = argparse.ArgumentParser(description="生成 Starlink 情报周报自动化测试文档。")
     parser.add_argument("--no-email", action="store_true", help="只生成 Markdown，不发送邮件。")
     parser.add_argument("--dry-run", action="store_true", help="打印将要执行的操作，不写文件、不发邮件。")
@@ -1796,6 +1978,21 @@ def main() -> int:
         default="auto",
         help="官方索引页受控渲染策略；默认 auto，仅在静态候选为 0 时启用。",
     )
+    parser.add_argument(
+        "--detail-render-mode",
+        choices=["auto", "never", "always"],
+        default=os.getenv("DETAIL_RENDER_MODE") or "auto",
+        help="官方详情页受控渲染策略；默认 auto，仅在静态详情不足时启用。",
+    )
+    parser.add_argument(
+        "--max-rendered-details-per-source",
+        type=int,
+        default=int(os.getenv("MAX_RENDERED_DETAILS_PER_SOURCE") or 10),
+    )
+    parser.add_argument("--detail-timeout-ms", type=int, default=int(os.getenv("DETAIL_TIMEOUT_MS") or 30_000))
+    parser.add_argument("--detail-wait-ms", type=int, default=int(os.getenv("DETAIL_WAIT_MS") or 1_500))
+    parser.add_argument("--detail-max-scrolls", type=int, default=int(os.getenv("DETAIL_MAX_SCROLLS") or 3))
+    parser.add_argument("--detail-concurrency", type=int, default=int(os.getenv("DETAIL_CONCURRENCY") or 1))
     parser.add_argument(
         "--rebootstrap-source",
         choices=["starlink_official_updates", "spacex_official_launches"],
@@ -1867,6 +2064,12 @@ def main() -> int:
     if args.max_llm_usage_records < 1:
         print("--max-llm-usage-records 必须是大于等于 1 的整数。")
         return 2
+    if args.max_rendered_details_per_source < 0 or args.detail_wait_ms < 0 or args.detail_max_scrolls < 0:
+        print("详情渲染数量、等待时间和最大滚动次数不能小于 0。")
+        return 2
+    if args.detail_timeout_ms < 1 or args.detail_concurrency < 1:
+        print("详情超时和并发参数必须大于等于 1。")
+        return 2
 
     send_email_enabled = not args.no_email and not args.dry_run
     collect_enabled = not args.no_collect
@@ -1882,6 +2085,7 @@ def main() -> int:
     source_statuses: dict[str, dict[str, object]] = {}
     quality_sources: dict[str, dict[str, object]] = {}
     item_report: dict[str, object] = {}
+    detail_diagnostics: dict[str, object] = {}
 
     print("开始执行 Starlink 情报周报自动化测试。")
     print(f"项目根目录：{PROJECT_ROOT}")
@@ -1889,17 +2093,19 @@ def main() -> int:
     print(f"输出模式：{args.output_mode}")
     print(f"是否发送邮件：{meta['send_email']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4A 官方条目发现、详情解析、稳定 ID、baseline 与 fallback。")
+    print("当前阶段：4B 官方详情动态解析、逐候选诊断与失败恢复。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
     meta["max_source_items"] = str(args.max_source_items)
+    meta["max_history_records"] = str(args.max_history_records)
 
     if args.no_collect:
         print("已按 --no-collect 参数跳过真实来源采集。")
         source_statuses = load_statuses_for_report()
         quality_sources = load_quality_for_report()
         item_report = load_json_for_report(ITEM_EXTRACTION_REPORT_FILE)
+        detail_diagnostics = load_json_for_report(DETAIL_EXTRACTION_DIAGNOSTICS_FILE)
         apply_status_to_meta(meta, source_statuses)
         apply_quality_to_meta(meta, quality_sources, source_statuses)
         apply_item_report_to_meta(meta, item_report)
@@ -1914,6 +2120,12 @@ def main() -> int:
             save_raw=False,
             fail_on_error=False,
             render_mode=args.render_mode,
+            detail_render_mode=args.detail_render_mode,
+            max_rendered_details_per_source=args.max_rendered_details_per_source,
+            detail_timeout_ms=args.detail_timeout_ms,
+            detail_wait_ms=args.detail_wait_ms,
+            detail_max_scrolls=args.detail_max_scrolls,
+            detail_concurrency=args.detail_concurrency,
             bootstrap_mode="baseline",
             rebootstrap_source=args.rebootstrap_source,
         )
@@ -1928,6 +2140,7 @@ def main() -> int:
         apply_status_to_meta(meta, source_statuses)
         apply_quality_to_meta(meta, quality_sources, source_statuses)
         item_report = collection_result.item_extraction_report
+        detail_diagnostics = collection_result.detail_extraction_diagnostics
         apply_item_report_to_meta(meta, item_report)
         source_items = collection_result.items or latest_items_for_report(args.max_source_items, source_statuses)
 
@@ -1964,6 +2177,7 @@ def main() -> int:
         llm_summary_data=llm_summary_data,
         llm_audit=llm_audit,
         item_report=item_report,
+        detail_diagnostics=detail_diagnostics,
     )
     manifest = update_weekly_manifest(meta, paths, source_statuses, quality_sources, args.dry_run)
     update_weekly_archive_index(manifest, args.dry_run)
@@ -1990,7 +2204,7 @@ def main() -> int:
 
     print("开始发送邮件。")
     collection_context = {
-        "stage": "4A",
+        "stage": "4B",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],
@@ -2007,6 +2221,9 @@ def main() -> int:
         "item_level_items": meta["item_level_items"],
         "page_level_items": meta["page_level_items"],
         "item_extraction_overview": meta["item_extraction_overview"],
+        "detail_extraction_overview": meta["detail_extraction_overview"],
+        "detail_failure_overview": meta["detail_failure_overview"],
+        "historical_reuse_note": meta["historical_reuse_note"],
         "summary_file": paths["summary"].name,
         "details_file": paths["details"].name,
         "index_file": paths["index"].name,
@@ -2022,6 +2239,12 @@ def main() -> int:
         "llm_input_records_after_dedup": meta["llm_input_records_after_dedup"],
         "llm_duplicate_records_removed": meta["llm_duplicate_records_removed"],
         "llm_unique_source_urls": meta["llm_unique_source_urls"],
+        "llm_raw_candidate_records": meta["llm_raw_candidate_records"],
+        "llm_records_after_url_dedup": meta["llm_records_after_url_dedup"],
+        "llm_final_core_input_records": meta["llm_final_core_input_records"],
+        "llm_final_core_unique_urls": meta["llm_final_core_unique_urls"],
+        "llm_reused_historical_records": meta["llm_reused_historical_records"],
+        "llm_current_status_text": meta["llm_current_status_text"],
         "llm_prompt_tokens": meta["llm_prompt_tokens"],
         "llm_completion_tokens": meta["llm_completion_tokens"],
         "llm_total_tokens": meta["llm_total_tokens"],

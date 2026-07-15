@@ -50,6 +50,15 @@ TIMESTAMP_FIELDS = [
     "collected_at",
     "generated_at",
     "first_seen_at",
+    "detail_fetch_status",
+    "last_detail_attempt_at",
+    "last_detail_success_at",
+    "last_detail_error_type",
+    "current_run_data_reused",
+    "detail_parse_method",
+    "semantic_content_hash",
+    "extraction_change_status",
+    "change_reason",
 ]
 
 ALLOWED_ITEM_FIELDS = [
@@ -129,7 +138,8 @@ def is_api_key_configured(value: str | None) -> bool:
 
 
 def load_project_env() -> None:
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
+        load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
 def project_path(path_value: str | Path) -> Path:
@@ -459,6 +469,11 @@ def build_audit(
         "duplicate_records_removed": 0,
         "dedup_strategy": DEDUP_STRATEGY,
     }
+    dedup.setdefault("raw_candidate_records", dedup.get("input_records_before_dedup", input_records))
+    dedup.setdefault("records_after_url_dedup", dedup.get("input_records_after_dedup", input_records))
+    dedup.setdefault("final_core_input_records", input_records)
+    dedup.setdefault("final_core_unique_urls", input_records)
+    dedup.setdefault("reused_historical_records", 0)
     references = output_reference_stats or {
         "output_record_references_before_dedup": 0,
         "output_record_references_after_dedup": 0,
@@ -577,6 +592,11 @@ def build_usage_record(audit: dict[str, Any]) -> dict[str, Any]:
         "input_records_after_dedup": audit.get("input_records_after_dedup"),
         "duplicate_records_removed": audit.get("duplicate_records_removed"),
         "unique_source_urls": audit.get("unique_source_urls"),
+        "raw_candidate_records": audit.get("raw_candidate_records"),
+        "records_after_url_dedup": audit.get("records_after_url_dedup"),
+        "final_core_input_records": audit.get("final_core_input_records"),
+        "final_core_unique_urls": audit.get("final_core_unique_urls"),
+        "reused_historical_records": audit.get("reused_historical_records"),
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
@@ -639,6 +659,8 @@ def system_prompt() -> str:
         "baseline 表示首次成功条目抽取形成的历史基线，不是本周新增，禁止写成 new 或本周新事件。\n"
         "同一来源存在 item_level 时，应以条目级记录为核心，不得把 page_level 当作核心事实。\n"
         "SpaceX 条目只有 starlink_relevance=direct 时才能进入 Starlink 核心结论。\n"
+        "如果 current_run_data_reused=true，本轮未重新确认详情正文。只能说明该记录来自最近一次成功解析，"
+        "不得描述为本轮新确认内容。\n"
         "如果没有 new 或 changed 条目，必须明确写“本周未检测到新增或内容变化条目”。\n"
         "每条摘要必须引用已有 record id 和 URL。\n"
         "输出必须是合法 JSON。"
@@ -694,6 +716,7 @@ def build_user_prompt(
             "baseline_is_not_new": True,
             "item_level_preferred": True,
             "spacex_core_requires_direct_starlink_relevance": True,
+            "reused_history_is_not_current_confirmation": True,
         },
         "items": selected_items,
         "monitoring_context": monitoring_context or [],
@@ -1003,6 +1026,23 @@ def run_llm_summary(
     dedup_stats["unique_source_urls"] = len(
         {normalize_source_url(str(item.get("url") or "")) for item in deduplicated_items if item.get("url")}
     )
+    dedup_stats.update(
+        {
+            "raw_candidate_records": dedup_stats["input_records_before_dedup"],
+            "records_after_url_dedup": dedup_stats["input_records_after_dedup"],
+            "final_core_input_records": len(selected_items),
+            "final_core_unique_urls": len(
+                {
+                    normalize_source_url(str(item.get("url") or ""))
+                    for item in selected_items
+                    if item.get("url")
+                }
+            ),
+            "reused_historical_records": sum(
+                bool(item.get("current_run_data_reused")) for item in selected_items
+            ),
+        }
+    )
     monitoring_context = build_monitoring_context(
         source_status_data,
         extraction_quality_data,
@@ -1191,6 +1231,11 @@ def run_llm_summary(
         "input_records_before_dedup": dedup_stats["input_records_before_dedup"],
         "input_records_after_dedup": dedup_stats["input_records_after_dedup"],
         "unique_source_urls": dedup_stats["unique_source_urls"],
+        "raw_candidate_records": dedup_stats["raw_candidate_records"],
+        "records_after_url_dedup": dedup_stats["records_after_url_dedup"],
+        "final_core_input_records": dedup_stats["final_core_input_records"],
+        "final_core_unique_urls": dedup_stats["final_core_unique_urls"],
+        "reused_historical_records": dedup_stats["reused_historical_records"],
         "summary": summary,
     }
     audit = build_audit(

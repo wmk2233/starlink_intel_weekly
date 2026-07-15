@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from parsers.common import DETAIL_ERROR_TYPES
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEEKLY_DIR = PROJECT_ROOT / "weekly"
@@ -98,6 +100,7 @@ def build_report(week_id: str) -> dict[str, Any]:
     extraction_quality_path = DATA_DIR / "extraction_quality.json"
     item_state_path = DATA_DIR / "item_extraction_state.json"
     item_report_path = DATA_DIR / "item_extraction_report.json"
+    detail_diagnostics_path = DATA_DIR / "detail_extraction_diagnostics.json"
     weekly_manifest_path = DATA_DIR / "weekly_manifest.json"
     run_history_path = DATA_DIR / "run_history.jsonl"
     llm_audit_path = DATA_DIR / "llm_audit.json"
@@ -122,6 +125,8 @@ def build_report(week_id: str) -> dict[str, Any]:
         "parser_version", "record_type", "category", "record_scope", "source_quality",
         "extraction_confidence", "change_status", "content_hash", "seen_in_current_index",
         "date_text", "discovery_method",
+        "semantic_content_hash", "extraction_hash", "extraction_change_status", "change_reason",
+        "detail_parse_method", "detail_fetch_status", "current_run_data_reused",
     }
     add_check(
         report,
@@ -198,6 +203,9 @@ def build_report(week_id: str) -> dict[str, Any]:
         "static_candidate_count", "rendered_candidate_count", "selected_candidate_count",
         "dominant_extracted_level", "dominant_source_quality", "title_completeness",
         "date_completeness", "evidence_completeness", "field_evidence_completeness", "warnings",
+        "candidate_count_total", "static_detail_success", "rendered_detail_attempted",
+        "rendered_detail_success", "reused_previous_success", "final_detail_success",
+        "final_detail_failed", "final_success_rate", "failure_types", "dominant_detail_parse_method",
     }
     add_check(
         report,
@@ -206,7 +214,60 @@ def build_report(week_id: str) -> dict[str, Any]:
         and all(isinstance(value, dict) and required_report_fields <= set(value) for value in extraction_sources.values()),
         "item_extraction_report.json 字段不完整",
     )
-    serialized_items = json.dumps({"items": item_records_all, "state": item_state, "report": item_report}, ensure_ascii=False)
+    valid_diagnostics, diagnostics, diagnostics_error = load_json_file(detail_diagnostics_path)
+    add_check(report, "detail_extraction_diagnostics_valid", valid_diagnostics, diagnostics_error)
+    diagnostic_sources = diagnostics.get("sources", {}) if valid_diagnostics else {}
+    details = [
+        detail
+        for source in diagnostic_sources.values()
+        if isinstance(source, dict)
+        for detail in source.get("details", [])
+        if isinstance(detail, dict)
+    ] if isinstance(diagnostic_sources, dict) else []
+    add_check(
+        report,
+        "detail_final_status_valid",
+        all(detail.get("final_status") in {"success", "failed", "reused_previous_success"} for detail in details),
+        "详情 final_status 不在允许枚举中",
+    )
+    add_check(
+        report,
+        "detail_error_types_valid",
+        all(detail.get("error_type") is None or detail.get("error_type") in DETAIL_ERROR_TYPES for detail in details),
+        "详情 error_type 不在允许枚举中",
+    )
+    counters_valid = True
+    for source in diagnostic_sources.values() if isinstance(diagnostic_sources, dict) else []:
+        if not isinstance(source, dict):
+            counters_valid = False
+            continue
+        numeric_fields = ["candidate_count", "static_success", "render_attempted", "render_success", "final_success", "final_failed", "reused_previous_success"]
+        counters_valid = counters_valid and all(isinstance(source.get(field), int) and source.get(field) >= 0 for field in numeric_fields)
+        counters_valid = counters_valid and source.get("final_success", 0) + source.get("final_failed", 0) <= source.get("candidate_count", 0)
+        counters_valid = counters_valid and source.get("render_success", 0) <= source.get("render_attempted", 0)
+        rate = source.get("success_rate")
+        counters_valid = counters_valid and (rate is None or isinstance(rate, (int, float)) and 0 <= rate <= 1)
+    add_check(report, "detail_counts_valid", counters_valid, "详情候选、成功、失败或成功率计数不一致")
+    add_check(
+        report,
+        "reused_history_marked",
+        all(
+            detail.get("final_status") != "reused_previous_success" or detail.get("current_run_data_reused") is True
+            for detail in details
+        )
+        and all(not record.get("current_run_data_reused") or record.get("detail_fetch_status") == "failed_this_run" for record in item_records),
+        "历史复用记录缺少 current_run_data_reused/detail_fetch_status 标记",
+    )
+    add_check(
+        report,
+        "parser_enrichment_not_semantic_changed",
+        all(
+            record.get("change_reason") != "parser_enrichment" or record.get("change_status") == "unchanged"
+            for record in item_records
+        ),
+        "parser enrichment 被误标为事实 changed",
+    )
+    serialized_items = json.dumps({"items": item_records_all, "state": item_state, "report": item_report, "diagnostics": diagnostics}, ensure_ascii=False)
     forbidden_fields = {"html", "raw_html", "api_key", "smtp_password", "gitee_remote", "token"}
     observed_fields = {
         str(key).lower()
@@ -263,6 +324,16 @@ def build_report(week_id: str) -> dict[str, Any]:
         valid_usage and all(required_usage_fields <= set(record) for record in usage_records),
         "llm_usage.jsonl 存在缺失字段",
     )
+    phase4b_usage_fields = {
+        "raw_candidate_records", "records_after_url_dedup", "final_core_input_records",
+        "final_core_unique_urls", "reused_historical_records",
+    }
+    add_check(
+        report,
+        "llm_latest_usage_phase4b_fields",
+        valid_usage and bool(usage_records) and phase4b_usage_fields <= set(usage_records[-1]),
+        "最新 llm_usage 记录缺少 Phase 4B 输入统计",
+    )
     serialized_usage = json.dumps(usage_records, ensure_ascii=False)
     forbidden_usage_fields = {"api_key", "openai_api_key", "deepseek_api_key", "smtp_password", "gitee_remote", "prompt", "response", "cost"}
     usage_fields = {str(key).lower() for record in usage_records for key in record}
@@ -287,6 +358,16 @@ def build_report(week_id: str) -> dict[str, Any]:
         and removed == before_dedup - after_dedup
     )
     add_check(report, "llm_dedup_counts_valid", dedup_valid, "LLM 输入去重计数不一致")
+    records_after_url_dedup = llm_audit.get("records_after_url_dedup")
+    final_core_input_records = llm_audit.get("final_core_input_records")
+    add_check(
+        report,
+        "llm_final_core_counts_valid",
+        isinstance(records_after_url_dedup, int)
+        and isinstance(final_core_input_records, int)
+        and 0 <= final_core_input_records <= records_after_url_dedup,
+        "最终核心输入数量大于 URL 去重后记录",
+    )
     usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     total_tokens = usage.get("total_tokens")
     latency_ms = usage.get("latency_ms")
@@ -350,7 +431,7 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "summary_has_llm_section", "大模型辅助摘要" in summary_text, "summary 缺少“大模型辅助摘要”")
     add_check(report, "summary_has_llm_provider", "LLM Provider" in summary_text, "summary 缺少 LLM Provider")
     add_check(report, "summary_has_page_monitoring", "页面级监测解释" in summary_text, "summary 缺少页面级监测解释")
-    add_check(report, "summary_has_input_dedup", "去重前输入记录" in summary_text, "summary 缺少输入去重统计")
+    add_check(report, "summary_has_input_dedup", "原始候选记录" in summary_text, "summary 缺少三层输入统计")
     add_check(report, "summary_has_structured_official_items", "## 结构化官方条目" in summary_text, "summary 缺少结构化官方条目")
     baseline_total = sum(int(value.get("baseline_items") or 0) for value in extraction_sources.values() if isinstance(value, dict)) if isinstance(extraction_sources, dict) else 0
     add_check(
@@ -359,6 +440,20 @@ def build_report(week_id: str) -> dict[str, Any]:
         baseline_total == 0 or "baseline 仅表示建立采集基线，不代表这些内容在本周发布" in summary_text,
         "summary 缺少 baseline 非新增说明",
     )
+    add_check(
+        report,
+        "summary_zero_baseline_wording_valid",
+        baseline_total > 0 or "本次为条目级解析器首次成功运行" not in summary_text,
+        "baseline=0 时 summary 仍显示首次建库",
+    )
+    add_check(report, "summary_has_detail_parsing", "### 详情解析情况" in summary_text, "summary 缺少详情解析情况")
+    if valid and llm_audit.get("llm_enabled") is True:
+        add_check(
+            report,
+            "summary_llm_enabled_wording_valid",
+            "当前自动化运行未启用 LLM" not in summary_text,
+            "LLM enabled=true 时 summary 仍显示当前未启用",
+        )
 
     details_text = read_text(details_path)
     add_check(report, "details_has_source_status", "来源状态诊断" in details_text, "details 缺少“来源状态诊断”")
@@ -367,8 +462,10 @@ def build_report(week_id: str) -> dict[str, Any]:
     add_check(report, "details_has_llm_audit", "大模型摘要审计" in details_text, "details 缺少“大模型摘要审计”")
     add_check(report, "details_has_llm_provider", "LLM Provider" in details_text, "details 缺少 LLM Provider")
     add_check(report, "details_has_page_monitoring", "页面级监测解释" in details_text, "details 缺少页面级监测解释")
-    add_check(report, "details_has_input_dedup", "去重前输入记录" in details_text, "details 缺少输入去重统计")
+    add_check(report, "details_has_input_dedup", "原始候选记录" in details_text, "details 缺少三层输入统计")
     add_check(report, "details_has_official_item_diagnostics", "## 官方条目解析诊断" in details_text, "details 缺少官方条目解析诊断")
+    add_check(report, "details_has_detail_diagnostics", "## 官方详情页解析诊断" in details_text, "details 缺少官方详情页解析诊断")
+    add_check(report, "details_has_detail_failure_types", "### 详情失败类型" in details_text, "details 缺少详情失败类型")
 
     index_text = read_text(index_path)
     add_check(report, "index_links_summary", f"./{week_id}-summary.md" in index_text, "兼容索引缺少 summary 相对链接")
@@ -396,6 +493,7 @@ def print_text_report(report: dict[str, Any]) -> None:
     print(f"run_history.jsonl：{'合法' if checks.get('run_history_valid') else '异常'}")
     print(f"llm_audit.json：{'合法' if checks.get('llm_audit_valid') else '异常'}")
     print(f"llm_usage.jsonl：{'合法' if checks.get('llm_usage_valid') else '异常'}")
+    print(f"detail_extraction_diagnostics.json：{'合法' if checks.get('detail_extraction_diagnostics_valid') else '异常'}")
     print(
         "llm_summaries.json："
         + ("合法或可选" if checks.get("llm_summary_valid_when_generated") or checks.get("llm_summary_valid_if_present") or checks.get("llm_summary_optional") else "异常")

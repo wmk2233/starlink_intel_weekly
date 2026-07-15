@@ -1,51 +1,24 @@
 {
-  "generated_at": "2026-07-15T06:21:46+00:00",
-  "parser_version": "official_item_extraction_v1",
+  "generated_at": "2026-07-15T15:35:25+08:00",
+  "parser_version": "official_item_extraction_v2",
   "sources": {
     "spacex_official_launches": {
-      "average_confidence": 0.35,
-      "candidate_links_total": 1,
-      "change_status": "unchanged",
-      "date_completeness": null,
-      "dominant_extracted_level": "page_level",
-      "dominant_source_quality": "low",
-      "evidence_completeness": null,
-      "field_evidence_completeness": null,
-      "health_status": "reachable",
-      "http_status": 200,
-      "item_level_count": 0,
-      "items_collected": 1,
-      "last_checked_at": "2026-07-15T06:21:34+00:00",
-      "level_counts": {
-        "page_level": 1
-      },
-      "notes": [
-        "页面可达，但当前静态规则未识别到稳定的独立条目；保留页面级记录，不补写发布时间或技术事实。"
-      ],
-      "page_level_count": 1,
-      "parser_version": "spacex_launches_item_v1",
-      "quality_counts": {
-        "low": 1
-      },
-      "source_id": "spacex_official_launches",
-      "source_name": "SpaceX Official Launches",
-      "title_completeness": null,
-      "url": "https://www.spacex.com/launches"
-    },
-    "starlink_official_updates": {
-      "average_confidence": 0.9,
+      "average_confidence": 0.8,
+      "candidate_count_total": 1,
       "candidate_links_total": 0,
-      "change_status": "changed",
-      "date_completeness": 1.0,
+      "change_status": "unchanged",
+      "date_completeness": 0.0,
       "dominant_extracted_level": "item_level",
-      "dominant_source_quality": "high",
+      "dominant_source_quality": "medium",
       "evidence_completeness": 1.0,
       "field_evidence_completeness": 1.0,
+      "final_detail_failed": 0,
+      "final_detail_success": 1,
       "health_status": "reachable",
       "http_status": 200,
       "item_level_count": 1,
       "items_collected": 1,
-      "last_checked_at": "2026-07-15T06:21:20+00:00",
+      "last_checked_at": "2026-07-15T15:35:00+08:00",
       "level_counts": {
         "item_level": 1
       },
@@ -53,12 +26,57 @@
         "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。"
       ],
       "page_level_count": 0,
-      "parser_version": "starlink_updates_item_v1",
+      "parser_version": "spacex_launches_item_v2",
       "quality_counts": {
-        "high": 1
+        "medium": 1
       },
+      "rendered_candidate_count": 1,
+      "rendered_detail_attempted": 1,
+      "rendered_detail_success": 1,
+      "selected_candidate_count": 1,
+      "source_id": "spacex_official_launches",
+      "source_name": "SpaceX Official Launches",
+      "static_candidate_count": 0,
+      "static_detail_success": 0,
+      "title_completeness": 1.0,
+      "url": "https://www.spacex.com/launches"
+    },
+    "starlink_official_updates": {
+      "average_confidence": 0.8,
+      "candidate_count_total": 4,
+      "candidate_links_total": 0,
+      "change_status": "changed",
+      "date_completeness": 0.0,
+      "dominant_extracted_level": "item_level",
+      "dominant_source_quality": "medium",
+      "evidence_completeness": 1.0,
+      "field_evidence_completeness": 1.0,
+      "final_detail_failed": 0,
+      "final_detail_success": 4,
+      "health_status": "reachable",
+      "http_status": 200,
+      "item_level_count": 4,
+      "items_collected": 4,
+      "last_checked_at": "2026-07-15T15:34:13+08:00",
+      "level_counts": {
+        "item_level": 4
+      },
+      "notes": [
+        "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。"
+      ],
+      "page_level_count": 0,
+      "parser_version": "starlink_updates_item_v2",
+      "quality_counts": {
+        "medium": 4
+      },
+      "rendered_candidate_count": 4,
+      "rendered_detail_attempted": 4,
+      "rendered_detail_success": 4,
+      "selected_candidate_count": 4,
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
+      "static_candidate_count": 0,
+      "static_detail_success": 0,
       "title_completeness": 1.0,
       "url": "https://www.starlink.com/updates"
     }

@@ -15,15 +15,15 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-07-15T06:21:20+00:00 | reachable | changed | 2026-07-15T06:21:20+00:00 | 正常 |
-| SpaceX Official Launches | 2026-07-15T06:21:34+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-15T15:34:13+08:00 | reachable | changed | 2026-07-15T15:34:13+08:00 | 正常 |
+| SpaceX Official Launches | 2026-07-15T15:35:00+08:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
-| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 候选链接数 |
-|---|---|---|---:|---:|
-| Starlink Official Updates | item_level | high | 0.9 | 0 |
-| SpaceX Official Launches | page_level | low | 0.35 | 1 |
+| 来源 | 主导解析层级 | 主导质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 |
+|---|---|---|---:|---:|---:|---:|
+| Starlink Official Updates | item_level | medium | 0.8 | 0 | 4 | 4 |
+| SpaceX Official Launches | item_level | medium | 0.8 | 0 | 1 | 1 |
 
 ## 周报输出结构
 
@@ -95,14 +95,26 @@
 - `data/item_extraction_report.json` 保存候选、详情成功/失败、fallback 和变化计数；
 - 浏览器不可用或证据不足时使用 page-level fallback，不编造标题、日期、任务状态或载荷事实。
 
+## 阶段 4B 动态详情解析与失败恢复知识
+
+- 官方详情先静态请求，JavaScript shell、缺少标题或 evidence 时才受控运行 Playwright；
+- `data/detail_extraction_diagnostics.json` 保存逐候选状态、长度和有限 error type，不保存完整 HTML、截图、HAR、视频或 trace；
+- 历史成功 item-level 在本轮详情失败时保留，并明确标记为复用历史，不代表本轮重新确认；
+- `consecutive_failures` 只用于运维诊断，不用于推断官方条目删除；
+- `semantic_content_hash` 排除 parser version、质量、field evidence 和提取方法；parser enrichment 与 semantic change 分开记录；
+- baseline 文案仅在本轮 baseline 大于 0 时出现；LLM 当前状态按实际运行动态展示；
+- LLM 输入统计分为原始候选、URL 去重后和最终核心输入；复用历史记录受额外提示词约束；
+- 不从 slug、HTTP Last-Modified 或采集时间推断官方日期、任务状态或载荷事实；
+- Playwright 详情 fallback 会增加运行时间，但详情失败不会阻断周报、邮件、GitHub 提交或 Gitee 同步。
+
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-15 06:21:20 UTC+0000
+- 运行时间：2026-07-15 15:34:13 中国标准时间+0800
 - ISO 周编号：2026-W29
-- 执行环境：Linux 6.17.0-1018-azure
-- Python 版本：3.11.15
+- 执行环境：Windows 10
+- Python 版本：3.11.9
 - 输出模式：dual
-- 是否发送邮件：是
+- 是否发送邮件：否
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W29-summary.md
@@ -112,18 +124,18 @@
 - 周报 manifest：data/weekly_manifest.json
 - 运行历史：data/run_history.jsonl
 - 本次采集来源名称：Starlink Official Updates、SpaceX Official Launches
-- 本次采集条目数量：2
+- 本次采集条目数量：5
 - 已接入来源数量：2
 - 来源可达性概览：Starlink Official Updates=reachable；SpaceX Official Launches=reachable
 - 页面变化状态概览：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
 - 新增条目数：0
 - 内容变化条目数：0
-- 未变化条目数：1
+- 未变化条目数：5
 - LLM Provider：deepseek
 - LLM 模型：deepseek-v4-flash
-- LLM 摘要状态：generated
-- LLM 输入记录（去重前 / 后）：5 / 3
-- LLM 唯一来源 URL：3
-- LLM Total tokens：6328
-- LLM API 调用耗时：12381.06 ms
+- LLM 摘要状态：skipped
+- LLM 输入记录（去重前 / 后）：9 / 7
+- LLM 唯一来源 URL：7
+- LLM Total tokens：unknown
+- LLM API 调用耗时：unknown ms
 

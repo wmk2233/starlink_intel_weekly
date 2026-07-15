@@ -1,36 +1,103 @@
 {
-  "generated_at": "2026-07-15T06:21:46+00:00",
+  "generated_at": "2026-07-15T15:35:25+08:00",
   "sources": {
     "spacex_official_launches": {
-      "bootstrap_completed": false,
-      "bootstrap_completed_at": null,
-      "items": {},
-      "known_item_count": 0,
-      "last_attempt_at": "2026-07-15T06:21:46+00:00",
+      "bootstrap_completed": true,
+      "bootstrap_completed_at": "2026-07-15T15:31:37+08:00",
+      "items": {
+        "c6060f6415f8c377": {
+          "canonical_url": "https://www.spacex.com/launches/sda-t1tl-e",
+          "consecutive_failures": 0,
+          "content_hash": "85a78959c0b1f6e2",
+          "extraction_hash": "1c83cb1cd9cb12b5",
+          "first_seen_at": "2026-07-15T15:31:12+08:00",
+          "last_attempt_at": "2026-07-15T15:35:00+08:00",
+          "last_error_type": null,
+          "last_parser_version": "spacex_launches_item_v2",
+          "last_seen_at": "2026-07-15T15:35:00+08:00",
+          "last_success_at": "2026-07-15T15:35:00+08:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "85a78959c0b1f6e2"
+        }
+      },
+      "known_item_count": 1,
+      "last_attempt_at": "2026-07-15T15:35:25+08:00",
       "last_candidate_count": 1,
-      "last_error_type": "detail_parse_insufficient_evidence",
+      "last_error_type": null,
       "last_failure_at": "2026-07-15T06:21:46+00:00",
-      "last_item_count": 0,
-      "parser_version": "spacex_launches_item_v1"
+      "last_item_count": 1,
+      "last_success_at": "2026-07-15T15:35:25+08:00",
+      "parser_version": "spacex_launches_item_v2"
     },
     "starlink_official_updates": {
       "bootstrap_completed": true,
       "bootstrap_completed_at": "2026-07-14T15:04:45+08:00",
       "items": {
+        "044bafcf1089533d": {
+          "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
+          "consecutive_failures": 0,
+          "content_hash": "15031e9924949a65",
+          "extraction_hash": "30c343f6d2e02b70",
+          "first_seen_at": "2026-07-15T15:30:05+08:00",
+          "last_attempt_at": "2026-07-15T15:34:13+08:00",
+          "last_error_type": null,
+          "last_parser_version": "starlink_updates_item_v2",
+          "last_seen_at": "2026-07-15T15:34:13+08:00",
+          "last_success_at": "2026-07-15T15:34:13+08:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "15031e9924949a65"
+        },
+        "495a49c7d5c93cbc": {
+          "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
+          "consecutive_failures": 0,
+          "content_hash": "26342c05c89cd954",
+          "extraction_hash": "30c343f6d2e02b70",
+          "first_seen_at": "2026-07-15T15:30:05+08:00",
+          "last_attempt_at": "2026-07-15T15:34:13+08:00",
+          "last_error_type": null,
+          "last_parser_version": "starlink_updates_item_v2",
+          "last_seen_at": "2026-07-15T15:34:13+08:00",
+          "last_success_at": "2026-07-15T15:34:13+08:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "26342c05c89cd954"
+        },
         "95bbf31b3a93d3e6": {
           "canonical_url": "https://starlink.com/updates/stargaze",
-          "content_hash": "14d1326f8705072b",
+          "consecutive_failures": 0,
+          "content_hash": "a2acff504bb0169a",
+          "extraction_hash": "30c343f6d2e02b70",
           "first_seen_at": "2026-07-14T14:54:30+08:00",
-          "last_seen_at": "2026-07-15T06:21:20+00:00"
+          "last_attempt_at": "2026-07-15T15:34:13+08:00",
+          "last_error_type": null,
+          "last_parser_version": "starlink_updates_item_v2",
+          "last_seen_at": "2026-07-15T15:34:13+08:00",
+          "last_success_at": "2026-07-15T15:34:13+08:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "a2acff504bb0169a"
+        },
+        "d3b89bb9510b1b9a": {
+          "canonical_url": "https://starlink.com/updates/network-update",
+          "consecutive_failures": 0,
+          "content_hash": "2f7b8c18c91fe9b2",
+          "extraction_hash": "30c343f6d2e02b70",
+          "first_seen_at": "2026-07-15T15:34:13+08:00",
+          "last_attempt_at": "2026-07-15T15:34:13+08:00",
+          "last_error_type": null,
+          "last_failure_at": "2026-07-15T15:30:05+08:00",
+          "last_parser_version": "starlink_updates_item_v2",
+          "last_seen_at": "2026-07-15T15:34:13+08:00",
+          "last_success_at": "2026-07-15T15:34:13+08:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "2f7b8c18c91fe9b2"
         }
       },
-      "known_item_count": 1,
-      "last_attempt_at": "2026-07-15T06:21:34+00:00",
+      "known_item_count": 4,
+      "last_attempt_at": "2026-07-15T15:35:00+08:00",
       "last_candidate_count": 4,
       "last_error_type": null,
-      "last_item_count": 1,
-      "last_success_at": "2026-07-15T06:21:34+00:00",
-      "parser_version": "starlink_updates_item_v1"
+      "last_item_count": 4,
+      "last_success_at": "2026-07-15T15:35:00+08:00",
+      "parser_version": "starlink_updates_item_v2"
     }
   },
   "version": 1

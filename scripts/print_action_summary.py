@@ -13,6 +13,7 @@ SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
 ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json"
 ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
+DETAIL_EXTRACTION_DIAGNOSTICS_FILE = PROJECT_ROOT / "data" / "detail_extraction_diagnostics.json"
 WEEKLY_MANIFEST_FILE = PROJECT_ROOT / "data" / "weekly_manifest.json"
 RUN_HISTORY_FILE = PROJECT_ROOT / "data" / "run_history.jsonl"
 LLM_AUDIT_FILE = PROJECT_ROOT / "data" / "llm_audit.json"
@@ -132,7 +133,7 @@ def main() -> int:
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：4A",
+        "- 阶段：4B",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",
@@ -145,6 +146,7 @@ def main() -> int:
         "- extraction_quality.json 路径：data/extraction_quality.json",
         "- item_extraction_state.json 路径：data/item_extraction_state.json",
         "- item_extraction_report.json 路径：data/item_extraction_report.json",
+        "- detail_extraction_diagnostics.json 路径：data/detail_extraction_diagnostics.json",
         "- llm_audit.json 路径：data/llm_audit.json",
         "- sources.yml 路径：sources.yml",
         f"- items.jsonl 是否存在：{_yes_no(ITEMS_FILE.exists())}",
@@ -152,6 +154,7 @@ def main() -> int:
         f"- extraction_quality.json 是否存在：{_yes_no(quality_exists)}",
         f"- item_extraction_state.json 是否存在：{_yes_no(ITEM_EXTRACTION_STATE_FILE.exists())}",
         f"- item_extraction_report.json 是否存在：{_yes_no(ITEM_EXTRACTION_REPORT_FILE.exists())}",
+        f"- detail_extraction_diagnostics.json 是否存在：{_yes_no(DETAIL_EXTRACTION_DIAGNOSTICS_FILE.exists())}",
         f"- weekly_manifest.json 是否存在：{_yes_no(WEEKLY_MANIFEST_FILE.exists())}",
         f"- run_history.jsonl 是否存在：{_yes_no(RUN_HISTORY_FILE.exists())}",
         f"- llm_audit.json 是否存在：{_yes_no(LLM_AUDIT_FILE.exists())}",
@@ -161,8 +164,13 @@ def main() -> int:
         "",
         "### 官方条目抽取",
         "",
-        "| 来源 | 解析器 | 候选 | 详情成功 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 | 渲染 fallback |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
+        "| 来源 | 解析器 | 静态候选 | 渲染候选 | 候选总数 | 静态详情成功 | 渲染详情成功 | 最终成功 | 失败 | 成功率 | Baseline | 新增 | 变化 | 未变化 | 层级 | 质量 |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+        "",
+        "### 详情失败类型",
+        "",
+        "| 来源 | 错误类型 | 数量 |",
+        "|---|---|---:|",
         "",
         "### 本周输出文档",
         "",
@@ -203,8 +211,11 @@ def main() -> int:
         f"| Base URL 类型 | {_escape_table_cell(llm_audit.get('base_url_label', 'unknown'))} |",
         f"| LLM 状态 | {_escape_table_cell(llm_audit.get('llm_status', 'unknown'))} |",
         f"| 摘要是否生成 | {_escape_table_cell(llm_audit.get('summary_generated', 'unknown'))} |",
-        f"| 去重前输入记录 | {_escape_table_cell(llm_audit.get('input_records_before_dedup', 'unknown'))} |",
-        f"| 去重后输入记录 | {_escape_table_cell(llm_audit.get('input_records_after_dedup', 'unknown'))} |",
+        f"| 原始候选记录 | {_escape_table_cell(llm_audit.get('raw_candidate_records', llm_audit.get('input_records_before_dedup', 'unknown')))} |",
+        f"| URL 去重后记录 | {_escape_table_cell(llm_audit.get('records_after_url_dedup', llm_audit.get('input_records_after_dedup', 'unknown')))} |",
+        f"| 最终核心输入记录 | {_escape_table_cell(llm_audit.get('final_core_input_records', llm_audit.get('input_records', 'unknown')))} |",
+        f"| 最终核心唯一 URL | {_escape_table_cell(llm_audit.get('final_core_unique_urls', 'unknown'))} |",
+        f"| 复用历史记录 | {_escape_table_cell(llm_audit.get('reused_historical_records', 'unknown'))} |",
         f"| 删除重复记录 | {_escape_table_cell(llm_audit.get('duplicate_records_removed', 'unknown'))} |",
         f"| 唯一来源 URL | {_escape_table_cell(llm_audit.get('unique_source_urls', 'unknown'))} |",
         f"| Prompt tokens | {_escape_table_cell(_usage_metric(usage.get('prompt_tokens')))} |",
@@ -230,24 +241,41 @@ def main() -> int:
                     [
                         _escape_table_cell(report.get("source_name") or source_id),
                         _escape_table_cell(report.get("parser_version", "unknown")),
-                        _escape_table_cell(report.get("candidate_count", 0)),
-                        _escape_table_cell(report.get("detail_fetch_success", 0)),
+                        _escape_table_cell(report.get("static_candidate_count", 0)),
+                        _escape_table_cell(report.get("rendered_candidate_count", 0)),
+                        _escape_table_cell(report.get("candidate_count_total", report.get("candidate_count", 0))),
+                        _escape_table_cell(report.get("static_detail_success", 0)),
+                        _escape_table_cell(report.get("rendered_detail_success", 0)),
+                        _escape_table_cell(report.get("final_detail_success", report.get("detail_fetch_success", 0))),
+                        _escape_table_cell(report.get("final_detail_failed", report.get("detail_fetch_failed", 0))),
+                        _escape_table_cell("unknown" if report.get("final_success_rate") is None else f"{float(report.get('final_success_rate')):.0%}"),
                         _escape_table_cell(report.get("baseline_items", 0)),
                         _escape_table_cell(report.get("new_items", 0)),
                         _escape_table_cell(report.get("changed_items", 0)),
                         _escape_table_cell(report.get("unchanged_items", 0)),
                         _escape_table_cell(report.get("dominant_extracted_level", "unknown")),
                         _escape_table_cell(report.get("dominant_source_quality", "unknown")),
-                        f"{_yes_no(bool(report.get('render_fallback_used')))} / {_escape_table_cell(report.get('render_fallback_status', 'unknown'))}",
                     ]
                 )
                 + " |"
             )
-        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|") + 1
+        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|") + 1
         lines[insertion:insertion] = item_rows
     else:
-        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|") + 1
-        lines[insertion:insertion] = ["| unknown | unknown | 0 | 0 | 0 | 0 | 0 | 0 | unknown | unknown | 否 / unknown |"]
+        insertion = lines.index("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|") + 1
+        lines[insertion:insertion] = ["| unknown | unknown | 0 | 0 | 0 | 0 | 0 | 0 | 0 | unknown | 0 | 0 | 0 | 0 | unknown | unknown |"]
+    failure_rows: list[str] = []
+    for source_id, report in item_reports.items():
+        failure_types = report.get("failure_types", {}) if isinstance(report, dict) else {}
+        if not isinstance(failure_types, dict):
+            continue
+        for error_type, count in sorted(failure_types.items()):
+            failure_rows.append(
+                f"| {_escape_table_cell(report.get('source_name') or source_id)} | "
+                f"{_escape_table_cell(error_type)} | {_escape_table_cell(count)} |"
+            )
+    failure_insertion = lines.index("|---|---|---:|") + 1
+    lines[failure_insertion:failure_insertion] = failure_rows or ["| unknown | none | 0 |"]
     if statuses:
         for source_id, status in statuses.items():
             lines.append(
@@ -272,8 +300,8 @@ def main() -> int:
             "",
             "### 解析质量",
             "",
-            "| 来源 | 主导解析层级 | 主导解析质量 | 平均置信度 | 候选链接数 | 解析器版本 |",
-            "|---|---|---|---:|---:|---|",
+            "| 来源 | 主导解析层级 | 主导解析质量 | 平均置信度 | 静态候选 | 渲染候选 | 候选总数 | 解析器版本 |",
+            "|---|---|---|---:|---:|---:|---:|---|",
         ]
     )
     ordered_ids = list(statuses.keys()) or list(quality_sources.keys())
@@ -289,14 +317,16 @@ def main() -> int:
                         _escape_table_cell(quality.get("dominant_extracted_level") or status.get("dominant_extracted_level") or "unknown"),
                         _escape_table_cell(quality.get("dominant_source_quality") or status.get("dominant_source_quality") or "unknown"),
                         _escape_table_cell(quality.get("average_confidence") or status.get("average_confidence") or 0),
-                        _escape_table_cell(quality.get("candidate_links_total") or status.get("candidate_links_total") or 0),
+                        _escape_table_cell(quality.get("static_candidate_count") or status.get("static_candidate_count") or 0),
+                        _escape_table_cell(quality.get("rendered_candidate_count") or status.get("rendered_candidate_count") or 0),
+                        _escape_table_cell(quality.get("candidate_count_total") or status.get("candidate_count_total") or 0),
                         _escape_table_cell(quality.get("parser_version") or status.get("parser_version") or "unknown"),
                     ]
                 )
                 + " |"
             )
     else:
-        lines.append("| unknown | unknown | unknown | 0 | 0 | unknown |")
+        lines.append("| unknown | unknown | unknown | 0 | 0 | 0 | 0 | unknown |")
 
     print("\n".join(lines))
     return 0

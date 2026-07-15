@@ -246,3 +246,19 @@ python scripts/collect_sources.py --source-id starlink_official_updates --reboot
 ```
 
 该操作会改变变化检测语义，执行前应先备份数据并人工确认。GitHub Actions 永远不传入 `--rebootstrap-source`。
+
+## 16. 阶段 4B 详情诊断与失败恢复运维
+
+无写入诊断使用：
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED="1"
+$env:LLM_ENABLED="false"
+python scripts/diagnose_official_details.py --all --limit 10 --render-mode auto --json --no-write
+```
+
+`data/detail_extraction_diagnostics.json` 只记录候选 URL、静态/渲染状态、长度、有限错误类型和是否复用历史成功，不保存完整 HTML、DOM、Cookie、截图、视频、HAR、trace 或完整异常。详情失败不代表官方条目删除；`current_run_data_reused=true` 表示正文来自最近一次成功解析，不代表本轮重新确认。
+
+parser v2 的 `semantic_content_hash` 不包含 parser version、质量、字段证据或提取方法；这些变化通过 `extraction_hash` 和 `extraction_change_status=improved` 观察。事实字段真正变化时才使用 `change_reason=semantic_content_changed`。不得从 URL slug 推断日期、状态或载荷。
+
+LLM 运行统计依次显示原始候选记录、URL 去重后记录和最终核心输入记录。baseline 说明仅在本轮产生 baseline 时出现，LLM 状态说明按当前实际启用状态生成。详情 Playwright 会增加运行时间，排障时先看失败类型，不反复请求追求固定成功率。

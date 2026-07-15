@@ -30,3 +30,9 @@
 python scripts/diagnose_official_pages.py --all --no-write
 python scripts/collect_sources.py --max-source-items 10 --render-mode auto --dry-run
 ```
+
+## 2026-07-15 阶段 4B 详情诊断
+
+本次只访问两个既有官方索引及其同域白名单详情路径。索引仍为静态候选 0；渲染后 Starlink 发现 4 个候选，SpaceX 发现 1 个候选。5 个详情静态响应均被确定性识别为 `javascript_shell`，受控详情 Playwright fallback 均达到标题与实质 evidence 门槛。页面没有可确认日期时，日期字段保持 null，不从 slug、HTTP Last-Modified 或采集时间补写。
+
+诊断仅输出 HTTP 状态、Content-Type、长度、重定向次数、最终 host、字段是否存在、evidence 长度和稳定 error type。完整 HTML、渲染 DOM、截图、HAR、视频和 trace 均未保存。该结果反映本次运行，不硬编码为未来固定成功数量。

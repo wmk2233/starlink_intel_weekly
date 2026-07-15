@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import time
+from copy import deepcopy
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,13 +22,21 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from parsers.common import (
+    DETAIL_ERROR_TYPES,
+    DETAIL_RENDERABLE_ERRORS,
     ItemCandidate,
     ParsedOfficialItem,
     candidates_from_dom_links,
+    detail_page_hash,
+    detail_parse_error,
     discover_candidates,
+    extraction_hash as official_extraction_hash,
     item_content_hash as official_item_content_hash,
     merge_candidates as merge_official_candidates,
+    merge_static_and_rendered_fields,
+    normalize_candidate_url,
     parser_quality,
+    semantic_content_hash,
     stable_item_id,
 )
 from parsers.spacex_launches import PARSER_VERSION as SPACEX_PARSER_VERSION
@@ -43,9 +52,10 @@ SOURCE_STATUS_FILE = PROJECT_ROOT / "data" / "source_status.json"
 EXTRACTION_QUALITY_FILE = PROJECT_ROOT / "data" / "extraction_quality.json"
 ITEM_EXTRACTION_STATE_FILE = PROJECT_ROOT / "data" / "item_extraction_state.json"
 ITEM_EXTRACTION_REPORT_FILE = PROJECT_ROOT / "data" / "item_extraction_report.json"
+DETAIL_EXTRACTION_DIAGNOSTICS_FILE = PROJECT_ROOT / "data" / "detail_extraction_diagnostics.json"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
-USER_AGENT = "starlink-intel-weekly/phase4a (+official-source-monitoring)"
-COLLECTOR_NAME = "official_item_extraction_v1"
+USER_AGENT = "starlink-intel-weekly/phase4b (+official-source-monitoring)"
+COLLECTOR_NAME = "official_item_extraction_v2"
 PARSER_VERSION = COLLECTOR_NAME
 SUPPORTED_SOURCE_IDS = {"starlink_official_updates", "spacex_official_launches"}
 
@@ -130,6 +140,7 @@ class CollectResult:
     extraction_quality: dict[str, Any] = field(default_factory=dict)
     item_extraction_state: dict[str, Any] = field(default_factory=dict)
     item_extraction_report: dict[str, Any] = field(default_factory=dict)
+    detail_extraction_diagnostics: dict[str, Any] = field(default_factory=dict)
     baseline_count: int = 0
     new_count: int = 0
     changed_count: int = 0
@@ -140,6 +151,7 @@ class CollectResult:
     wrote_quality: bool = False
     wrote_item_state: bool = False
     wrote_item_report: bool = False
+    wrote_detail_diagnostics: bool = False
 
     @property
     def page_change_status(self) -> str:
@@ -162,14 +174,36 @@ class OfficialExtractionOutcome:
     candidates: list[ItemCandidate] = field(default_factory=list)
     static_candidate_count: int = 0
     rendered_candidate_count: int = 0
+    candidate_count_total: int = 0
     detail_fetch_success: int = 0
     detail_fetch_failed: int = 0
+    static_detail_success: int = 0
+    rendered_detail_attempted: int = 0
+    rendered_detail_success: int = 0
+    reused_previous_success: int = 0
+    final_detail_success: int = 0
+    final_detail_failed: int = 0
+    failure_types: dict[str, int] = field(default_factory=dict)
+    detail_diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    dominant_detail_parse_method: str = "unknown"
     page_level_fallback: bool = False
     render_fallback_used: bool = False
     render_fallback_status: str = "not_needed"
     parser_version: str = "unknown"
     extraction_succeeded: bool = False
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DetailFetchResult:
+    html: str = ""
+    http_status: int | None = None
+    content_type: str | None = None
+    html_length: int = 0
+    redirect_count: int = 0
+    final_url: str | None = None
+    final_host: str | None = None
+    error_type: str | None = None
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -308,6 +342,21 @@ def load_item_extraction_report(path: Path = ITEM_EXTRACTION_REPORT_FILE) -> dic
     return payload
 
 
+def load_detail_extraction_diagnostics(path: Path = DETAIL_EXTRACTION_DIAGNOSTICS_FILE) -> dict[str, Any]:
+    default = {"version": 1, "stage": "4B", "generated_at": None, "render_mode": "auto", "sources": {}}
+    if not path.exists():
+        return default
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+    if not isinstance(payload, dict):
+        return default
+    if not isinstance(payload.get("sources"), dict):
+        payload["sources"] = {}
+    return payload
+
+
 def write_item_extraction_state(state: dict[str, Any], path: Path = ITEM_EXTRACTION_STATE_FILE) -> None:
     state["version"] = 1
     state["generated_at"] = now_iso()
@@ -316,9 +365,19 @@ def write_item_extraction_state(state: dict[str, Any], path: Path = ITEM_EXTRACT
 
 def write_item_extraction_report(report: dict[str, Any], path: Path = ITEM_EXTRACTION_REPORT_FILE) -> None:
     report["version"] = 1
-    report["stage"] = "4A"
+    report["stage"] = "4B"
     report["generated_at"] = now_iso()
     write_json_atomic(path, report)
+
+
+def write_detail_extraction_diagnostics(
+    diagnostics: dict[str, Any],
+    path: Path = DETAIL_EXTRACTION_DIAGNOSTICS_FILE,
+) -> None:
+    diagnostics["version"] = 1
+    diagnostics["stage"] = "4B"
+    diagnostics["generated_at"] = now_iso()
+    write_json_atomic(path, diagnostics)
 
 
 def make_item_id(url: str, title: str) -> str:
@@ -872,28 +931,270 @@ def render_index_candidates(fetch: SourceFetch, timeout_seconds: int = 30, max_s
     return candidates_from_dom_links(str(fetch.source["id"]), str(fetch.source["url"]), links), "success"
 
 
-def fetch_detail_html(session: requests.Session, url: str, timeout: int = 15, max_bytes: int = 2_000_000) -> tuple[str, int | None, str | None]:
+def fetch_detail_html(
+    session: requests.Session,
+    source: dict[str, Any],
+    url: str,
+    timeout: int = 15,
+    max_bytes: int = 2_000_000,
+) -> DetailFetchResult:
+    source_id = str(source.get("id") or "")
+    index_url = str(source.get("url") or "")
+    canonical = normalize_candidate_url(source_id, index_url, url)
+    if canonical is None:
+        return DetailFetchResult(error_type="invalid_candidate_url")
     try:
-        response = session.get(url, timeout=timeout, stream=True)
-        status = response.status_code
-        response.raise_for_status()
-        content_type = str(response.headers.get("Content-Type") or "").lower()
-        if "html" not in content_type:
-            return "", status, "detail_not_html"
-        chunks: list[bytes] = []
-        size = 0
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            if not chunk:
-                continue
-            size += len(chunk)
-            if size > max_bytes:
-                return "", status, "detail_too_large"
-            chunks.append(chunk)
-        encoding = response.encoding or "utf-8"
-        return b"".join(chunks).decode(encoding, errors="replace"), status, None
-    except requests.RequestException as exc:
-        status = getattr(getattr(exc, "response", None), "status_code", None)
-        return "", status, exc.__class__.__name__
+        with session.get(canonical, timeout=timeout, stream=True, allow_redirects=True) as response:
+            status = response.status_code
+            content_type = str(response.headers.get("Content-Type") or "").lower()
+            final_url = str(response.url or canonical)
+            final_parts = urlsplit(final_url)
+            final_canonical = normalize_candidate_url(source_id, index_url, final_url)
+            base_path = urlsplit(index_url).path.rstrip("/").lower()
+            if final_canonical is None:
+                error = (
+                    "redirect_to_index_page"
+                    if final_parts.path.rstrip("/").lower() == base_path
+                    else "redirect_outside_allowed_domain"
+                )
+                return DetailFetchResult(
+                    http_status=status,
+                    content_type=content_type or None,
+                    redirect_count=len(response.history),
+                    final_url=final_url,
+                    final_host=final_parts.hostname,
+                    error_type=error,
+                )
+            if 400 <= status < 500:
+                return DetailFetchResult(
+                    http_status=status,
+                    content_type=content_type or None,
+                    redirect_count=len(response.history),
+                    final_url=final_canonical,
+                    final_host=final_parts.hostname,
+                    error_type="http_4xx",
+                )
+            if status >= 500:
+                return DetailFetchResult(
+                    http_status=status,
+                    content_type=content_type or None,
+                    redirect_count=len(response.history),
+                    final_url=final_canonical,
+                    final_host=final_parts.hostname,
+                    error_type="http_5xx",
+                )
+            if "html" not in content_type and "xhtml" not in content_type:
+                return DetailFetchResult(
+                    http_status=status,
+                    content_type=content_type or None,
+                    redirect_count=len(response.history),
+                    final_url=final_canonical,
+                    final_host=final_parts.hostname,
+                    error_type="invalid_content_type",
+                )
+            content_length = response.headers.get("Content-Length")
+            if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+                return DetailFetchResult(
+                    http_status=status,
+                    content_type=content_type or None,
+                    redirect_count=len(response.history),
+                    final_url=final_canonical,
+                    final_host=final_parts.hostname,
+                    error_type="response_too_large",
+                )
+            chunks: list[bytes] = []
+            size = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > max_bytes:
+                    return DetailFetchResult(
+                        http_status=status,
+                        content_type=content_type or None,
+                        html_length=size,
+                        redirect_count=len(response.history),
+                        final_url=final_canonical,
+                        final_host=final_parts.hostname,
+                        error_type="response_too_large",
+                    )
+                chunks.append(chunk)
+            encoding = response.encoding or "utf-8"
+            html = b"".join(chunks).decode(encoding, errors="replace")
+            return DetailFetchResult(
+                html=html,
+                http_status=status,
+                content_type=content_type or None,
+                html_length=len(html),
+                redirect_count=len(response.history),
+                final_url=final_canonical,
+                final_host=final_parts.hostname,
+                error_type="empty_response" if not normalize_text(html) else None,
+            )
+    except requests.Timeout:
+        return DetailFetchResult(final_url=canonical, final_host=urlsplit(canonical).hostname, error_type="request_timeout")
+    except requests.RequestException:
+        return DetailFetchResult(final_url=canonical, final_host=urlsplit(canonical).hostname, error_type="request_error")
+
+
+def render_detail_candidates(
+    source: dict[str, Any],
+    candidates: list[ItemCandidate],
+    parser: Any,
+    *,
+    timeout_ms: int = 30_000,
+    wait_ms: int = 1_500,
+    max_scrolls: int = 3,
+) -> dict[str, dict[str, Any]]:
+    results: dict[str, dict[str, Any]] = {}
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return {
+            candidate.canonical_url: {
+                "item": None,
+                "error_type": "render_unavailable",
+                "navigation_status": "unavailable",
+                "final_host": None,
+                "dom_length": 0,
+                "detail_page_hash": None,
+            }
+            for candidate in candidates
+        }
+
+    source_id = str(source.get("id") or "")
+    index_url = str(source.get("url") or "")
+    browser = None
+    context = None
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(user_agent=USER_AGENT)
+            for candidate in candidates:
+                canonical = normalize_candidate_url(source_id, index_url, candidate.canonical_url)
+                if canonical is None:
+                    results[candidate.canonical_url] = {
+                        "item": None,
+                        "error_type": "invalid_candidate_url",
+                        "navigation_status": "not_attempted",
+                        "final_host": None,
+                        "dom_length": 0,
+                        "detail_page_hash": None,
+                    }
+                    continue
+                page = context.new_page()
+                try:
+                    page.route(
+                        "**/*",
+                        lambda route: route.abort()
+                        if route.request.resource_type in {"image", "media", "font"}
+                        else route.continue_(),
+                    )
+                    response = page.goto(canonical, wait_until="domcontentloaded", timeout=timeout_ms)
+                    status = response.status if response is not None else None
+                    final_url = str(page.url or canonical)
+                    final_canonical = normalize_candidate_url(source_id, index_url, final_url)
+                    if final_canonical is None:
+                        results[candidate.canonical_url] = {
+                            "item": None,
+                            "error_type": "render_redirect_outside_domain",
+                            "navigation_status": "redirect_rejected",
+                            "final_host": urlsplit(final_url).hostname,
+                            "dom_length": 0,
+                            "detail_page_hash": None,
+                        }
+                        continue
+                    if isinstance(status, int) and 400 <= status < 500:
+                        results[candidate.canonical_url] = {
+                            "item": None,
+                            "error_type": "http_4xx",
+                            "navigation_status": f"http_{status}",
+                            "final_host": urlsplit(final_url).hostname,
+                            "dom_length": 0,
+                            "detail_page_hash": None,
+                        }
+                        continue
+                    try:
+                        page.wait_for_selector("h1, article, main", timeout=min(timeout_ms // 3, 5_000))
+                    except PlaywrightTimeoutError:
+                        pass
+                    if wait_ms:
+                        page.wait_for_timeout(wait_ms)
+                    for _ in range(max_scrolls):
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_timeout(min(wait_ms, 500))
+                    html = page.content()
+                    try:
+                        parsed = parser(
+                            html,
+                            final_canonical,
+                            candidate.index_evidence or candidate.evidence,
+                            candidate.title,
+                            parse_method="rendered",
+                        )
+                        error_type = detail_parse_error(html, parsed, rendered=True)
+                    except Exception:
+                        parsed = None
+                        error_type = "parse_error"
+                    results[candidate.canonical_url] = {
+                        "item": parsed if error_type is None else None,
+                        "error_type": error_type,
+                        "navigation_status": "success",
+                        "final_url": final_canonical,
+                        "final_host": urlsplit(final_url).hostname,
+                        "dom_length": len(html),
+                        "detail_page_hash": detail_page_hash(html),
+                    }
+                except PlaywrightTimeoutError:
+                    results[candidate.canonical_url] = {
+                        "item": None,
+                        "error_type": "render_timeout",
+                        "navigation_status": "timeout",
+                        "final_host": None,
+                        "dom_length": 0,
+                        "detail_page_hash": None,
+                    }
+                except Exception:
+                    results[candidate.canonical_url] = {
+                        "item": None,
+                        "error_type": "render_navigation_failed",
+                        "navigation_status": "failed",
+                        "final_host": None,
+                        "dom_length": 0,
+                        "detail_page_hash": None,
+                    }
+                finally:
+                    page.close()
+            context.close()
+            context = None
+            browser.close()
+            browser = None
+    except Exception:
+        for candidate in candidates:
+            results.setdefault(
+                candidate.canonical_url,
+                {
+                    "item": None,
+                    "error_type": "render_unavailable",
+                    "navigation_status": "unavailable",
+                    "final_host": None,
+                    "dom_length": 0,
+                    "detail_page_hash": None,
+                },
+            )
+    finally:
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                pass
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+    return results
 
 
 def parsed_item_to_record(
@@ -902,6 +1203,7 @@ def parsed_item_to_record(
     fetched_at: str,
     http_status: int | None,
     discovery_method: str,
+    page_hash: str | None = None,
 ) -> dict[str, Any]:
     quality, confidence = parser_quality(parsed)
     record = parsed.to_dict()
@@ -928,17 +1230,95 @@ def parsed_item_to_record(
             "matched_keywords": ["starlink"] if parsed.starlink_relevance == "direct" else [],
             "extraction_notes": "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。",
             "seen_in_current_index": True,
+            "detail_fetch_status": "success",
+            "last_detail_attempt_at": fetched_at,
+            "last_detail_success_at": fetched_at,
+            "last_detail_error_type": None,
+            "current_run_data_reused": False,
+            "detail_page_hash": page_hash,
         }
     )
-    record["content_hash"] = official_item_content_hash(record)
+    record["semantic_content_hash"] = semantic_content_hash(record)
+    record["content_hash"] = record["semantic_content_hash"]
+    record["extraction_hash"] = official_extraction_hash(record)
     return record
+
+
+def _warning_types(item: ParsedOfficialItem | None) -> list[str]:
+    if item is None:
+        return []
+    warnings: list[str] = []
+    for warning in item.extraction_warnings:
+        lowered = str(warning).lower()
+        if "date" in lowered or "日期" in lowered or "时间" in lowered:
+            warnings.append("unparsed_date")
+        elif lowered.startswith("field_conflict:"):
+            warnings.append(lowered)
+        else:
+            warnings.append("parser_warning")
+    return list(dict.fromkeys(warnings))[:10]
+
+
+def _should_render_detail(error_type: str | None, mode: str, has_static_item: bool) -> bool:
+    if mode == "never":
+        return False
+    non_renderable = {
+        "invalid_candidate_url",
+        "redirect_outside_allowed_domain",
+        "redirect_to_index_page",
+        "http_4xx",
+        "invalid_content_type",
+        "response_too_large",
+    }
+    if error_type in non_renderable:
+        return False
+    if mode == "always":
+        return True
+    return not has_static_item and error_type in DETAIL_RENDERABLE_ERRORS
+
+
+def _reuse_previous_success(
+    existing: dict[str, Any] | None,
+    attempted_at: str,
+    error_type: str,
+) -> dict[str, Any] | None:
+    if not existing or existing.get("record_scope") != "item":
+        return None
+    reused = deepcopy(existing)
+    reused.update(
+        {
+            "seen_in_current_index": True,
+            "detail_fetch_status": "failed_this_run",
+            "last_detail_attempt_at": attempted_at,
+            "last_detail_error_type": error_type,
+            "current_run_data_reused": True,
+            "detail_parse_method": "reused_previous_success",
+            "extraction_change_status": "failed",
+            "change_reason": "detail_fetch_failed_reused_previous_success",
+            "change_status": "unchanged",
+        }
+    )
+    reused.setdefault("last_detail_success_at", existing.get("fetched_at") or existing.get("last_seen_at"))
+    reused.setdefault("semantic_content_hash", existing.get("content_hash") or semantic_content_hash(existing))
+    reused["content_hash"] = reused["semantic_content_hash"]
+    return reused
 
 
 def extract_official_items(
     fetch: SourceFetch,
     max_source_items: int,
     render_mode: str = "auto",
+    *,
+    existing_items: dict[str, dict[str, Any]] | None = None,
+    detail_render_mode: str = "auto",
+    max_rendered_details_per_source: int = 10,
+    detail_timeout_ms: int = 30_000,
+    detail_wait_ms: int = 1_500,
+    detail_max_scrolls: int = 3,
+    detail_concurrency: int = 1,
+    detail_renderer: Any | None = None,
 ) -> OfficialExtractionOutcome:
+    del detail_concurrency  # Phase 4B intentionally processes detail pages sequentially.
     source_id = str(fetch.source.get("id") or "")
     parser_version = STARLINK_PARSER_VERSION if source_id == "starlink_official_updates" else SPACEX_PARSER_VERSION
     outcome = OfficialExtractionOutcome(parser_version=parser_version)
@@ -946,45 +1326,183 @@ def extract_official_items(
     outcome.static_candidate_count = len(static_candidates)
     candidates = list(static_candidates)
 
-    should_render = render_mode == "always" or (render_mode == "auto" and not static_candidates)
-    if should_render:
+    should_render_index = render_mode == "always" or (render_mode == "auto" and not static_candidates)
+    if should_render_index:
         outcome.render_fallback_used = True
         rendered, render_status = render_index_candidates(fetch)
         outcome.rendered_candidate_count = len(rendered)
         outcome.render_fallback_status = render_status
         candidates = merge_official_candidates([*candidates, *rendered])
         if render_status != "success":
-            outcome.warnings.append(f"render_fallback_{render_status}")
+            outcome.warnings.append(f"index_render_{render_status}")
     elif render_mode == "never":
         outcome.render_fallback_status = "disabled"
 
+    outcome.candidate_count_total = len(candidates)
     outcome.candidates = candidates[:max_source_items]
-    session = _requests_session()
+    existing_items = existing_items or {}
     parser = parse_starlink_update if source_id == "starlink_official_updates" else parse_spacex_launch
+    session = _requests_session()
+    static_items: dict[str, ParsedOfficialItem | None] = {}
+    static_page_hashes: dict[str, str | None] = {}
+    render_queue: list[ItemCandidate] = []
+    diagnostic_by_url: dict[str, dict[str, Any]] = {}
+
     for index, candidate in enumerate(outcome.candidates):
         if index:
             time.sleep(0.2)
-        detail_html, status, error = fetch_detail_html(session, candidate.canonical_url)
-        if error:
-            outcome.detail_fetch_failed += 1
-            outcome.warnings.append(f"detail_fetch_{error}")
-            continue
-        parsed = parser(
-            detail_html,
+        record_id = stable_item_id(source_id, candidate.canonical_url)
+        fetched = fetch_detail_html(
+            session,
+            fetch.source,
             candidate.canonical_url,
-            candidate.index_evidence or candidate.evidence,
-            candidate.title,
+            timeout=max(1, detail_timeout_ms // 1000),
         )
-        if parsed is None:
-            outcome.detail_fetch_failed += 1
-            outcome.warnings.append("detail_parse_insufficient_evidence")
-            continue
-        outcome.detail_fetch_success += 1
-        outcome.items.append(
-            parsed_item_to_record(parsed, fetch.source, fetch.fetched_at, status, candidate.origin)
+        parsed: ParsedOfficialItem | None = None
+        error_type = fetched.error_type
+        if error_type is None:
+            try:
+                parsed = parser(
+                    fetched.html,
+                    fetched.final_url or candidate.canonical_url,
+                    candidate.index_evidence or candidate.evidence,
+                    candidate.title,
+                    parse_method="static",
+                )
+                error_type = detail_parse_error(fetched.html, parsed)
+            except Exception:
+                parsed = None
+                error_type = "parse_error"
+        if error_type is None and parsed is not None:
+            outcome.static_detail_success += 1
+        else:
+            parsed = None
+        static_items[candidate.canonical_url] = parsed
+        static_page_hashes[candidate.canonical_url] = detail_page_hash(fetched.html) if fetched.html else None
+        diagnostic = {
+            "record_id": record_id,
+            "canonical_url": candidate.canonical_url,
+            "discovery_method": candidate.origin,
+            "static": {
+                "attempted": True,
+                "http_status": fetched.http_status,
+                "content_type": fetched.content_type,
+                "html_length": fetched.html_length,
+                "redirect_count": fetched.redirect_count,
+                "final_host": fetched.final_host,
+                "parse_status": "success" if parsed is not None else (error_type or "unknown_error"),
+                "title_found": bool(parsed and parsed.title),
+                "date_found": bool(parsed and (parsed.published_at or parsed.published_date_text)),
+                "evidence_length": len(parsed.evidence) if parsed else 0,
+                "parser_warning_types": _warning_types(parsed),
+            },
+            "render": {
+                "attempted": False,
+                "navigation_status": "not_attempted",
+                "final_host": None,
+                "dom_length": 0,
+                "parse_status": "not_attempted",
+                "title_found": False,
+                "date_found": False,
+                "evidence_length": 0,
+            },
+            "final_status": "pending",
+            "final_method": None,
+            "error_type": error_type,
+            "current_run_data_reused": False,
+            "checked_at": fetch.fetched_at,
+        }
+        diagnostic_by_url[candidate.canonical_url] = diagnostic
+        if _should_render_detail(error_type, detail_render_mode, parsed is not None):
+            if len(render_queue) < max_rendered_details_per_source:
+                render_queue.append(candidate)
+            else:
+                diagnostic["error_type"] = "render_limit_reached"
+
+    renderer = detail_renderer or render_detail_candidates
+    rendered_results: dict[str, dict[str, Any]] = {}
+    if render_queue:
+        rendered_results = renderer(
+            fetch.source,
+            render_queue,
+            parser,
+            timeout_ms=detail_timeout_ms,
+            wait_ms=detail_wait_ms,
+            max_scrolls=detail_max_scrolls,
         )
 
-    outcome.extraction_succeeded = bool(outcome.items)
+    methods: list[str] = []
+    for candidate in outcome.candidates:
+        diagnostic = diagnostic_by_url[candidate.canonical_url]
+        static_item = static_items.get(candidate.canonical_url)
+        rendered_result = rendered_results.get(candidate.canonical_url)
+        rendered_item: ParsedOfficialItem | None = None
+        final_hash = static_page_hashes.get(candidate.canonical_url)
+        if rendered_result is not None:
+            outcome.rendered_detail_attempted += 1
+            rendered_item = rendered_result.get("item")
+            render_error = rendered_result.get("error_type")
+            if rendered_item is not None and render_error is None:
+                outcome.rendered_detail_success += 1
+            diagnostic["render"] = {
+                "attempted": True,
+                "navigation_status": rendered_result.get("navigation_status", "unknown"),
+                "final_host": rendered_result.get("final_host"),
+                "dom_length": int(rendered_result.get("dom_length") or 0),
+                "parse_status": "success" if rendered_item is not None and render_error is None else (render_error or "unknown_error"),
+                "title_found": bool(rendered_item and rendered_item.title),
+                "date_found": bool(rendered_item and (rendered_item.published_at or rendered_item.published_date_text)),
+                "evidence_length": len(rendered_item.evidence) if rendered_item else 0,
+            }
+            if rendered_result.get("detail_page_hash"):
+                final_hash = rendered_result.get("detail_page_hash")
+            if render_error is not None:
+                diagnostic["error_type"] = render_error
+
+        final_item = merge_static_and_rendered_fields(static_item, rendered_item)
+        if final_item is not None:
+            outcome.final_detail_success += 1
+            outcome.items.append(
+                parsed_item_to_record(
+                    final_item,
+                    fetch.source,
+                    fetch.fetched_at,
+                    diagnostic["static"].get("http_status"),
+                    candidate.origin,
+                    final_hash,
+                )
+            )
+            diagnostic["final_status"] = "success"
+            diagnostic["final_method"] = final_item.detail_parse_method
+            diagnostic["error_type"] = None
+            methods.append(final_item.detail_parse_method)
+            continue
+
+        final_error = str(diagnostic.get("error_type") or "unknown_error")
+        if final_error not in DETAIL_ERROR_TYPES:
+            final_error = "unknown_error"
+        diagnostic["error_type"] = final_error
+        outcome.final_detail_failed += 1
+        reused = _reuse_previous_success(existing_items.get(diagnostic["record_id"]), fetch.fetched_at, final_error)
+        if reused is not None:
+            outcome.items.append(reused)
+            outcome.reused_previous_success += 1
+            diagnostic["final_status"] = "reused_previous_success"
+            diagnostic["final_method"] = "reused_previous_success"
+            diagnostic["current_run_data_reused"] = True
+            methods.append("reused_previous_success")
+        else:
+            diagnostic["final_status"] = "failed"
+            diagnostic["final_method"] = None
+        outcome.failure_types[final_error] = outcome.failure_types.get(final_error, 0) + 1
+        outcome.warnings.append(f"detail_failure:{final_error}")
+
+    outcome.detail_diagnostics = [diagnostic_by_url[candidate.canonical_url] for candidate in outcome.candidates]
+    outcome.detail_fetch_success = outcome.final_detail_success
+    outcome.detail_fetch_failed = outcome.final_detail_failed
+    outcome.extraction_succeeded = outcome.final_detail_success > 0
+    if methods:
+        outcome.dominant_detail_parse_method = Counter(methods).most_common(1)[0][0]
     if not outcome.items:
         candidate_payload = [
             {"url": candidate.canonical_url, "title": candidate.title, "matched_keywords": []}
@@ -995,12 +1513,17 @@ def extract_official_items(
     return outcome
 
 
-def extract_items(fetch: SourceFetch, limit: int, render_mode: str = "auto") -> OfficialExtractionOutcome:
+def extract_items(
+    fetch: SourceFetch,
+    limit: int,
+    render_mode: str = "auto",
+    **kwargs: Any,
+) -> OfficialExtractionOutcome:
     source_id = fetch.source.get("id")
     if source_id not in SUPPORTED_SOURCE_IDS:
         print(f"跳过当前阶段未支持的来源：{source_id}")
         return OfficialExtractionOutcome(warnings=["unsupported_source"])
-    return extract_official_items(fetch, limit, render_mode)
+    return extract_official_items(fetch, limit, render_mode, **kwargs)
 
 
 def apply_item_change_metadata(
@@ -1048,6 +1571,9 @@ def apply_official_item_baseline_metadata(
     source_state: dict[str, Any],
     extraction_succeeded: bool,
     rebootstrap: bool = False,
+    detail_diagnostics: list[dict[str, Any]] | None = None,
+    update_state: bool = True,
+    previous_parser_version: str | None = None,
 ) -> tuple[int, int, int, int]:
     if rebootstrap:
         source_state["bootstrap_completed"] = False
@@ -1059,56 +1585,154 @@ def apply_official_item_baseline_metadata(
     unchanged_count = 0
     bootstrap_completed = bool(source_state.get("bootstrap_completed"))
     state_items = source_state.setdefault("items", {})
-    source_state["last_attempt_at"] = now_iso()
+    attempted_at = now_iso()
+    if update_state:
+        source_state["last_attempt_at"] = attempted_at
 
     for item in items:
         if item.get("record_scope") != "item":
             continue
         item_id = str(item.get("id") or "")
         fetched_at = str(item.get("fetched_at") or now_iso())
-        current_hash = str(item.get("content_hash") or official_item_content_hash(item))
+        legacy_current_hash = item.get("content_hash")
+        current_hash = str(item.get("semantic_content_hash") or semantic_content_hash(item))
         existing = existing_by_id.get(item_id)
+        item["semantic_content_hash"] = current_hash
         item["content_hash"] = current_hash
+        item["extraction_hash"] = item.get("extraction_hash") or official_extraction_hash(item)
         item["last_seen_at"] = fetched_at
         item["first_seen_at"] = (existing or {}).get("first_seen_at") or fetched_at
+
+        if item.get("current_run_data_reused"):
+            item["change_status"] = "unchanged"
+            item["previous_content_hash"] = (existing or {}).get("content_hash")
+            item["last_changed_at"] = (existing or {}).get("last_changed_at") or item["first_seen_at"]
+            item["extraction_change_status"] = "failed"
+            item["change_reason"] = "detail_fetch_failed_reused_previous_success"
+            unchanged_count += 1
+            continue
 
         if not bootstrap_completed:
             item["change_status"] = "baseline"
             item["previous_content_hash"] = (existing or {}).get("content_hash")
             item["last_changed_at"] = (existing or {}).get("last_changed_at") or fetched_at
+            item["extraction_change_status"] = "unchanged"
+            item["change_reason"] = "baseline_established"
             baseline_count += 1
         elif not existing:
-            item["change_status"] = "new"
+            previous_candidate_state = state_items.get(item_id, {})
+            if not isinstance(previous_candidate_state, dict):
+                previous_candidate_state = {}
+            recovered_known_candidate = bool(previous_candidate_state.get("last_failure_at"))
+            parser_upgrade_discovery = bool(
+                previous_parser_version
+                and previous_parser_version != item.get("parser_version")
+            )
+            enrichment_discovery = parser_upgrade_discovery or recovered_known_candidate
+            item["change_status"] = "unchanged" if enrichment_discovery else "new"
             item["previous_content_hash"] = None
             item["last_changed_at"] = fetched_at
-            new_count += 1
-        elif existing.get("content_hash") != current_hash:
-            item["change_status"] = "changed"
-            item["previous_content_hash"] = existing.get("content_hash")
-            item["last_changed_at"] = fetched_at
-            changed_count += 1
+            if enrichment_discovery:
+                item["extraction_change_status"] = "improved"
+                item["change_reason"] = (
+                    "detail_failure_recovered" if recovered_known_candidate else "parser_enrichment_discovery"
+                )
+                unchanged_count += 1
+            else:
+                item["extraction_change_status"] = "unchanged"
+                item["change_reason"] = "new_item"
+                new_count += 1
         else:
-            item["change_status"] = "unchanged"
+            previous_semantic_hash = existing.get("semantic_content_hash")
+            parser_changed = existing.get("parser_version") != item.get("parser_version")
+            if parser_changed:
+                old_title = normalize_text(str(existing.get("title") or "")).casefold()
+                new_title = normalize_text(str(item.get("title") or "")).casefold()
+                title_compatible = (
+                    old_title == new_title
+                    or bool(old_title and new_title.startswith(f"{old_title}:"))
+                    or bool(new_title and old_title.startswith(f"{new_title}:"))
+                )
+                old_date = existing.get("published_at") or existing.get("published_date_text")
+                new_date = item.get("published_at") or item.get("published_date_text")
+                semantic_changed = not title_compatible or bool(old_date and new_date and old_date != new_date)
+            elif previous_semantic_hash:
+                semantic_changed = previous_semantic_hash != current_hash
+            elif existing.get("content_hash") and legacy_current_hash:
+                semantic_changed = existing.get("content_hash") != legacy_current_hash
+            else:
+                semantic_changed = semantic_content_hash(existing) != current_hash
+
             item["previous_content_hash"] = existing.get("content_hash")
-            item["last_changed_at"] = existing.get("last_changed_at") or item["first_seen_at"]
-            unchanged_count += 1
+            if semantic_changed:
+                item["change_status"] = "changed"
+                item["last_changed_at"] = fetched_at
+                item["extraction_change_status"] = "unchanged"
+                item["change_reason"] = "semantic_content_changed"
+                changed_count += 1
+            else:
+                item["change_status"] = "unchanged"
+                item["last_changed_at"] = existing.get("last_changed_at") or item["first_seen_at"]
+                extraction_changed = existing.get("extraction_hash") != item.get("extraction_hash")
+                if parser_changed or extraction_changed:
+                    item["extraction_change_status"] = "improved"
+                    item["change_reason"] = "parser_enrichment"
+                else:
+                    item["extraction_change_status"] = "unchanged"
+                    item["change_reason"] = "no_semantic_change"
+                unchanged_count += 1
 
-        state_items[item_id] = {
-            "canonical_url": item.get("canonical_url") or item.get("url"),
-            "content_hash": current_hash,
-            "first_seen_at": item.get("first_seen_at"),
-            "last_seen_at": fetched_at,
-        }
+        if update_state:
+            previous_state = state_items.get(item_id, {}) if isinstance(state_items.get(item_id), dict) else {}
+            state_items[item_id] = {
+                **previous_state,
+                "canonical_url": item.get("canonical_url") or item.get("url"),
+                "content_hash": current_hash,
+                "semantic_content_hash": current_hash,
+                "extraction_hash": item.get("extraction_hash"),
+                "first_seen_at": item.get("first_seen_at"),
+                "last_seen_at": fetched_at,
+                "last_attempt_at": item.get("last_detail_attempt_at") or fetched_at,
+                "last_success_at": item.get("last_detail_success_at") or fetched_at,
+                "last_error_type": None,
+                "consecutive_failures": 0,
+                "last_success_method": item.get("detail_parse_method") or "static",
+                "last_parser_version": item.get("parser_version"),
+            }
 
-    if extraction_succeeded:
+    if update_state:
+        for diagnostic in detail_diagnostics or []:
+            if not isinstance(diagnostic, dict):
+                continue
+            item_id = str(diagnostic.get("record_id") or "")
+            if not item_id or diagnostic.get("final_status") == "success":
+                continue
+            previous_state = state_items.get(item_id, {}) if isinstance(state_items.get(item_id), dict) else {}
+            error_type = str(diagnostic.get("error_type") or "unknown_error")
+            state_items[item_id] = {
+                **previous_state,
+                "canonical_url": diagnostic.get("canonical_url"),
+                "last_attempt_at": diagnostic.get("checked_at") or attempted_at,
+                "last_failure_at": diagnostic.get("checked_at") or attempted_at,
+                "last_error_type": error_type if error_type in DETAIL_ERROR_TYPES else "unknown_error",
+                "consecutive_failures": int(previous_state.get("consecutive_failures") or 0) + 1,
+                "last_parser_version": (
+                    STARLINK_PARSER_VERSION
+                    if str(diagnostic.get("canonical_url") or "").startswith("https://starlink.com/")
+                    else SPACEX_PARSER_VERSION
+                ),
+            }
+
+    if extraction_succeeded and update_state:
         source_state["last_success_at"] = now_iso()
         if not bootstrap_completed:
             source_state["bootstrap_completed"] = True
             source_state["bootstrap_completed_at"] = now_iso()
-    else:
+    elif update_state:
         source_state.setdefault("bootstrap_completed", bootstrap_completed)
         source_state["last_failure_at"] = now_iso()
-    source_state["known_item_count"] = len(state_items)
+    if update_state:
+        source_state["known_item_count"] = len(state_items)
     return baseline_count, new_count, changed_count, unchanged_count
 
 
@@ -1219,6 +1843,15 @@ def build_extraction_quality_summary(status: dict[str, Any], items: list[dict[st
         "dominant_source_quality": quality["dominant_source_quality"],
         "average_confidence": quality["average_confidence"],
         "candidate_links_total": quality["candidate_links_total"],
+        "static_candidate_count": status.get("static_candidate_count", 0),
+        "rendered_candidate_count": status.get("rendered_candidate_count", 0),
+        "candidate_count_total": status.get("candidate_count_total", status.get("candidate_count", 0)),
+        "selected_candidate_count": status.get("selected_candidate_count", status.get("candidate_count", 0)),
+        "static_detail_success": status.get("static_detail_success", 0),
+        "rendered_detail_attempted": status.get("rendered_detail_attempted", 0),
+        "rendered_detail_success": status.get("rendered_detail_success", 0),
+        "final_detail_success": status.get("final_detail_success", 0),
+        "final_detail_failed": status.get("final_detail_failed", 0),
         "level_counts": quality["level_counts"],
         "quality_counts": quality["quality_counts"],
         "item_level_count": quality["item_level_count"],
@@ -1287,8 +1920,25 @@ def update_source_status(
         "average_confidence": quality["average_confidence"],
         "candidate_links_total": quality["candidate_links_total"],
         "candidate_count": len(outcome.candidates) if outcome else 0,
+        "static_candidate_count": outcome.static_candidate_count if outcome else 0,
+        "rendered_candidate_count": outcome.rendered_candidate_count if outcome else 0,
+        "candidate_count_total": outcome.candidate_count_total if outcome else 0,
+        "selected_candidate_count": len(outcome.candidates) if outcome else 0,
         "detail_fetch_success": outcome.detail_fetch_success if outcome else 0,
         "detail_fetch_failed": outcome.detail_fetch_failed if outcome else 0,
+        "static_detail_success": outcome.static_detail_success if outcome else 0,
+        "rendered_detail_attempted": outcome.rendered_detail_attempted if outcome else 0,
+        "rendered_detail_success": outcome.rendered_detail_success if outcome else 0,
+        "reused_previous_success": outcome.reused_previous_success if outcome else 0,
+        "final_detail_success": outcome.final_detail_success if outcome else 0,
+        "final_detail_failed": outcome.final_detail_failed if outcome else 0,
+        "final_success_rate": (
+            round(outcome.final_detail_success / outcome.candidate_count_total, 4)
+            if outcome and outcome.candidate_count_total
+            else None
+        ),
+        "failure_types": dict(sorted(outcome.failure_types.items())) if outcome else {},
+        "dominant_detail_parse_method": outcome.dominant_detail_parse_method if outcome else "unknown",
         "item_level_items": quality["item_level_count"],
         "page_level_items": quality["page_level_count"],
         "page_level_fallback": outcome.page_level_fallback if outcome else True,
@@ -1321,10 +1971,17 @@ def collect_source(
     source_status: dict[str, Any],
     item_extraction_state: dict[str, Any],
     item_extraction_report: dict[str, Any],
+    detail_extraction_diagnostics: dict[str, Any],
     limit: int = 20,
     save_raw: bool = False,
     dry_run: bool = False,
     render_mode: str = "auto",
+    detail_render_mode: str = "auto",
+    max_rendered_details_per_source: int = 10,
+    detail_timeout_ms: int = 30_000,
+    detail_wait_ms: int = 1_500,
+    detail_max_scrolls: int = 3,
+    detail_concurrency: int = 1,
     rebootstrap: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
     fetch = fetch_source(source)
@@ -1345,10 +2002,20 @@ def collect_source(
             "parser_version": STARLINK_PARSER_VERSION if source["id"] == "starlink_official_updates" else SPACEX_PARSER_VERSION,
             "static_candidate_count": 0,
             "rendered_candidate_count": 0,
+            "candidate_count_total": 0,
             "selected_candidate_count": 0,
             "candidate_count": 0,
             "detail_fetch_success": 0,
             "detail_fetch_failed": 0,
+            "static_detail_success": 0,
+            "rendered_detail_attempted": 0,
+            "rendered_detail_success": 0,
+            "reused_previous_success": 0,
+            "final_detail_success": 0,
+            "final_detail_failed": 0,
+            "final_success_rate": None,
+            "failure_types": {"request_error": 1},
+            "dominant_detail_parse_method": "unknown",
             "item_level_items": 0,
             "page_level_items": 0,
             "page_level_fallback": True,
@@ -1367,6 +2034,20 @@ def collect_source(
             "unchanged_items": 0,
             "warnings": ["index_fetch_failed"],
         }
+        detail_extraction_diagnostics.setdefault("sources", {})[source["id"]] = {
+            "source_id": source["id"],
+            "source_name": source.get("name"),
+            "candidate_count": 0,
+            "details": [],
+            "static_success": 0,
+            "render_attempted": 0,
+            "render_success": 0,
+            "final_success": 0,
+            "final_failed": 0,
+            "reused_previous_success": 0,
+            "success_rate": None,
+            "failure_types": {"request_error": 1},
+        }
         status = write_failed_source_status(source_status, fetch)
         message = f"{source.get('name', source.get('id'))} 采集失败：{fetch.error}"
         print(message)
@@ -1378,7 +2059,18 @@ def collect_source(
     elif save_raw and dry_run:
         print("[dry-run] 已请求页面，但不会保存原始 HTML。")
 
-    outcome = extract_items(fetch, limit, render_mode)
+    outcome = extract_items(
+        fetch,
+        limit,
+        render_mode,
+        existing_items=existing_items,
+        detail_render_mode=detail_render_mode,
+        max_rendered_details_per_source=max_rendered_details_per_source,
+        detail_timeout_ms=detail_timeout_ms,
+        detail_wait_ms=detail_wait_ms,
+        detail_max_scrolls=detail_max_scrolls,
+        detail_concurrency=detail_concurrency,
+    )
     items = outcome.items
     item_records = [item for item in items if item.get("record_scope") == "item"]
     page_records = [item for item in items if item.get("record_scope") == "page"]
@@ -1390,6 +2082,7 @@ def collect_source(
         source["id"],
         {"bootstrap_completed": False, "bootstrap_completed_at": None, "known_item_count": 0, "items": {}},
     )
+    previous_parser_version = state.get("parser_version")
     state["parser_version"] = outcome.parser_version
     state["last_candidate_count"] = len(outcome.candidates)
     state["last_item_count"] = len(item_records)
@@ -1402,6 +2095,9 @@ def collect_source(
         state,
         extraction_succeeded=outcome.extraction_succeeded,
         rebootstrap=rebootstrap,
+        detail_diagnostics=outcome.detail_diagnostics,
+        update_state=not dry_run,
+        previous_parser_version=str(previous_parser_version) if previous_parser_version else None,
     )
     status = update_source_status(
         source_status,
@@ -1426,10 +2122,24 @@ def collect_source(
         "parser_version": outcome.parser_version,
         "static_candidate_count": outcome.static_candidate_count,
         "rendered_candidate_count": outcome.rendered_candidate_count,
+        "candidate_count_total": outcome.candidate_count_total,
         "selected_candidate_count": len(outcome.candidates),
         "candidate_count": len(outcome.candidates),
         "detail_fetch_success": outcome.detail_fetch_success,
         "detail_fetch_failed": outcome.detail_fetch_failed,
+        "static_detail_success": outcome.static_detail_success,
+        "rendered_detail_attempted": outcome.rendered_detail_attempted,
+        "rendered_detail_success": outcome.rendered_detail_success,
+        "reused_previous_success": outcome.reused_previous_success,
+        "final_detail_success": outcome.final_detail_success,
+        "final_detail_failed": outcome.final_detail_failed,
+        "final_success_rate": (
+            round(outcome.final_detail_success / len(outcome.candidates), 4)
+            if outcome.candidates
+            else None
+        ),
+        "failure_types": dict(sorted(outcome.failure_types.items())),
+        "dominant_detail_parse_method": outcome.dominant_detail_parse_method,
         "item_level_items": len(item_records),
         "page_level_items": len(page_records),
         "page_level_fallback": outcome.page_level_fallback,
@@ -1448,6 +2158,24 @@ def collect_source(
         "changed_items": changed_count,
         "unchanged_items": unchanged_count,
         "warnings": sorted(set(outcome.warnings))[:10],
+    }
+    detail_extraction_diagnostics.setdefault("sources", {})[source["id"]] = {
+        "source_id": source["id"],
+        "source_name": source.get("name"),
+        "candidate_count": len(outcome.candidates),
+        "details": outcome.detail_diagnostics,
+        "static_success": outcome.static_detail_success,
+        "render_attempted": outcome.rendered_detail_attempted,
+        "render_success": outcome.rendered_detail_success,
+        "final_success": outcome.final_detail_success,
+        "final_failed": outcome.final_detail_failed,
+        "reused_previous_success": outcome.reused_previous_success,
+        "success_rate": (
+            round(outcome.final_detail_success / len(outcome.candidates), 4)
+            if outcome.candidates
+            else None
+        ),
+        "failure_types": dict(sorted(outcome.failure_types.items())),
     }
     print_source_summary(status)
     return items, status, None
@@ -1479,6 +2207,12 @@ def collect_all_sources(
     save_raw: bool = False,
     fail_on_error: bool = False,
     render_mode: str = "auto",
+    detail_render_mode: str = "auto",
+    max_rendered_details_per_source: int = 10,
+    detail_timeout_ms: int = 30_000,
+    detail_wait_ms: int = 1_500,
+    detail_max_scrolls: int = 3,
+    detail_concurrency: int = 1,
     bootstrap_mode: str = "baseline",
     rebootstrap_source: str | None = None,
 ) -> CollectResult:
@@ -1505,6 +2239,8 @@ def collect_all_sources(
     extraction_quality = load_extraction_quality()
     item_extraction_state = load_item_extraction_state()
     item_extraction_report = load_item_extraction_report()
+    detail_extraction_diagnostics = load_detail_extraction_diagnostics()
+    detail_extraction_diagnostics["render_mode"] = detail_render_mode
     quality_sources = extraction_quality.setdefault("sources", {})
     all_items: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -1523,10 +2259,17 @@ def collect_all_sources(
             source_status=source_status,
             item_extraction_state=item_extraction_state,
             item_extraction_report=item_extraction_report,
+            detail_extraction_diagnostics=detail_extraction_diagnostics,
             limit=limit,
             save_raw=save_raw,
             dry_run=dry_run,
             render_mode=render_mode,
+            detail_render_mode=detail_render_mode,
+            max_rendered_details_per_source=max_rendered_details_per_source,
+            detail_timeout_ms=detail_timeout_ms,
+            detail_wait_ms=detail_wait_ms,
+            detail_max_scrolls=detail_max_scrolls,
+            detail_concurrency=detail_concurrency,
             rebootstrap=rebootstrap_source == source_id_value,
         )
         source_statuses[source["id"]] = status
@@ -1547,6 +2290,7 @@ def collect_all_sources(
         extraction_quality=extraction_quality,
         item_extraction_state=item_extraction_state,
         item_extraction_report=item_extraction_report,
+        detail_extraction_diagnostics=detail_extraction_diagnostics,
     )
     result.baseline_count = sum(
         1 for item in all_items if item.get("record_scope") == "item" and item.get("change_status") == "baseline"
@@ -1568,6 +2312,7 @@ def collect_all_sources(
         print(f"[dry-run] 不写入 {EXTRACTION_QUALITY_FILE}。")
         print(f"[dry-run] 不写入 {ITEM_EXTRACTION_STATE_FILE}。")
         print(f"[dry-run] 不写入 {ITEM_EXTRACTION_REPORT_FILE}。")
+        print(f"[dry-run] 不写入 {DETAIL_EXTRACTION_DIAGNOSTICS_FILE}。")
         return result
 
     if all_items:
@@ -1604,6 +2349,10 @@ def collect_all_sources(
     write_item_extraction_report(item_extraction_report)
     result.wrote_item_report = True
     print(f"{ITEM_EXTRACTION_REPORT_FILE} 已更新。")
+
+    write_detail_extraction_diagnostics(detail_extraction_diagnostics)
+    result.wrote_detail_diagnostics = True
+    print(f"{DETAIL_EXTRACTION_DIAGNOSTICS_FILE} 已更新。")
     return result
 
 
@@ -1619,6 +2368,20 @@ def main() -> int:
         help="每个来源最多请求和解析的候选详情数，默认 10。",
     )
     parser.add_argument("--render-mode", choices=["auto", "never", "always"], default="auto")
+    parser.add_argument(
+        "--detail-render-mode",
+        choices=["auto", "never", "always"],
+        default=os.getenv("DETAIL_RENDER_MODE") or "auto",
+    )
+    parser.add_argument(
+        "--max-rendered-details-per-source",
+        type=int,
+        default=int(os.getenv("MAX_RENDERED_DETAILS_PER_SOURCE") or 10),
+    )
+    parser.add_argument("--detail-timeout-ms", type=int, default=int(os.getenv("DETAIL_TIMEOUT_MS") or 30_000))
+    parser.add_argument("--detail-wait-ms", type=int, default=int(os.getenv("DETAIL_WAIT_MS") or 1_500))
+    parser.add_argument("--detail-max-scrolls", type=int, default=int(os.getenv("DETAIL_MAX_SCROLLS") or 3))
+    parser.add_argument("--detail-concurrency", type=int, default=int(os.getenv("DETAIL_CONCURRENCY") or 1))
     parser.add_argument("--bootstrap-mode", choices=["baseline"], default="baseline")
     parser.add_argument("--rebootstrap-source", choices=sorted(SUPPORTED_SOURCE_IDS))
     parser.add_argument(
@@ -1635,6 +2398,15 @@ def main() -> int:
     if args.limit < 1:
         print("--limit 必须是大于等于 1 的整数。")
         return 2
+    if args.max_rendered_details_per_source < 0:
+        print("--max-rendered-details-per-source 不能小于 0。")
+        return 2
+    if args.detail_timeout_ms < 1 or args.detail_wait_ms < 0 or args.detail_max_scrolls < 0:
+        print("详情渲染超时必须大于 0，等待时间和最大滚动次数不能小于 0。")
+        return 2
+    if args.detail_concurrency < 1:
+        print("--detail-concurrency 必须大于等于 1；阶段 4B 当前按顺序执行。")
+        return 2
 
     result = collect_all_sources(
         source_id=args.source_id,
@@ -1643,6 +2415,12 @@ def main() -> int:
         save_raw=args.save_raw,
         fail_on_error=args.fail_on_error,
         render_mode=args.render_mode,
+        detail_render_mode=args.detail_render_mode,
+        max_rendered_details_per_source=args.max_rendered_details_per_source,
+        detail_timeout_ms=args.detail_timeout_ms,
+        detail_wait_ms=args.detail_wait_ms,
+        detail_max_scrolls=args.detail_max_scrolls,
+        detail_concurrency=args.detail_concurrency,
         bootstrap_mode=args.bootstrap_mode,
         rebootstrap_source=args.rebootstrap_source,
     )

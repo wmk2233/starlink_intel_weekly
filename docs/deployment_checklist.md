@@ -202,3 +202,14 @@ GitHub Actions 定时规则为：
 - Playwright 只渲染两个官方索引页，失败时 page-level fallback 且不阻断主流程；
 - GitHub Actions 保持 LLM 默认关闭，不需要 DeepSeek/OpenAI API Key；
 - `.env`、`prompts/`、`data/raw/` 和 `data/cache/` 仍不提交。
+
+## 16. 阶段 4B 动态详情解析部署清单
+
+- GitHub Variables 可配置 `DETAIL_RENDER_MODE=auto`、`MAX_RENDERED_DETAILS_PER_SOURCE=10`、`DETAIL_TIMEOUT_MS=30000`、`DETAIL_WAIT_MS=1500`、`DETAIL_MAX_SCROLLS=3`、`DETAIL_CONCURRENCY=1`；
+- Workflow 仍只安装 Chromium，并在质量检查前运行全部离线单元测试；
+- 自动提交清单包含 `data/detail_extraction_diagnostics.json`；
+- 确认详情浏览器不保存完整 HTML、截图、视频、HAR 或 trace；
+- 确认历史成功记录保留、consecutive failure、semantic change 与 extraction improvement 检查通过；
+- baseline=0 时不显示首次建库，LLM 文案按当前运行动态生成；
+- Actions Summary 显示原始候选、URL 去重后和最终核心输入；
+- Playwright 详情 fallback 会增加 workflow 执行时间。

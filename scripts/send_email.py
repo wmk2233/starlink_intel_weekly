@@ -17,7 +17,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def load_project_env() -> None:
     """Load local .env values when the file exists."""
-    load_dotenv(PROJECT_ROOT / ".env")
+    if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
+        load_dotenv(PROJECT_ROOT / ".env")
 
 
 def _split_recipients(value: str) -> list[str]:
@@ -63,9 +64,21 @@ def build_message(
     message["To"] = ", ".join(recipients)
 
     attachment_lines = "\n".join(f"- {path.name}" for path in attachments)
+    try:
+        baseline_count = int(collection_context.get("baseline_items", "0"))
+    except (TypeError, ValueError):
+        baseline_count = 0
+    baseline_note = (
+        "本次为条目级解析首次建库，baseline 条目不等同于本周新增。\n"
+        if baseline_count > 0
+        else ""
+    )
+    historical_reuse_note = collection_context.get("historical_reuse_note", "")
+    if historical_reuse_note:
+        historical_reuse_note = f"{historical_reuse_note}\n"
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 4A：完成官方条目发现、详情解析、稳定 ID、baseline 与页面级 fallback。\n"
+        "当前阶段为阶段 4B：增强官方详情静态解析、受控浏览器 fallback、逐候选诊断与失败恢复。\n"
         "原始事实与状态数据来自规则化网页采集、hash 变化检测和解析质量诊断。大模型仅对本地结构化来源数据进行受约束摘要，不使用外部知识，也不生成无来源事实。\n\n"
         "LLM 摘要状态：\n"
         f"- Provider：{collection_context.get('llm_provider', 'unknown')}\n"
@@ -74,10 +87,13 @@ def build_message(
         f"- 当前状态：{collection_context.get('llm_status', 'unknown')}\n"
         f"- 摘要是否生成：{collection_context.get('llm_summary_generated', 'false')}\n"
         f"- 原因：{collection_context.get('llm_reason', '未知')}\n\n"
+        f"{collection_context.get('llm_current_status_text', '')}\n\n"
         "LLM 输入与使用情况：\n"
-        f"- 去重前输入记录：{collection_context.get('llm_input_records_before_dedup', '0')}\n"
-        f"- 去重后输入记录：{collection_context.get('llm_input_records_after_dedup', '0')}\n"
-        f"- 唯一来源链接：{collection_context.get('llm_unique_source_urls', '0')}\n"
+        f"- 原始候选记录：{collection_context.get('llm_raw_candidate_records', '0')}\n"
+        f"- URL 去重后记录：{collection_context.get('llm_records_after_url_dedup', '0')}\n"
+        f"- 最终核心输入记录：{collection_context.get('llm_final_core_input_records', '0')}\n"
+        f"- 最终核心唯一 URL：{collection_context.get('llm_final_core_unique_urls', '0')}\n"
+        f"- 复用历史记录：{collection_context.get('llm_reused_historical_records', '0')}\n"
         f"- Prompt tokens：{collection_context.get('llm_prompt_tokens', 'unknown')}\n"
         f"- Completion tokens：{collection_context.get('llm_completion_tokens', 'unknown')}\n"
         f"- Total tokens：{collection_context.get('llm_total_tokens', 'unknown')}\n"
@@ -111,7 +127,12 @@ def build_message(
         f"- 页面级 fallback：{collection_context.get('page_level_items', '0')}\n"
         f"- baseline 条目：{collection_context.get('baseline_items', '0')}\n"
         f"{collection_context.get('item_extraction_overview', '暂无官方条目抽取结果。')}\n"
-        "本次为条目级解析首次建库，baseline 条目不等同于本周新增。\n"
+        f"{baseline_note}"
+        "官方详情解析情况：\n"
+        f"{collection_context.get('detail_extraction_overview', '暂无官方详情解析结果。')}\n"
+        "详情失败类型：\n"
+        f"{collection_context.get('detail_failure_overview', '本轮没有详情解析失败。')}\n"
+        f"{historical_reuse_note}"
         "页面级监测解释：\n"
         f"{collection_context.get('llm_monitoring_overview', '暂无页面级监测解释。')}\n\n"
         "附件：\n"

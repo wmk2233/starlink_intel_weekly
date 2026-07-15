@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -29,6 +30,58 @@ MEDIA_SUFFIXES = {
     ".m3u8", ".mov", ".mp3", ".mp4", ".pdf", ".png", ".svg", ".webm", ".webp",
 }
 JSON_SCRIPT_TYPES = {"application/ld+json", "application/json"}
+DETAIL_ERROR_TYPES = frozenset(
+    {
+        "invalid_candidate_url",
+        "redirect_outside_allowed_domain",
+        "redirect_to_index_page",
+        "http_4xx",
+        "http_5xx",
+        "request_timeout",
+        "request_error",
+        "invalid_content_type",
+        "response_too_large",
+        "empty_response",
+        "javascript_shell",
+        "blocked_or_challenge_page",
+        "missing_title",
+        "missing_evidence",
+        "missing_required_fields",
+        "render_unavailable",
+        "render_timeout",
+        "render_navigation_failed",
+        "render_redirect_outside_domain",
+        "rendered_missing_title",
+        "rendered_missing_evidence",
+        "rendered_missing_required_fields",
+        "render_limit_reached",
+        "parse_error",
+        "unknown_error",
+    }
+)
+DETAIL_RENDERABLE_ERRORS = frozenset(
+    {
+        "empty_response",
+        "javascript_shell",
+        "missing_title",
+        "missing_evidence",
+        "missing_required_fields",
+    }
+)
+INDEX_TITLES = {
+    "starlink",
+    "starlink updates",
+    "updates",
+    "spacex",
+    "spacex launches",
+    "launches",
+}
+BLOCKED_PAGE_MARKERS = (
+    "attention required",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+    "verify you are human",
+)
 
 
 def clean_text(value: object, limit: int | None = None) -> str:
@@ -67,6 +120,9 @@ class ParsedOfficialItem:
     starlink_relevance: str
     structured_fields: dict[str, Any] = field(default_factory=dict)
     extraction_warnings: list[str] = field(default_factory=list)
+    modified_at: str | None = None
+    modified_date_text: str | None = None
+    detail_parse_method: str = "static"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -108,18 +164,169 @@ def stable_item_id(source_id: str, canonical_url: str) -> str:
 
 
 def item_content_hash(item: dict[str, Any]) -> str:
+    return semantic_content_hash(item)
+
+
+def _hash_payload(fields: dict[str, Any]) -> str:
+    raw = json.dumps(fields, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def semantic_content_hash(item: dict[str, Any]) -> str:
     fields = {
         "title": item.get("title"),
         "published_at": item.get("published_at"),
         "published_date_text": item.get("published_date_text"),
+        "modified_at": item.get("modified_at"),
+        "modified_date_text": item.get("modified_date_text"),
         "summary": item.get("summary"),
         "evidence": item.get("evidence"),
-        "field_evidence": item.get("field_evidence") or {},
         "structured_fields": item.get("structured_fields") or {},
         "starlink_relevance": item.get("starlink_relevance"),
     }
-    raw = json.dumps(fields, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return _hash_payload(fields)
+
+
+def extraction_hash(item: dict[str, Any]) -> str:
+    return _hash_payload(
+        {
+            "parser_version": item.get("parser_version"),
+            "field_evidence": item.get("field_evidence") or {},
+            "extraction_warnings": item.get("extraction_warnings") or [],
+            "source_quality": item.get("source_quality"),
+            "extraction_confidence": item.get("extraction_confidence"),
+            "detail_parse_method": item.get("detail_parse_method"),
+        }
+    )
+
+
+def detail_page_hash(html: str) -> str | None:
+    soup = BeautifulSoup(html or "", "html.parser")
+    for node in soup(["script", "style", "noscript", "svg", "nav", "footer", "form"]):
+        node.decompose()
+    visible = clean_text(soup.get_text(" "))
+    return _hash_payload({"visible_text": visible}) if visible else None
+
+
+def detect_blocked_or_challenge_page(html: str) -> bool:
+    text = clean_text(BeautifulSoup(html or "", "html.parser").get_text(" ")).lower()
+    return any(marker in text for marker in BLOCKED_PAGE_MARKERS)
+
+
+def detect_javascript_shell(html: str) -> bool:
+    if not clean_text(html):
+        return False
+    soup = BeautifulSoup(html, "html.parser")
+    if detect_blocked_or_challenge_page(html):
+        return False
+    clone = BeautifulSoup(str(soup), "html.parser")
+    for node in clone(["script", "style", "noscript", "svg", "nav", "footer", "form"]):
+        node.decompose()
+    visible = clean_text(clone.get_text(" "))
+    has_content_root = bool(clone.find(["h1", "article", "main"]))
+    meaningful_blocks = [block for block in page_text_blocks(soup) if len(block) >= 40]
+    javascript_notice = bool(
+        re.search(r"javascript\s+(?:is\s+)?(?:required|disabled)|enable\s+javascript", visible, re.I)
+    )
+    root_only = bool(soup.find(id=re.compile(r"^(?:root|app|__next)$", re.I))) and not meaningful_blocks
+    return javascript_notice or root_only or (len(visible) < 80 and not has_content_root and bool(soup.find("script")))
+
+
+def detail_parse_error(html: str, item: ParsedOfficialItem | None, rendered: bool = False) -> str | None:
+    prefix = "rendered_" if rendered else ""
+    if not clean_text(html):
+        return "rendered_missing_required_fields" if rendered else "empty_response"
+    if detect_blocked_or_challenge_page(html):
+        return "blocked_or_challenge_page"
+    if detect_javascript_shell(html):
+        return "rendered_missing_required_fields" if rendered else "javascript_shell"
+    if item is not None:
+        if not clean_text(item.title):
+            return f"{prefix}missing_title"
+        if len(clean_text(item.evidence)) < 80:
+            return f"{prefix}missing_evidence"
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+    title = clean_text((soup.find("h1") or {}).get_text(" ") if soup.find("h1") else "")
+    if not title:
+        title, _method = first_meta_content(
+            soup,
+            (("property", "og:title"), ("name", "twitter:title")),
+        )
+    if not title or title.lower() in INDEX_TITLES:
+        return f"{prefix}missing_title"
+    if not any(len(block) >= 80 for block in page_text_blocks(soup)):
+        return f"{prefix}missing_evidence"
+    return f"{prefix}missing_required_fields"
+
+
+def _method_rank(method: str) -> int:
+    lowered = clean_text(method).lower()
+    if "json_ld" in lowered or "json-ld" in lowered or "datepublished" in lowered:
+        return 5
+    if "h1" in lowered or "time" in lowered or "article" in lowered:
+        return 4
+    if "main" in lowered:
+        return 3
+    if "meta" in lowered:
+        return 2
+    return 1
+
+
+def merge_static_and_rendered_fields(
+    static_item: ParsedOfficialItem | None,
+    rendered_item: ParsedOfficialItem | None,
+) -> ParsedOfficialItem | None:
+    if static_item is None:
+        return deepcopy(rendered_item)
+    if rendered_item is None:
+        return deepcopy(static_item)
+
+    merged = deepcopy(static_item)
+    warnings = list(dict.fromkeys([*static_item.extraction_warnings, *rendered_item.extraction_warnings]))
+    for field_name in (
+        "title",
+        "published_at",
+        "published_date_text",
+        "modified_at",
+        "modified_date_text",
+        "summary",
+        "evidence",
+    ):
+        static_value = getattr(static_item, field_name)
+        rendered_value = getattr(rendered_item, field_name)
+        if not static_value and rendered_value:
+            setattr(merged, field_name, rendered_value)
+            evidence_key = "published_at" if field_name.startswith("published") else (
+                "modified_at" if field_name.startswith("modified") else field_name
+            )
+            if rendered_item.field_evidence.get(evidence_key):
+                merged.field_evidence[evidence_key] = rendered_item.field_evidence[evidence_key]
+            continue
+        if not rendered_value or static_value == rendered_value:
+            continue
+        evidence_key = "published_at" if field_name.startswith("published") else (
+            "modified_at" if field_name.startswith("modified") else field_name
+        )
+        static_method = static_item.field_evidence.get(evidence_key, "")
+        rendered_method = rendered_item.field_evidence.get(evidence_key, "")
+        if _method_rank(rendered_method) > _method_rank(static_method):
+            setattr(merged, field_name, rendered_value)
+            merged.field_evidence[evidence_key] = rendered_method
+        warnings.append(f"field_conflict:{evidence_key}")
+
+    for key, value in rendered_item.structured_fields.items():
+        if merged.structured_fields.get(key) in (None, "", [], {}) and value not in (None, "", [], {}):
+            merged.structured_fields[key] = deepcopy(value)
+            if rendered_item.field_evidence.get(key):
+                merged.field_evidence[key] = rendered_item.field_evidence[key]
+        elif value not in (None, "", [], {}) and merged.structured_fields.get(key) != value:
+            warnings.append(f"field_conflict:{key}")
+
+    merged.extraction_warnings = list(dict.fromkeys(warnings))
+    merged.detail_parse_method = "static+rendered"
+    return merged
 
 
 def _candidate_from_values(

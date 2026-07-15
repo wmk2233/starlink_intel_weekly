@@ -1,6 +1,6 @@
 # Starlink 情报周报自动化项目
 
-本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持官方条目发现、详情页解析、稳定 ID、首次 baseline、页面级 fallback、双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
+本项目用于搭建 Starlink 技术情报周报的自动化链路。当前阶段已接入两个官方来源：Starlink Official Updates 与 SpaceX Official Launches，并支持官方条目发现、动态详情解析、逐候选诊断、失败恢复、稳定 ID、首次 baseline、页面级 fallback、双文档周报、历史归档索引、输出质量检查，以及 OpenAI/DeepSeek 可选 LLM 摘要审计；LLM 默认关闭，也不接入第三方发射日程网站。
 
 ## 当前阶段目标
 
@@ -15,6 +15,7 @@
 - 阶段 3B 已支持 DeepSeek provider 和受控 LLM 验证，默认 provider 为 `deepseek`，但 LLM 默认仍关闭。
 - 阶段 3C 已增加 LLM 输入与引用去重、页面级/条目级变化分层、用量审计、GitHub Variables/Secrets 分级和 Node.js 24 Actions 版本。
 - 阶段 4A 已增加两个官方索引页的 item-level 抽取、详情证据、URL 稳定 ID、首次 baseline、防历史误报、受控 Playwright fallback 和 item-level 优先机制。
+- 阶段 4B 已增加静态详情增强、详情 Playwright fallback、逐候选失败诊断、历史成功记录保留、语义变化分层和最终核心输入统计。
 
 ## 阶段 4A 官方条目级抽取
 
@@ -38,6 +39,16 @@ python scripts/collect_sources.py --max-source-items 10 --render-mode auto --dry
 ```
 
 正式运行前先执行解析器、baseline 和质量单测。`--rebootstrap-source` 只用于人工明确重建某个来源基线，GitHub Actions 不使用该参数。
+
+## 阶段 4B 动态详情解析与失败恢复
+
+阶段 4B 在索引候选发现后先执行受限静态详情请求；静态响应为 JavaScript shell、缺少标题或 evidence 时，按 `DETAIL_RENDER_MODE=auto` 使用同域 Playwright 详情 fallback。详情浏览器按来源隔离 context、顺序处理、限制超时和滚动，只保留字段、长度、hash 与错误枚举，不保存完整 HTML、DOM、Cookie、截图、视频、HAR 或 trace。
+
+逐候选诊断写入 `data/detail_extraction_diagnostics.json`。详情临时失败不代表官方条目删除：已有成功 item-level 会保留并标记 `current_run_data_reused=true`，没有历史成功时才使用 page-level fallback。`semantic_content_hash` 只跟踪标题、官方日期、evidence 和结构化事实；parser version、field evidence、提取方法与质量只进入 `extraction_hash`，因此 parser enrichment 不会自动误报为事实 changed。
+
+详情渲染使用公开配置 `DETAIL_RENDER_MODE`、`MAX_RENDERED_DETAILS_PER_SOURCE`、`DETAIL_TIMEOUT_MS`、`DETAIL_WAIT_MS`、`DETAIL_MAX_SCROLLS`、`DETAIL_CONCURRENCY`。Playwright 会增加本地和 GitHub Actions 运行时间。
+
+LLM 状态文案按本次运行动态生成；输入统计明确区分原始候选记录、URL 去重后记录和最终核心输入记录。复用历史记录可以作为受限上下文，但不得描述为本轮重新确认。baseline 提示仅在本轮 `baseline_items > 0` 时显示。
 
 ## 阶段 1B 工程加固
 

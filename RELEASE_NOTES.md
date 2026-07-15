@@ -1,5 +1,15 @@
 # Release Notes
 
+## v0.4B：动态详情解析与失败恢复
+
+- 新增官方详情静态预检、稳定错误类型和同域 Playwright fallback；
+- 新增 `data/detail_extraction_diagnostics.json` 与逐候选脱敏诊断 CLI；
+- Starlink/SpaceX 解析器升级为 v2，并分离 published/modified 日期语义；
+- 历史成功 item-level 在本轮详情失败时保留，不把临时失败解释为删除；
+- 区分 semantic change、parser enrichment 和 extraction failure，避免 parser 升级制造虚假 changed；
+- 修复 baseline=0、LLM 当前启用状态和三层最终核心输入统计文案；
+- 不新增来源，不保存完整 HTML、截图、视频、HAR 或 trace。
+
 ## v0.4A：官方条目级抽取
 
 - 为两个既有官方索引页增加静态候选发现、详情解析和受控 Playwright fallback；
