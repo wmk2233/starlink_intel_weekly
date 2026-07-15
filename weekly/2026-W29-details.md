@@ -64,14 +64,14 @@
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T15:34:13+08:00 | fcf0cc3d400cceab |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T15:35:00+08:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T07:49:56+00:00 | 7d22d5ac027708ac |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T07:50:29+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T15:34:13+08:00 |
+| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T07:49:56+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
 
 ## 5. 解析质量诊断
@@ -99,7 +99,7 @@
 | content_hash | a2acff504bb0169a |
 | previous_content_hash | a2acff504bb0169a |
 | first_seen_at | 2026-07-14T14:54:30+08:00 |
-| last_seen_at | 2026-07-15T15:34:13+08:00 |
+| last_seen_at | 2026-07-15T07:49:56+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -119,7 +119,7 @@
 | content_hash | 15031e9924949a65 |
 | previous_content_hash | 15031e9924949a65 |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T15:34:13+08:00 |
+| last_seen_at | 2026-07-15T07:49:56+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -139,7 +139,7 @@
 | content_hash | 26342c05c89cd954 |
 | previous_content_hash | 26342c05c89cd954 |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T15:34:13+08:00 |
+| last_seen_at | 2026-07-15T07:49:56+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -157,9 +157,9 @@
 | source_quality | medium |
 | extraction_confidence | 0.8 |
 | content_hash | 2f7b8c18c91fe9b2 |
-| previous_content_hash |  |
+| previous_content_hash | 2f7b8c18c91fe9b2 |
 | first_seen_at | 2026-07-15T15:34:13+08:00 |
-| last_seen_at | 2026-07-15T15:34:13+08:00 |
+| last_seen_at | 2026-07-15T07:49:56+00:00 |
 | last_changed_at | 2026-07-15T15:34:13+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -181,7 +181,7 @@
 | content_hash | 85a78959c0b1f6e2 |
 | previous_content_hash | 85a78959c0b1f6e2 |
 | first_seen_at | 2026-07-15T15:31:12+08:00 |
-| last_seen_at | 2026-07-15T15:35:00+08:00 |
+| last_seen_at | 2026-07-15T07:50:29+00:00 |
 | last_changed_at | 2026-07-15T15:31:12+08:00 |
 | matched_keywords | [] |
 | candidate_links | [] |
@@ -410,6 +410,16 @@
   - Python 版本：3.11.9
   - 输出模式：dual
   - 是否发送邮件：否
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-15 07:49:56 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 是否发送邮件：是
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged

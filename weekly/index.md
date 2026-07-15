@@ -6,7 +6,7 @@
 
 | ISO 周编号 | 总结版 | 明细版 | 兼容索引 | 最近运行时间 | 来源数 | 新增 | 变化 | 未变化 | 主导解析质量 |
 |---|---|---|---|---|---:|---:|---:|---:|---|
-| 2026-W29 | [summary](./2026-W29-summary.md) | [details](./2026-W29-details.md) | [index](./2026-W29.md) | 2026-07-15T15:34:13+08:00 | 2 | 0 | 0 | 5 | medium |
+| 2026-W29 | [summary](./2026-W29-summary.md) | [details](./2026-W29-details.md) | [index](./2026-W29.md) | 2026-07-15T07:49:56+00:00 | 2 | 0 | 0 | 5 | medium |
 | 2026-W28 | [summary](./2026-W28-summary.md) | [details](./2026-W28-details.md) | [index](./2026-W28.md) | 2026-07-06T04:37:32+00:00 | 2 | 0 | 0 | 2 | low |
 | 2026-W27 | [summary](./2026-W27-summary.md) | [details](./2026-W27-details.md) | [index](./2026-W27.md) | 2026-06-29T04:58:34+00:00 | 2 | 1 | 0 | 1 | low |
 | 2026-W26 | [summary](./2026-W26-summary.md) | [details](./2026-W26-details.md) | [index](./2026-W26.md) | 2026-06-22T05:29:19+00:00 | 2 | 0 | 0 | 2 | low |

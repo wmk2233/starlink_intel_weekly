@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T15:35:25+08:00",
+  "generated_at": "2026-07-15T07:50:44+00:00",
   "sources": {
     "spacex_official_launches": {
       "baseline_items": 0,
@@ -7,7 +7,7 @@
       "candidate_count": 1,
       "candidate_count_total": 1,
       "changed_items": 0,
-      "checked_at": "2026-07-15T15:35:00+08:00",
+      "checked_at": "2026-07-15T07:50:29+00:00",
       "date_completeness": 0.0,
       "detail_fetch_failed": 0,
       "detail_fetch_success": 1,
@@ -50,7 +50,7 @@
       "candidate_count": 4,
       "candidate_count_total": 4,
       "changed_items": 0,
-      "checked_at": "2026-07-15T15:34:13+08:00",
+      "checked_at": "2026-07-15T07:49:56+00:00",
       "date_completeness": 0.0,
       "detail_fetch_failed": 0,
       "detail_fetch_success": 4,
