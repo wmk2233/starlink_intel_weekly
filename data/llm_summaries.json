@@ -20,7 +20,7 @@
   "base_url_label": "deepseek_default",
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T09:56:20+00:00",
+  "generated_at": "2026-07-15T13:01:21+00:00",
   "input_records": 4,
   "input_records_after_dedup": 7,
   "input_records_before_dedup": 9,
@@ -34,8 +34,8 @@
   "summary": {
     "key_points": [
       {
-        "caveat": "无",
-        "point": "Starlink发布了一款新的基于网页的工具，简化了卫星交会筛查和星历共享。",
+        "caveat": "条目内容无变化。",
+        "point": "Starlink发布Space Safety Web Interface，简化卫星运营商的交会筛查与星历共享。",
         "source_record_ids": [
           "044bafcf1089533d"
         ],
@@ -44,8 +44,8 @@
         ]
       },
       {
-        "caveat": "无",
-        "point": "Starlink在过去一年扩展到42个新国家，活跃客户增长270万以上，总数超过600万，并发射了2300多颗卫星。",
+        "caveat": "条目内容无变化。",
+        "point": "Starlink Network Update显示网络扩展到42个新市场，全球活跃客户超600万，美国高峰中位下载速度近200 Mbps（2025年7月）。",
         "source_record_ids": [
           "d3b89bb9510b1b9a"
         ],
@@ -54,8 +54,8 @@
         ]
       },
       {
-        "caveat": "无",
-        "point": "Starlink使用波束切换技术自动绕过障碍物，确保可靠的高速互联网连接。",
+        "caveat": "条目内容无变化。",
+        "point": "Starlink Beam Switching通过实时波束切换自动绕过树木、建筑等障碍物，确保高速互联网连接可靠性。",
         "source_record_ids": [
           "495a49c7d5c93cbc"
         ],
@@ -64,8 +64,8 @@
         ]
       },
       {
-        "caveat": "无",
-        "point": "Stargaze是SpaceX开发的太空态势感知系统，旨在增强低地球轨道卫星运营的安全性和可持续性。",
+        "caveat": "条目内容无变化。",
+        "point": "Stargaze是SpaceX的新型空间态势感知系统，利用超过30,000个光学传感器跟踪低地球轨道物体，已发布交会数据消息。",
         "source_record_ids": [
           "95bbf31b3a93d3e6"
         ],
@@ -75,7 +75,7 @@
       }
     ],
     "llm_summary_version": "llm_reference_aligned_v2",
-    "overall_summary": "本周未检测到新增或内容变化条目。Starlink官方更新页面现有4篇条目：太空安全网页界面、网络更新、波束切换和Stargaze态势感知系统。"
+    "overall_summary": "本周未检测到新增或内容变化条目。Starlink官方Updates页面现有四个条目持续可用：Space Safety Web Interface（轨道安全工具）、Network Update（网络性能更新）、Beam Switching（波束切换技术）和Stargaze（空间态势感知系统）。"
   },
   "unique_source_urls": 7
 }
