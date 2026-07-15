@@ -6,7 +6,7 @@
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4D.1：周报展示生成时点的 provisional 健康快照，运行结束后的 final 状态以 GitHub Actions Summary 和 `data/run_health.json` 为准；pending_at_render_time 不是失败。这些采集及告警状态不代表官方业务状态或事件重要程度。
+当前阶段为阶段 4D.2：周报统一展示生成时点的 provisional 健康快照与独立邮件步骤，运行结束后的 final 状态以 GitHub Actions Summary 和 `data/run_health.json` 为准；pending_at_render_time 不是失败。这些采集及告警状态不代表官方业务状态或事件重要程度。
 
 ## 2. 本周核心结论
 
@@ -232,7 +232,8 @@ LLM Provider：deepseek
 - 运行时间：2026-07-15 14:24:19 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
-- 是否发送邮件：否
+- 邮件发送方式：GitHub Actions 后续独立步骤
+- 报告生成时邮件状态：pending_at_render_time
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 已接入来源数量：2

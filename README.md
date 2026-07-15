@@ -889,3 +889,9 @@ Phase 4D 新增数据文件：
 Workflow 依次执行 pre-finalize 输出检查、项目审计、邮件、GitHub 提交和主要 Gitee 同步尝试，然后以 `if: always()` 读取这些步骤的有限 outcome 生成 final health。输出检查或项目审计失败为 critical，邮件或 Gitee 失败为 warning；Gitee warning 继续非阻塞。`data/run_health_history.jsonl` 只长期保存 `is_final=true` 的记录，同一 `run_id` 原位 upsert，不为 provisional 和 final 各追加一条。
 
 邮件无法报告自身尚未完成的投递结果，Gitee 推送也无法包含在其后生成的最终健康提交。因此邮件正文明确使用 pending 状态，Gitee 的主要同步尝试结果写入 final health；本次 finalization commit 可由下一次正常 Gitee 同步补齐。LLM 对 `unchanged` 条目必须使用历史记录语气，不得写成“本周发布、推出、上线、新增或宣布”；`changed` 只表示本轮检测到内容变化，`new` 只有存在明确官方日期证据时才允许写“本周发布”。
+
+## 阶段 4D.2：最终展示与邮件报告一致性
+
+阶段 4D.2 统一 Actions Summary 的最终状态展示：运行健康表和后续“输出质量检查”“稳定性与配置审计”区域都从 `is_final=true` 的 `data/run_health.json` 读取 outcome。Final health 不存在时显示 `unavailable`，不使用旧环境字段推断 passed，也不把 provisional 当成最终成功。
+
+独立邮件步骤现在分别读取 `data/source_status.json`、`data/item_extraction_report.json` 和 `data/detail_extraction_diagnostics.json`，展示友好来源名称、页面变化、new/changed/unchanged、解析层级、质量以及详情成功/失败统计。Workflow 核心生成步骤仍使用 `--no-email`，但周报显示“邮件发送方式：GitHub Actions 后续独立步骤”和“报告生成时邮件状态：pending_at_render_time”，不再误写为整个 workflow 不发送邮件。

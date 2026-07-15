@@ -104,6 +104,8 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "environment": f"{platform.system()} {platform.release()}",
         "python_version": platform.python_version(),
         "send_email": "是" if send_email_enabled else "否",
+        "email_delivery_mode": "run_weekly.py 末尾发送" if send_email_enabled else "当前运行不发送邮件",
+        "email_status_at_report": "pending_at_render_time" if send_email_enabled else "not_applicable",
         "collect_sources": "是" if collect_enabled else "否",
         "quality_generated": "否",
         "output_mode": output_mode,
@@ -214,6 +216,25 @@ def get_run_metadata(send_email_enabled: bool, collect_enabled: bool, output_mod
         "llm_errors": "",
         "llm_warnings": "",
     }
+
+
+def apply_email_reporting_mode(
+    meta: dict[str, str],
+    *,
+    send_email_enabled: bool,
+    no_email_requested: bool,
+    dry_run: bool,
+    github_actions: bool,
+) -> None:
+    if github_actions and no_email_requested and not dry_run:
+        meta["email_delivery_mode"] = "GitHub Actions 后续独立步骤"
+        meta["email_status_at_report"] = "pending_at_render_time"
+    elif send_email_enabled:
+        meta["email_delivery_mode"] = "run_weekly.py 末尾发送"
+        meta["email_status_at_report"] = "pending_at_render_time"
+    else:
+        meta["email_delivery_mode"] = "当前运行不发送邮件"
+        meta["email_status_at_report"] = "not_applicable"
 
 
 def weekly_output_paths(week_id: str) -> dict[str, Path]:
@@ -1027,7 +1048,8 @@ def render_recent_run_summary(meta: dict[str, str]) -> str:
             f"- 运行时间：{meta.get('run_time', '未知')}",
             f"- ISO 周编号：{meta.get('iso_week', '未知')}",
             f"- 输出模式：{meta.get('output_mode', '未知')}",
-            f"- 是否发送邮件：{meta.get('send_email', '未知')}",
+            f"- 邮件发送方式：{meta.get('email_delivery_mode', 'unknown')}",
+            f"- 报告生成时邮件状态：{meta.get('email_status_at_report', 'unknown')}",
             f"- 是否执行真实来源采集：{meta.get('collect_sources', '未知')}",
             f"- 是否生成解析质量诊断：{meta.get('quality_generated', '未知')}",
             f"- 已接入来源数量：{meta.get('connected_source_count', '未知')}",
@@ -1051,7 +1073,8 @@ def render_history_records(records: list[dict[str, str]]) -> str:
                     f"  - 执行环境：{record.get('environment', '未知')}",
                     f"  - Python 版本：{record.get('python_version', '未知')}",
                     f"  - 输出模式：{record.get('output_mode', '未知')}",
-                    f"  - 是否发送邮件：{record.get('send_email', '未知')}",
+                    f"  - 邮件发送方式：{record.get('email_delivery_mode', '旧格式未记录独立邮件步骤')}",
+                    f"  - 报告生成时邮件状态：{record.get('email_status_at_report', 'unknown')}",
                     f"  - 是否执行真实来源采集：{record.get('collect_sources', '未知')}",
                     f"  - 是否生成解析质量诊断：{record.get('quality_generated', '未知')}",
                     f"  - 页面变化状态：{record.get('page_change_status', '未知')}",
@@ -1087,6 +1110,8 @@ def _parse_history_records(history_text: str) -> list[dict[str, str]]:
         "Python 版本": "python_version",
         "输出模式": "output_mode",
         "是否发送邮件": "send_email",
+        "邮件发送方式": "email_delivery_mode",
+        "报告生成时邮件状态": "email_status_at_report",
         "是否执行真实来源采集": "collect_sources",
         "是否生成解析质量诊断": "quality_generated",
         "页面变化状态": "page_change_status",
@@ -1657,7 +1682,7 @@ def build_weekly_summary_markdown(
 - Starlink Official Updates
 - SpaceX Official Launches
 
-当前阶段为阶段 4D.1：周报展示生成时点的 provisional 健康快照，运行结束后的 final 状态以 GitHub Actions Summary 和 `data/run_health.json` 为准；pending_at_render_time 不是失败。这些采集及告警状态不代表官方业务状态或事件重要程度。
+当前阶段为阶段 4D.2：周报统一展示生成时点的 provisional 健康快照与独立邮件步骤，运行结束后的 final 状态以 GitHub Actions Summary 和 `data/run_health.json` 为准；pending_at_render_time 不是失败。这些采集及告警状态不代表官方业务状态或事件重要程度。
 
 ## 2. 本周核心结论
 
@@ -2209,6 +2234,8 @@ def append_run_history(
         "mode": meta.get("output_mode", "dual"),
         "dry_run": False,
         "email_enabled": meta.get("send_email") == "是",
+        "email_delivery_mode": meta.get("email_delivery_mode", "unknown"),
+        "email_status_at_report": meta.get("email_status_at_report", "unknown"),
         "collect_enabled": meta.get("collect_sources") == "是",
         "sources_total": int(meta.get("connected_source_count") or 0),
         "reachable_sources": int(meta.get("reachable_source_count") or 0),
@@ -2537,7 +2564,8 @@ def update_knowledge_base_text(
 - 执行环境：{meta["environment"]}
 - Python 版本：{meta["python_version"]}
 - 输出模式：{meta["output_mode"]}
-- 是否发送邮件：{meta["send_email"]}
+- 邮件发送方式：{meta["email_delivery_mode"]}
+- 报告生成时邮件状态：{meta["email_status_at_report"]}
 - 是否执行真实来源采集：{meta["collect_sources"]}
 - 是否生成解析质量诊断：{meta["quality_generated"]}
 - 总结版文档：{meta["summary_path"]}
@@ -2767,6 +2795,13 @@ def main() -> int:
     send_email_enabled = not args.no_email and not args.dry_run
     collect_enabled = not args.no_collect
     meta = get_run_metadata(send_email_enabled, collect_enabled, args.output_mode)
+    apply_email_reporting_mode(
+        meta,
+        send_email_enabled=send_email_enabled,
+        no_email_requested=args.no_email,
+        dry_run=args.dry_run,
+        github_actions=os.getenv("GITHUB_ACTIONS", "").strip().lower() == "true",
+    )
     paths = weekly_output_paths(meta["iso_week"])
     meta["summary_path"] = f"weekly/{paths['summary'].name}"
     meta["details_path"] = f"weekly/{paths['details'].name}"
@@ -2791,9 +2826,10 @@ def main() -> int:
     print(f"项目根目录：{PROJECT_ROOT}")
     print(f"当前 ISO 周编号：{meta['iso_week']}")
     print(f"输出模式：{args.output_mode}")
-    print(f"是否发送邮件：{meta['send_email']}")
+    print(f"邮件发送方式：{meta['email_delivery_mode']}")
+    print(f"报告生成时邮件状态：{meta['email_status_at_report']}")
     print(f"是否执行真实来源采集：{meta['collect_sources']}")
-    print("当前阶段：4D.1 provisional/final 运行健康与报告时点一致性。")
+    print("当前阶段：4D.2 最终状态展示统一与邮件报告回归修复。")
     print(f"是否启用 LLM 摘要：{'是' if args.enable_llm else '否'}")
     print(f"自动化测试记录最多保留：{args.max_history_records} 条")
     print(f"周报真实来源记录每个来源最多展示：{args.max_source_items} 条")
@@ -2992,7 +3028,7 @@ def main() -> int:
     alert_totals = alert_report.get("totals", {}) if isinstance(alert_report, dict) else {}
     alert_totals = alert_totals if isinstance(alert_totals, dict) else {}
     collection_context = {
-        "stage": "4D.1",
+        "stage": "4D.2",
         "collected": meta["collect_sources"],
         "source_names": meta["source_names"],
         "item_count": meta["source_item_count"],

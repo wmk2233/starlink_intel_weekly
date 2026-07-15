@@ -322,3 +322,9 @@ python scripts/check_outputs.py --final-health-only --strict
 ```
 
 Actions Summary 是运行结束状态；周报和邮件是较早的报告时点快照。主要 Gitee 推送发生在 finalization 之前，因此本轮最终健康提交允许由下一次正常同步补齐，不能通过递归推送报告自身。LLM 对 unchanged 历史条目必须使用“现有官方条目介绍”或“已有官方记录显示”等表达，不能写成本轮发布。
+
+## 19. 阶段 4D.2 报告一致性排障
+
+Actions Summary 中“运行健康”“输出质量检查”和“稳定性与配置审计”必须使用同一份 final health。若 `data/run_health.json` 不是 `health_phase=final / is_final=true`，后两个区域显示 `unavailable`；不得用旧环境变量补写 passed。Final 存在时，`output_validation` 和 `project_audit` 的 `result=success` 分别映射为 `passed`。
+
+邮件报告依次检查 `data/source_status.json`、`data/item_extraction_report.json` 和 `data/detail_extraction_diagnostics.json`。来源有数据但邮件出现“暂无官方条目抽取结果”或“暂无官方详情解析结果”时，应先检查 JSON 的 `sources` 对象和 `source_name`，再运行 `tests/test_phase4d2_reporting.py`。Workflow 中 `run_weekly.py --no-email` 只表示邮件由后续独立步骤发送；周报应显示 `pending_at_render_time`，该状态不是失败。

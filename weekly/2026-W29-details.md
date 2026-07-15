@@ -530,7 +530,8 @@
   - 执行环境：Linux 6.17.0-1020-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：GitHub Actions 后续独立步骤
+  - 报告生成时邮件状态：pending_at_render_time
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged

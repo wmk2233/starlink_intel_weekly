@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.4D.2：最终展示统一与邮件报告回归修复
+
+- Actions Summary 的输出检查和项目审计区域统一从 final health 读取，成功映射为 `passed`，缺失 final 时显示 `unavailable`。
+- 邮件恢复读取 `item_extraction_report.json` 与 `detail_extraction_diagnostics.json`，有结构化数据时不再显示“暂无结果”。
+- 邮件来源概览恢复友好 `source_name`、页面变化、new/changed/unchanged、解析层级和质量。
+- 周报区分核心脚本 `--no-email` 与 GitHub Actions 后续独立邮件步骤，报告生成时使用 `pending_at_render_time`。
+- 未修改来源、采集判断、生命周期、版本、告警、baseline 或官方事实数据。
+
 ## v0.4D.1：运行健康最终化与报告一致性
 
 - 新增 `provisional / final` 两阶段健康模型、`is_final`、`finalized_at` 和组件状态来源。

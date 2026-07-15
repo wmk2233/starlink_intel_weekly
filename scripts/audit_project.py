@@ -16,7 +16,7 @@ from operational_health import ALERT_ACTIONS, ALERT_SEVERITIES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CURRENT_STAGE = "4D.1"
+CURRENT_STAGE = "4D.2"
 
 REQUIRED_FILES = [
     "README.md",
@@ -84,6 +84,7 @@ REQUIRED_FILES = [
     "tests/test_final_alert_evaluation.py",
     "tests/test_pending_distribution_status.py",
     "tests/test_phase4d1_reporting.py",
+    "tests/test_phase4d2_reporting.py",
     "tests/test_unchanged_llm_temporal_wording.py",
     "tests/fixtures/lifecycle_replay/items.json",
     "docs/starlink_knowledge_base.md",
@@ -852,6 +853,46 @@ def check_phase4d1_consistency(report: dict[str, Any]) -> None:
     mark_passed_if_clean(report, section)
 
 
+def check_phase4d2_reporting(report: dict[str, Any]) -> None:
+    section = "phase4d2_reporting"
+    summary = read_text("scripts/print_action_summary.py")
+    email = read_text("scripts/send_email.py")
+    weekly = read_text("scripts/run_weekly.py")
+    tests = read_text("tests/test_phase4d2_reporting.py")
+    required = {
+        "summary": ["_final_check_status", "output_validation", "project_audit", "unavailable"],
+        "email": [
+            "detail_extraction_diagnostics.json",
+            "_render_source_overview",
+            "_render_item_extraction_overview",
+            "_render_detail_diagnostics",
+            "source_name",
+        ],
+        "weekly": ["邮件发送方式", "GitHub Actions 后续独立步骤", "报告生成时邮件状态", "pending_at_render_time"],
+        "tests": [
+            "test_final_health_success_drives_legacy_check_sections",
+            "test_missing_final_health_is_unavailable",
+            "test_final_health_overrides_conflicting_legacy_environment",
+            "test_structured_outputs_restore_item_detail_and_source_reporting",
+            "test_workflow_email_step_is_reported_as_pending_not_disabled",
+        ],
+    }
+    texts = {"summary": summary, "email": email, "weekly": weekly, "tests": tests}
+    missing = [f"{name}:{snippet}" for name, snippets in required.items() for snippet in snippets if snippet not in texts[name]]
+    if missing:
+        add_issue(report, section, "阶段 4D.2 报告一致性线索缺失：" + "、".join(missing))
+        return
+    docs = "\n".join(
+        read_text(path)
+        for path in ["README.md", "RELEASE_NOTES.md", "docs/operations_guide.md", "docs/starlink_knowledge_base.md"]
+    )
+    for phrase in ["阶段 4D.2", "final health", "邮件发送方式", "detail_extraction_diagnostics.json"]:
+        if phrase not in docs:
+            add_issue(report, section, f"阶段 4D.2 文档缺少：{phrase}")
+            return
+    mark_passed_if_clean(report, section)
+
+
 def check_llm_config_docs(report: dict[str, Any]) -> None:
     section = "llm_config"
     env_example = read_text(".env.example") if (PROJECT_ROOT / ".env.example").exists() else ""
@@ -1280,6 +1321,7 @@ def build_report() -> dict[str, Any]:
     check_phase4c_lifecycle(report)
     check_phase4d_reliability(report)
     check_phase4d1_consistency(report)
+    check_phase4d2_reporting(report)
     check_llm_config_docs(report)
     check_data_files(report)
     check_weekly_outputs(report)
@@ -1300,6 +1342,7 @@ def print_text_report(report: dict[str, Any]) -> None:
         ("phase4c_lifecycle", "Phase 4C 增量变化与生命周期"),
         ("phase4d_reliability", "Phase 4D 回放、告警与运行健康"),
         ("phase4d1_consistency", "Phase 4D.1 最终健康与报告一致性"),
+        ("phase4d2_reporting", "Phase 4D.2 最终展示与邮件报告"),
         ("llm_config", "LLM 配置与文档"),
         ("data_files", "数据文件"),
         ("weekly_outputs", "weekly 输出"),

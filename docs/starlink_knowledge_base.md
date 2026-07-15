@@ -145,6 +145,14 @@
 - 邮件无法报告自身尚未完成的投递结果，主要 Gitee 推送也不包含其后产生的 finalization commit；下一次正常同步可补齐。
 - unchanged 是历史条目本轮无语义变化，必须使用历史记录语气；changed 只表示检测到内容变化；new 无明确官方日期证据不得写“本周发布”。
 
+## 阶段 4D.2 最终展示与邮件报告知识
+
+- Actions Summary 的输出检查和审计区域以 final health 为唯一结果来源；final 缺失时显示 unavailable。
+- 邮件来源概览使用 `source_name`，并展示页面变化、new/changed/unchanged、解析层级和质量。
+- 条目概览来自 `item_extraction_report.json`，详情成功、失败和 fallback 诊断来自 `detail_extraction_diagnostics.json`。
+- GitHub Actions 核心步骤的 `--no-email` 表示由后续独立步骤发送，不表示整个 workflow 不发送邮件。
+- 报告生成时邮件状态为 `pending_at_render_time`；邮件完成后的真实结果只进入 final health。
+
 ## 最近一次自动化运行记录
 
 - 运行时间：2026-07-15 14:24:19 UTC+0000
@@ -152,7 +160,8 @@
 - 执行环境：Linux 6.17.0-1020-azure
 - Python 版本：3.11.15
 - 输出模式：dual
-- 是否发送邮件：否
+- 邮件发送方式：GitHub Actions 后续独立步骤
+- 报告生成时邮件状态：pending_at_render_time
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
 - 总结版文档：weekly/2026-W29-summary.md

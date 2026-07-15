@@ -67,9 +67,91 @@ def _step_health(value: object, *, critical: bool) -> str:
     return "pending_at_render_time"
 
 
+def _source_map(payload: dict[str, object]) -> dict[str, dict[str, object]]:
+    sources = payload.get("sources", {})
+    if not isinstance(sources, dict):
+        return {}
+    return {str(source_id): value for source_id, value in sources.items() if isinstance(value, dict)}
+
+
+def _rate_text(value: object) -> str:
+    try:
+        return f"{float(value):.0%}"
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _render_source_overview(sources: dict[str, dict[str, object]]) -> tuple[str, str]:
+    lines: list[str] = []
+    page_changes: list[str] = []
+    for source_id, status in sorted(sources.items()):
+        source_name = str(status.get("source_name") or source_id)
+        reachable = status.get("reachable")
+        reachability = "可达" if reachable is True else "不可达" if reachable is False else "unknown"
+        change_status = str(status.get("change_status") or "unknown")
+        page_changes.append(f"{source_name}={change_status}")
+        lines.append(
+            f"- {source_name}：可达性 {reachability} / 页面变化 {change_status} / "
+            f"新增 {status.get('new_items', 0)} / 变化 {status.get('changed_items', 0)} / "
+            f"未变化 {status.get('unchanged_items', 0)} / "
+            f"解析层级 {status.get('dominant_extracted_level', 'unknown')} / "
+            f"质量 {status.get('dominant_source_quality', 'unknown')}"
+        )
+    return "\n".join(lines) or "无来源状态结果。", "；".join(page_changes) or "unavailable"
+
+
+def _render_item_extraction_overview(reports: dict[str, dict[str, object]]) -> str:
+    lines: list[str] = []
+    for source_id, report in sorted(reports.items()):
+        source_name = str(report.get("source_name") or source_id)
+        lines.append(
+            f"- {source_name}：候选 {report.get('candidate_count_total', report.get('candidate_count', 0))} / "
+            f"条目级 {report.get('item_level_items', 0)} / 页面级 {report.get('page_level_items', 0)} / "
+            f"新增 {report.get('new_items', 0)} / 变化 {report.get('changed_items', 0)} / "
+            f"未变化 {report.get('unchanged_items', 0)} / baseline {report.get('baseline_items', 0)} / "
+            f"解析层级 {report.get('dominant_extracted_level', 'unknown')} / "
+            f"质量 {report.get('dominant_source_quality', 'unknown')}"
+        )
+    return "\n".join(lines) if lines else "暂无官方条目抽取结果。"
+
+
+def _render_detail_diagnostics(
+    diagnostics: dict[str, dict[str, object]],
+) -> tuple[str, str, int, int, int]:
+    lines: list[str] = []
+    failures: list[str] = []
+    success_total = 0
+    failed_total = 0
+    reused_total = 0
+    for source_id, report in sorted(diagnostics.items()):
+        source_name = str(report.get("source_name") or source_id)
+        success = int(report.get("final_success") or 0)
+        failed = int(report.get("final_failed") or 0)
+        reused = int(report.get("reused_previous_success") or 0)
+        success_total += success
+        failed_total += failed
+        reused_total += reused
+        lines.append(
+            f"- {source_name}：候选 {report.get('candidate_count', 0)} / "
+            f"静态成功 {report.get('static_success', 0)} / 渲染成功 {report.get('render_success', 0)} / "
+            f"历史复用 {reused} / 最终成功 {success} / 失败 {failed} / "
+            f"成功率 {_rate_text(report.get('success_rate'))}"
+        )
+        failure_types = report.get("failure_types", {})
+        if isinstance(failure_types, dict):
+            failures.extend(
+                f"- {source_name} / {failure_type}：{count}"
+                for failure_type, count in sorted(failure_types.items())
+            )
+    overview = "\n".join(lines) if lines else "暂无官方详情解析结果。"
+    failure_overview = "\n".join(failures) if failures else "本轮没有详情解析失败。"
+    return overview, failure_overview, success_total, failed_total, reused_total
+
+
 def build_context_from_outputs(markdown_path: Path, week_id: str, details_path: Path | None = None) -> dict[str, str]:
     source_status = _read_json(DATA_DIR / "source_status.json")
     item_report = _read_json(DATA_DIR / "item_extraction_report.json")
+    detail_diagnostics = _read_json(DATA_DIR / "detail_extraction_diagnostics.json")
     lifecycle = _read_json(DATA_DIR / "lifecycle_report.json")
     llm_audit = _read_json(DATA_DIR / "llm_audit.json")
     health = _read_json(DATA_DIR / "run_health.json")
@@ -79,40 +161,57 @@ def build_context_from_outputs(markdown_path: Path, week_id: str, details_path: 
         if str(raw_alerts.get("run_id") or "") == str(health.get("run_id") or "")
         else {}
     )
-    sources = source_status.get("sources", {}) if isinstance(source_status.get("sources"), dict) else {}
+    sources = _source_map(source_status)
     lifecycle_totals = lifecycle.get("totals", {}) if isinstance(lifecycle.get("totals"), dict) else {}
     alert_totals = alerts.get("totals", {}) if isinstance(alerts.get("totals"), dict) else {}
     llm_usage = llm_audit.get("usage", {}) if isinstance(llm_audit.get("usage"), dict) else {}
     components = health.get("components", {}) if isinstance(health.get("components"), dict) else {}
-    item_sources = item_report.get("sources", {}) if isinstance(item_report.get("sources"), dict) else {}
+    item_sources = _source_map(item_report)
+    detail_sources = _source_map(detail_diagnostics)
 
     def component_status(name: str) -> str:
         component = components.get(name, {}) if isinstance(components.get(name), dict) else {}
         return str(component.get("status") or "unknown")
 
-    source_lines = [
-        f"- {source_id}: reachable={status.get('reachable', 'unknown')}"
-        for source_id, status in sorted(sources.items())
-        if isinstance(status, dict)
-    ]
-    detail_success = sum(int(value.get("final_detail_success") or 0) for value in item_sources.values() if isinstance(value, dict))
-    detail_failed = sum(int(value.get("final_detail_failed") or 0) for value in item_sources.values() if isinstance(value, dict))
+    source_overview, page_change_status = _render_source_overview(sources)
+    item_extraction_overview = _render_item_extraction_overview(item_sources)
+    detail_extraction_overview, detail_failure_overview, detail_success, detail_failed, reused = _render_detail_diagnostics(detail_sources)
+    item_new = sum(int(value.get("new_items") or 0) for value in item_sources.values())
+    item_changed = sum(int(value.get("changed_items") or 0) for value in item_sources.values())
+    item_unchanged = sum(int(value.get("unchanged_items") or 0) for value in item_sources.values())
+    item_baseline = sum(int(value.get("baseline_items") or 0) for value in item_sources.values())
+    item_level = sum(int(value.get("item_level_items") or 0) for value in item_sources.values())
+    page_level = sum(int(value.get("page_level_items") or 0) for value in item_sources.values())
+    item_count = sum(int(value.get("candidate_count_total", value.get("candidate_count", 0)) or 0) for value in item_sources.values())
+    detail_total = detail_success + detail_failed
     context = {
-        "stage": "4D.1",
+        "stage": "4D.2",
         "collected": "是",
         "connected_source_count": str(len(sources)),
-        "source_overview": "\n".join(source_lines) or "无",
-        "quality_overview": f"详情成功 {detail_success}，失败 {detail_failed}",
-        "quality_generated": "是" if item_report else "否",
+        "source_overview": source_overview,
+        "quality_overview": (
+            f"详情成功 {detail_success}，失败 {detail_failed}，成功率 "
+            f"{_rate_text(detail_success / detail_total) if detail_total else 'unknown'}；"
+            f"条目级 {item_level}，页面级 {page_level}"
+        ),
+        "quality_generated": "是" if item_report or detail_diagnostics else "否",
         "health_status": f"{sum(1 for value in sources.values() if isinstance(value, dict) and value.get('reachable') is True)}/{len(sources)} 来源可达",
-        "page_change_status": "由 source_status.json 记录",
-        "item_count": str(sum(int(value.get("candidate_count") or 0) for value in sources.values() if isinstance(value, dict))),
-        "new_items": str(lifecycle_totals.get("new") or 0),
-        "changed_items": str(lifecycle_totals.get("changed") or 0),
-        "unchanged_items": str(lifecycle_totals.get("unchanged") or 0),
-        "baseline_items": str(lifecycle_totals.get("baseline") or 0),
-        "item_level_items": str(sum(int(value.get("item_level_items") or 0) for value in item_sources.values() if isinstance(value, dict))),
-        "page_level_items": str(sum(int(value.get("page_level_items") or 0) for value in item_sources.values() if isinstance(value, dict))),
+        "page_change_status": page_change_status,
+        "item_count": str(item_count),
+        "new_items": str(item_new),
+        "changed_items": str(item_changed),
+        "unchanged_items": str(item_unchanged),
+        "baseline_items": str(item_baseline),
+        "item_level_items": str(item_level),
+        "page_level_items": str(page_level),
+        "item_extraction_overview": item_extraction_overview,
+        "detail_extraction_overview": detail_extraction_overview,
+        "detail_failure_overview": detail_failure_overview,
+        "historical_reuse_note": (
+            "本轮详情获取失败时复用了最近一次成功结构化记录；该记录不代表本轮重新确认。"
+            if reused
+            else ""
+        ),
         "lifecycle_new_items": str(lifecycle_totals.get("new") or 0),
         "lifecycle_changed_items": str(lifecycle_totals.get("changed") or 0),
         "lifecycle_extraction_improved": str(lifecycle_totals.get("extraction_improved") or 0),
@@ -200,7 +299,7 @@ def build_message(
         historical_reuse_note = f"{historical_reuse_note}\n"
     body = (
         "本邮件由 starlink_intel_weekly 项目自动发送。\n"
-        "当前阶段为阶段 4D.1：区分报告生成时点的 provisional 健康与工作流结束后的 final 健康。\n"
+        "当前阶段为阶段 4D.2：统一 final 状态展示，并恢复邮件中的来源、条目与详情诊断报告。\n"
         "原始事实与状态数据来自规则化网页采集、hash 变化检测和解析质量诊断。大模型仅对本地结构化来源数据进行受约束摘要，不使用外部知识，也不生成无来源事实。\n\n"
         "LLM 摘要状态：\n"
         f"- Provider：{collection_context.get('llm_provider', 'unknown')}\n"

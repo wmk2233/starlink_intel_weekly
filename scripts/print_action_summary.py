@@ -162,13 +162,25 @@ def _week_id() -> str:
     return f"{iso.year}-W{iso.week:02d}"
 
 
+def _final_check_status(components: dict[str, object], component_name: str) -> str:
+    component = components.get(component_name, {})
+    if not isinstance(component, dict):
+        return "unavailable"
+    outcome = str(component.get("result") or "").strip().lower()
+    if outcome == "success":
+        return "passed"
+    if outcome in {"failure", "cancelled"}:
+        return "failed"
+    if outcome == "skipped":
+        return "skipped"
+    return "unavailable"
+
+
 def main() -> int:
     status_exists, statuses = _source_statuses()
     quality_exists, quality_sources = _extraction_quality()
     gitee_configured = bool(os.getenv("GITEE_REMOTE", "").strip())
     gitee_sync_status = os.getenv("GITEE_SYNC_STATUS", "unknown").strip() or "unknown"
-    output_check_status = os.getenv("OUTPUT_CHECK_STATUS", "unknown").strip() or "unknown"
-    project_audit_status = os.getenv("PROJECT_AUDIT_STATUS", "unknown").strip() or "unknown"
     llm_audit = _llm_audit()
     item_reports = _item_extraction_report()
     lifecycle_report = _lifecycle_report()
@@ -211,6 +223,8 @@ def main() -> int:
     )
     alert_totals = alert_report.get("totals", {}) if isinstance(alert_report.get("totals"), dict) else {}
     components = run_health.get("components", {}) if isinstance(run_health.get("components"), dict) else {}
+    output_check_status = _final_check_status(components, "output_validation") if final_health_available else "unavailable"
+    project_audit_status = _final_check_status(components, "project_audit") if final_health_available else "unavailable"
     if final_health_available:
         gitee_component = components.get("gitee_sync", {}) if isinstance(components.get("gitee_sync"), dict) else {}
         gitee_sync_status = str(gitee_component.get("result") or gitee_sync_status)
@@ -237,7 +251,7 @@ def main() -> int:
     lines = [
         "## Starlink Weekly Automation",
         "",
-        "- 阶段：4D.1",
+        "- 阶段：4D.2",
         f"- 工作流名称：{os.getenv('GITHUB_WORKFLOW', 'unknown')}",
         f"- 分支：{os.getenv('GITHUB_REF_NAME', 'unknown')}",
         f"- 触发方式：{os.getenv('GITHUB_EVENT_NAME', 'unknown')}",

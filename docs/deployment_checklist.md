@@ -261,3 +261,13 @@ GitHub Actions 定时规则为：
 - `check_outputs.py --pre-finalize --strict` 与 `--final-health-only --strict` 均通过；
 - unchanged LLM 要点不使用“本周发布、推出、上线、新增、宣布、新近上线”等本轮时点表达；
 - 不提交 `.env` 或 `prompts/`，不使用 `git add .`，不新增来源。
+
+## 19. 阶段 4D.2 报告一致性清单
+
+- Actions Summary 的输出检查和项目审计区域从 final health 读取，不再读取旧状态环境变量；
+- final health 缺失时显示 `unavailable`，不得伪造 `passed`；
+- 邮件读取 `source_status.json`、`item_extraction_report.json` 和 `detail_extraction_diagnostics.json`；
+- 有来源数据时显示 `source_name`、页面变化、new/changed/unchanged、解析层级和质量；
+- 有条目或详情诊断数据时不得显示“暂无官方条目抽取结果”或“暂无官方详情解析结果”；
+- Workflow 独立发送邮件时，周报显示邮件发送方式和 `pending_at_render_time`；
+- 运行 Phase 4D.2 专项测试、全量离线测试、两阶段输出检查和严格审计。
