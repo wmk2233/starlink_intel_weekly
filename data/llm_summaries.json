@@ -20,7 +20,7 @@
   "base_url_label": "deepseek_default",
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T14:25:13+00:00",
+  "generated_at": "2026-07-16T01:08:07+00:00",
   "input_records": 4,
   "input_records_after_dedup": 7,
   "input_records_before_dedup": 9,
@@ -34,8 +34,8 @@
   "summary": {
     "key_points": [
       {
-        "caveat": "该条目内容在本轮监测中未发生变化。",
-        "point": "现有官方条目介绍了一个新的基于网络的工具，用于简化卫星交会筛查和星历共享。",
+        "caveat": "该条目自本轮采集以来未发生变化。",
+        "point": "现有官方条目介绍了一个简化卫星交会筛查和星历共享的网络工具。",
         "source_record_ids": [
           "044bafcf1089533d"
         ],
@@ -44,8 +44,8 @@
         ]
       },
       {
-        "caveat": "该条目内容在本轮监测中未发生变化。",
-        "point": "现有官方条目介绍了 Starlink 网络速度、延迟、弹性、可扩展性和容量的最新更新。",
+        "caveat": "该条目自本轮采集以来未发生变化。",
+        "point": "现有官方条目概述了 Starlink 网络在全球扩张、客户增长、星座部署及性能提升方面的进展。",
         "source_record_ids": [
           "d3b89bb9510b1b9a"
         ],
@@ -54,8 +54,8 @@
         ]
       },
       {
-        "caveat": "该条目内容在本轮监测中未发生变化。",
-        "point": "现有官方条目说明 Starlink 使用波束切换自动绕开障碍物，以提供可靠的高速互联网。",
+        "caveat": "该条目自本轮采集以来未发生变化。",
+        "point": "现有官方条目说明了 Starlink 如何利用波束切换技术绕过障碍物以保持可靠连接。",
         "source_record_ids": [
           "495a49c7d5c93cbc"
         ],
@@ -64,8 +64,8 @@
         ]
       },
       {
-        "caveat": "该条目内容在本轮监测中未发生变化。",
-        "point": "现有官方条目介绍了 Stargaze，即 SpaceX 的空间态势感知系统，旨在提高低地球轨道卫星操作的安全性和可持续性。",
+        "caveat": "该条目自本轮采集以来未发生变化。",
+        "point": "现有官方条目介绍了 Stargaze，SpaceX 的空间态势感知系统，旨在增强低地球轨道卫星运行的安全性和可持续性。",
         "source_record_ids": [
           "95bbf31b3a93d3e6"
         ],
@@ -75,7 +75,7 @@
       }
     ],
     "llm_summary_version": "llm_reference_aligned_v2",
-    "overall_summary": "本周未检测到新增或内容变化条目。现有的官方 Starlink 更新条目包括：空间安全网络界面、网络更新、波束切换和 Stargaze 空间态势感知系统。"
+    "overall_summary": "本周未检测到新增或内容变化条目。现有官方条目包括：Starlink 太空安全网络界面、网络更新、波束切换以及 Stargaze 空间态势感知系统。"
   },
   "unique_source_urls": 7
 }

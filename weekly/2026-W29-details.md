@@ -58,9 +58,9 @@
 | 删除无来源要点 | 0 |
 | 引用对齐状态 | passed |
 | Prompt tokens | 4043 |
-| Completion tokens | 584 |
-| Total tokens | 4627 |
-| API 调用耗时 | 6895.81 ms |
+| Completion tokens | 605 |
+| Total tokens | 4648 |
+| API 调用耗时 | 7051.38 ms |
 | 校验状态 | passed |
 | 严格来源约束 | true |
 | 页面级记录禁止事实扩展 | true |
@@ -80,14 +80,14 @@
 
 | 来源 | 类别 | 类型 | 可信度 | 可达性 | 页面变化状态 | HTTP状态 | 最近检查时间 | page_hash |
 |---|---|---|---|---|---|---|---|---|
-| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-15T14:24:19+00:00 | f341b7f47767f5a2 |
-| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-15T14:24:50+00:00 | afd623b148154a55 |
+| Starlink Official Updates | official_updates | official | S | reachable | changed | 200 | 2026-07-16T01:07:13+00:00 | fdbdc19f29e1870d |
+| SpaceX Official Launches | official_launches | official | S | reachable | unchanged | 200 | 2026-07-16T01:07:44+00:00 | afd623b148154a55 |
 
 ## 4. 本周变化检测
 
 | 来源 | 新增条目数 | 内容变化条目数 | 未变化条目数 | 页面级变化状态 | 最近变化时间 |
 |---|---:|---:|---:|---|---|
-| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-15T14:24:19+00:00 |
+| Starlink Official Updates | 0 | 0 | 4 | changed | 2026-07-16T01:07:13+00:00 |
 | SpaceX Official Launches | 0 | 0 | 1 | unchanged | 2026-06-17T18:23:48+08:00 |
 
 ## 5. 解析质量诊断
@@ -115,7 +115,7 @@
 | content_hash | a4a8dfdee687fbe2 |
 | previous_content_hash | a4a8dfdee687fbe2 |
 | first_seen_at | 2026-07-14T14:54:30+08:00 |
-| last_seen_at | 2026-07-15T14:24:19+00:00 |
+| last_seen_at | 2026-07-16T01:07:13+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -135,7 +135,7 @@
 | content_hash | 782864df0d71359e |
 | previous_content_hash | 782864df0d71359e |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T14:24:19+00:00 |
+| last_seen_at | 2026-07-16T01:07:13+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -155,7 +155,7 @@
 | content_hash | bbda025dc135eb82 |
 | previous_content_hash | bbda025dc135eb82 |
 | first_seen_at | 2026-07-15T15:30:05+08:00 |
-| last_seen_at | 2026-07-15T14:24:19+00:00 |
+| last_seen_at | 2026-07-16T01:07:13+00:00 |
 | last_changed_at | 2026-07-15T15:30:05+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -175,7 +175,7 @@
 | content_hash | a73aef78a8f128de |
 | previous_content_hash | a73aef78a8f128de |
 | first_seen_at | 2026-07-15T15:34:13+08:00 |
-| last_seen_at | 2026-07-15T14:24:19+00:00 |
+| last_seen_at | 2026-07-16T01:07:13+00:00 |
 | last_changed_at | 2026-07-15T15:34:13+08:00 |
 | matched_keywords | ["starlink"] |
 | candidate_links | [] |
@@ -197,7 +197,7 @@
 | content_hash | 59cceb914691430c |
 | previous_content_hash | 59cceb914691430c |
 | first_seen_at | 2026-07-15T15:31:12+08:00 |
-| last_seen_at | 2026-07-15T14:24:50+00:00 |
+| last_seen_at | 2026-07-16T01:07:44+00:00 |
 | last_changed_at | 2026-07-15T15:31:12+08:00 |
 | matched_keywords | [] |
 | candidate_links | [] |
@@ -315,6 +315,7 @@
 | 2026-07-15T12:57:08+00:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | unknown | unknown |
 | 2026-07-15T21:34:26+08:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | generated | success | success |
 | 2026-07-15T14:22:02+00:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | skipped_disabled | success | success |
+| 2026-07-15T14:25:33+00:00 | final | healthy | 2/2 | 1.0 | 0 | 0 | 0 | 0 | 0 | generated | success | success |
 
 ## 离线生命周期回放验收
 
@@ -335,22 +336,13 @@
 
 ## 9. 自动化测试记录
 
-- 运行时间：2026-07-14 15:04:29 中国标准时间+0800
-  - ISO 周编号：2026-W29
-  - 执行环境：Windows 10
-  - Python 版本：3.11.9
-  - 输出模式：dual
-  - 是否发送邮件：否
-  - 是否执行真实来源采集：是
-  - 是否生成解析质量诊断：是
-  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
-  - 已接入来源数量：2
 - 运行时间：2026-07-15 06:12:06 UTC+0000
   - ISO 周编号：2026-W29
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -360,7 +352,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -370,7 +363,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -380,7 +374,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -390,7 +385,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -400,7 +396,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -410,7 +407,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：否
   - 是否生成解析质量诊断：是
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
@@ -420,7 +418,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：否
   - 是否生成解析质量诊断：是
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
@@ -430,7 +429,8 @@
   - 执行环境：Linux 6.17.0-1020-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -440,7 +440,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -450,7 +451,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：否
   - 是否生成解析质量诊断：是
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
@@ -460,7 +462,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -470,7 +473,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -480,7 +484,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -490,7 +495,8 @@
   - 执行环境：Windows 10
   - Python 版本：3.11.9
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：否
   - 是否生成解析质量诊断：是
   - 页面变化状态：SpaceX Official Launches=unchanged；Starlink Official Updates=changed
@@ -500,7 +506,8 @@
   - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -510,7 +517,8 @@
   - 执行环境：Linux 6.17.0-1020-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：是
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -520,7 +528,8 @@
   - 执行环境：Linux 6.17.0-1020-azure
   - Python 版本：3.11.15
   - 输出模式：dual
-  - 是否发送邮件：否
+  - 邮件发送方式：旧格式未记录独立邮件步骤
+  - 报告生成时邮件状态：unknown
   - 是否执行真实来源采集：是
   - 是否生成解析质量诊断：是
   - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
@@ -528,6 +537,17 @@
 - 运行时间：2026-07-15 14:24:19 UTC+0000
   - ISO 周编号：2026-W29
   - 执行环境：Linux 6.17.0-1020-azure
+  - Python 版本：3.11.15
+  - 输出模式：dual
+  - 邮件发送方式：GitHub Actions 后续独立步骤
+  - 报告生成时邮件状态：pending_at_render_time
+  - 是否执行真实来源采集：是
+  - 是否生成解析质量诊断：是
+  - 页面变化状态：Starlink Official Updates=changed；SpaceX Official Launches=unchanged
+  - 已接入来源数量：2
+- 运行时间：2026-07-16 01:07:13 UTC+0000
+  - ISO 周编号：2026-W29
+  - 执行环境：Linux 6.17.0-1018-azure
   - Python 版本：3.11.15
   - 输出模式：dual
   - 邮件发送方式：GitHub Actions 后续独立步骤

@@ -65,22 +65,22 @@ LLM Provider：deepseek
 | 指标 | 数值 |
 |---|---:|
 | Prompt tokens | 4043 |
-| Completion tokens | 584 |
-| Total tokens | 4627 |
-| API 调用耗时 | 6895.81 ms |
+| Completion tokens | 605 |
+| Total tokens | 4648 |
+| API 调用耗时 | 7051.38 ms |
 
 ### 总体摘要
 
-本周未检测到新增或内容变化条目。现有的官方 Starlink 更新条目包括：空间安全网络界面、网络更新、波束切换和 Stargaze 空间态势感知系统。
+本周未检测到新增或内容变化条目。现有官方条目包括：Starlink 太空安全网络界面、网络更新、波束切换以及 Stargaze 空间态势感知系统。
 
 ### 来源约束要点
 
 | 要点 | 来源记录 | 来源链接 | 限制说明 |
 |---|---|---|---|
-| 现有官方条目介绍了一个新的基于网络的工具，用于简化卫星交会筛查和星历共享。 | 044bafcf1089533d | https://starlink.com/updates/space-safety-web-interface | 该条目内容在本轮监测中未发生变化。 |
-| 现有官方条目介绍了 Starlink 网络速度、延迟、弹性、可扩展性和容量的最新更新。 | d3b89bb9510b1b9a | https://starlink.com/updates/network-update | 该条目内容在本轮监测中未发生变化。 |
-| 现有官方条目说明 Starlink 使用波束切换自动绕开障碍物，以提供可靠的高速互联网。 | 495a49c7d5c93cbc | https://starlink.com/updates/starlink-beam-switching | 该条目内容在本轮监测中未发生变化。 |
-| 现有官方条目介绍了 Stargaze，即 SpaceX 的空间态势感知系统，旨在提高低地球轨道卫星操作的安全性和可持续性。 | 95bbf31b3a93d3e6 | https://starlink.com/updates/stargaze | 该条目内容在本轮监测中未发生变化。 |
+| 现有官方条目介绍了一个简化卫星交会筛查和星历共享的网络工具。 | 044bafcf1089533d | https://starlink.com/updates/space-safety-web-interface | 该条目自本轮采集以来未发生变化。 |
+| 现有官方条目概述了 Starlink 网络在全球扩张、客户增长、星座部署及性能提升方面的进展。 | d3b89bb9510b1b9a | https://starlink.com/updates/network-update | 该条目自本轮采集以来未发生变化。 |
+| 现有官方条目说明了 Starlink 如何利用波束切换技术绕过障碍物以保持可靠连接。 | 495a49c7d5c93cbc | https://starlink.com/updates/starlink-beam-switching | 该条目自本轮采集以来未发生变化。 |
+| 现有官方条目介绍了 Stargaze，SpaceX 的空间态势感知系统，旨在增强低地球轨道卫星运行的安全性和可持续性。 | 95bbf31b3a93d3e6 | https://starlink.com/updates/stargaze | 该条目自本轮采集以来未发生变化。 |
 
 
 ## 结构化官方条目
@@ -229,7 +229,7 @@ LLM Provider：deepseek
 
 ## 8. 最近一次自动化运行摘要
 
-- 运行时间：2026-07-15 14:24:19 UTC+0000
+- 运行时间：2026-07-16 01:07:13 UTC+0000
 - ISO 周编号：2026-W29
 - 输出模式：dual
 - 邮件发送方式：GitHub Actions 后续独立步骤

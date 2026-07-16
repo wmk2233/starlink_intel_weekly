@@ -33,8 +33,8 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-07-15T14:24:19+00:00 | reachable | changed | 2026-07-15T14:24:19+00:00 | 正常 |
-| SpaceX Official Launches | 2026-07-15T14:24:50+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-07-16T01:07:13+00:00 | reachable | changed | 2026-07-16T01:07:13+00:00 | 正常 |
+| SpaceX Official Launches | 2026-07-16T01:07:44+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
@@ -155,9 +155,9 @@
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-07-15 14:24:19 UTC+0000
+- 运行时间：2026-07-16 01:07:13 UTC+0000
 - ISO 周编号：2026-W29
-- 执行环境：Linux 6.17.0-1020-azure
+- 执行环境：Linux 6.17.0-1018-azure
 - Python 版本：3.11.15
 - 输出模式：dual
 - 邮件发送方式：GitHub Actions 后续独立步骤
@@ -183,6 +183,6 @@
 - LLM 摘要状态：generated
 - LLM 输入记录（去重前 / 后）：9 / 7
 - LLM 唯一来源 URL：7
-- LLM Total tokens：4627
-- LLM API 调用耗时：6895.81 ms
+- LLM Total tokens：4648
+- LLM API 调用耗时：7051.38 ms
 

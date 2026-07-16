@@ -8,7 +8,7 @@
   "errors": [],
   "final_core_input_records": 4,
   "final_core_unique_urls": 4,
-  "generated_at": "2026-07-15T14:25:13+00:00",
+  "generated_at": "2026-07-16T01:08:07+00:00",
   "guardrails": {
     "monitoring_context_model_generated": false,
     "no_external_knowledge": true,
@@ -72,10 +72,10 @@
   "summary_generated": true,
   "unique_source_urls": 7,
   "usage": {
-    "completion_tokens": 584,
-    "latency_ms": 6895.81,
+    "completion_tokens": 605,
+    "latency_ms": 7051.38,
     "prompt_tokens": 4043,
-    "total_tokens": 4627
+    "total_tokens": 4648
   },
   "validation_status": "passed",
   "warnings": []
