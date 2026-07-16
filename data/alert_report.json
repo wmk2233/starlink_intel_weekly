@@ -2,11 +2,11 @@
   "alerts_this_run": [],
   "bootstrap_performed": false,
   "evaluation_phase": "final",
-  "generated_at": "2026-07-15T14:24:19+00:00",
+  "generated_at": "2026-07-16T01:07:13+00:00",
   "is_final": true,
   "open_alerts": [],
   "overall_alert_status": "normal",
-  "run_id": "29423345480",
+  "run_id": "29463283742",
   "severity_safety_note": "告警等级只表示自动化系统中的人工复查优先级，不表示 Starlink、SpaceX 或相关事件的战略重要性、影响程度或安全等级。",
   "stage": "4D.1",
   "totals": {

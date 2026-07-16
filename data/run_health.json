@@ -7,14 +7,14 @@
   "component_status_source": {
     "candidate_discovery": "internal_result",
     "detail_extraction": "internal_result",
-    "email": "pending_at_render_time",
-    "gitee_sync": "pending_at_render_time",
+    "email": "workflow_step_outcome",
+    "gitee_sync": "workflow_step_outcome",
     "lifecycle": "internal_result",
     "llm": "internal_result",
-    "output_validation": "pending_at_render_time",
-    "project_audit": "pending_at_render_time",
+    "output_validation": "workflow_step_outcome",
+    "project_audit": "workflow_step_outcome",
     "source_collection": "internal_result",
-    "workflow_core": "pending_at_render_time"
+    "workflow_core": "workflow_step_outcome"
   },
   "components": {
     "candidate_discovery": {
@@ -31,14 +31,14 @@
       "success_rate": 1.0
     },
     "email": {
-      "component_status_source": "pending_at_render_time",
-      "result": "pending_at_render_time",
-      "status": "pending_at_render_time"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "gitee_sync": {
-      "component_status_source": "pending_at_render_time",
-      "result": "pending_at_render_time",
-      "status": "pending_at_render_time"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "lifecycle": {
       "component_status_source": "internal_result",
@@ -51,14 +51,14 @@
       "status": "healthy"
     },
     "output_validation": {
-      "component_status_source": "pending_at_render_time",
-      "result": "pending_at_render_time",
-      "status": "pending_at_render_time"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "project_audit": {
-      "component_status_source": "pending_at_render_time",
-      "result": "pending_at_render_time",
-      "status": "pending_at_render_time"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     },
     "source_collection": {
       "component_status_source": "internal_result",
@@ -67,17 +67,17 @@
       "total_sources": 2
     },
     "workflow_core": {
-      "component_status_source": "pending_at_render_time",
-      "result": "pending_at_render_time",
-      "status": "pending_at_render_time"
+      "component_status_source": "workflow_step_outcome",
+      "result": "success",
+      "status": "healthy"
     }
   },
-  "duration_seconds": 54.0,
-  "finalized_at": null,
-  "finished_at": "2026-07-16T01:08:07+00:00",
-  "generated_at": "2026-07-16T01:08:07+00:00",
-  "health_phase": "provisional",
-  "is_final": false,
+  "duration_seconds": 67.0,
+  "finalized_at": "2026-07-16T01:08:20+00:00",
+  "finished_at": "2026-07-16T01:08:20+00:00",
+  "generated_at": "2026-07-16T01:08:20+00:00",
+  "health_phase": "final",
+  "is_final": true,
   "last_applied_run_id": "29463283742",
   "last_applied_started_at": "2026-07-16T01:07:13+00:00",
   "overall_health": "healthy",
