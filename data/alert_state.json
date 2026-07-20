@@ -12,19 +12,44 @@
     "source_unreachable|spacex_official_launches|global": 0,
     "source_unreachable|starlink_official_updates|global": 0
   },
-  "generated_at": "2026-07-16T01:07:13+00:00",
-  "last_applied_run_id": "29463283742",
-  "last_applied_started_at": "2026-07-16T01:07:13+00:00",
-  "last_processed_lifecycle_event_at": "2026-07-15T17:29:14+08:00",
-  "last_processed_run_id": "29463283742",
-  "open_conditions": {},
+  "generated_at": "2026-07-20T04:02:29+00:00",
+  "last_applied_run_id": "29715924185",
+  "last_applied_started_at": "2026-07-20T04:02:29+00:00",
+  "last_processed_lifecycle_event_at": "2026-07-20T04:03:21+00:00",
+  "last_processed_run_id": "29715924185",
+  "open_conditions": {
+    "temporarily_missing|spacex_official_launches|c6060f6415f8c377": {
+      "alert_key": "temporarily_missing|spacex_official_launches|c6060f6415f8c377",
+      "alert_kind": "condition",
+      "alert_type": "temporarily_missing",
+      "attention_required": false,
+      "canonical_url": "https://www.spacex.com/launches/sda-t1tl-e",
+      "category": "collection",
+      "consecutive_observations": 1,
+      "cooldown_until": "2026-07-21T04:02:29+00:00",
+      "first_opened_at": "2026-07-20T04:02:29+00:00",
+      "last_notified_at": "2026-07-20T04:02:29+00:00",
+      "last_observed_at": "2026-07-20T04:02:29+00:00",
+      "last_observed_run_id": "29715924185",
+      "message_code": "temporarily_missing",
+      "occurrence_count": 1,
+      "reason": "not_observed_in_complete_index_not_deleted",
+      "record_id": "c6060f6415f8c377",
+      "severity": "warning",
+      "source_id": "spacex_official_launches",
+      "status": "open"
+    }
+  },
   "processed_event_ids": [
     "d4c7646bc0583fa1a0ba",
     "70fb365de75585cbfae6",
     "84f288e03ab654dfc90e",
     "00e4fe6d4713663c874b",
     "2e5bbd08b0cd35da547c",
-    "fae2e46494eea006e122"
+    "fae2e46494eea006e122",
+    "73c0d289273a38e12a62",
+    "836448f5faeb28997940",
+    "e0490d31c65a88512f3b"
   ],
   "stage": "4D.1",
   "version": 2
