@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-16T01:08:00+00:00",
+  "generated_at": "2026-07-20T04:03:21+00:00",
   "parser_version": "official_item_extraction_v2",
   "sources": {
     "spacex_official_launches": {
@@ -18,7 +18,7 @@
       "http_status": 200,
       "item_level_count": 1,
       "items_collected": 1,
-      "last_checked_at": "2026-07-16T01:07:44+00:00",
+      "last_checked_at": "2026-07-20T04:03:05+00:00",
       "level_counts": {
         "item_level": 1
       },
@@ -43,7 +43,7 @@
     },
     "starlink_official_updates": {
       "average_confidence": 0.8,
-      "candidate_count_total": 4,
+      "candidate_count_total": 5,
       "candidate_links_total": 0,
       "change_status": "changed",
       "date_completeness": 0.0,
@@ -52,14 +52,14 @@
       "evidence_completeness": 1.0,
       "field_evidence_completeness": 1.0,
       "final_detail_failed": 0,
-      "final_detail_success": 4,
+      "final_detail_success": 5,
       "health_status": "reachable",
       "http_status": 200,
-      "item_level_count": 4,
-      "items_collected": 4,
-      "last_checked_at": "2026-07-16T01:07:13+00:00",
+      "item_level_count": 5,
+      "items_collected": 5,
+      "last_checked_at": "2026-07-20T04:02:30+00:00",
       "level_counts": {
-        "item_level": 4
+        "item_level": 5
       },
       "notes": [
         "条目字段来自官方详情页或明确的官方索引证据；未从 URL slug 推断日期或任务事实。"
@@ -67,12 +67,12 @@
       "page_level_count": 0,
       "parser_version": "starlink_updates_item_v2",
       "quality_counts": {
-        "medium": 4
+        "medium": 5
       },
-      "rendered_candidate_count": 4,
-      "rendered_detail_attempted": 4,
-      "rendered_detail_success": 4,
-      "selected_candidate_count": 4,
+      "rendered_candidate_count": 5,
+      "rendered_detail_attempted": 5,
+      "rendered_detail_success": 5,
+      "selected_candidate_count": 5,
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "static_candidate_count": 0,

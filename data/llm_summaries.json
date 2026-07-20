@@ -1,6 +1,14 @@
 {
   "allowed_reference_pairs": [
     {
+      "canonical_url": "https://www.spacex.com/launches/sl-17-39",
+      "record_id": "05610f007056730c"
+    },
+    {
+      "canonical_url": "https://starlink.com/updates/starlink-version-3-satellites",
+      "record_id": "ba5555615b6e6fb6"
+    },
+    {
       "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
       "record_id": "044bafcf1089533d"
     },
@@ -18,24 +26,44 @@
     }
   ],
   "base_url_label": "deepseek_default",
-  "final_core_input_records": 4,
-  "final_core_unique_urls": 4,
-  "generated_at": "2026-07-16T01:08:07+00:00",
-  "input_records": 4,
-  "input_records_after_dedup": 7,
-  "input_records_before_dedup": 9,
+  "final_core_input_records": 6,
+  "final_core_unique_urls": 6,
+  "generated_at": "2026-07-20T04:03:31+00:00",
+  "input_records": 6,
+  "input_records_after_dedup": 9,
+  "input_records_before_dedup": 11,
   "llm_enabled": true,
   "llm_provider": "deepseek",
   "llm_status": "generated",
   "model": "deepseek-v4-flash",
-  "raw_candidate_records": 9,
-  "records_after_url_dedup": 7,
+  "raw_candidate_records": 11,
+  "records_after_url_dedup": 9,
   "reused_historical_records": 0,
   "summary": {
     "key_points": [
       {
-        "caveat": "该条目自本轮采集以来未发生变化。",
-        "point": "现有官方条目介绍了一个简化卫星交会筛查和星历共享的网络工具。",
+        "caveat": "",
+        "point": "系统首次发现一项计划中的Starlink任务，目标发射24颗Starlink卫星至近地轨道，当前状态为“targeting”。",
+        "source_record_ids": [
+          "05610f007056730c"
+        ],
+        "source_urls": [
+          "https://www.spacex.com/launches/sl-17-39"
+        ]
+      },
+      {
+        "caveat": "",
+        "point": "系统首次发现Starlink V3卫星的官方介绍文档，该文档描述了下一代卫星设计在容量、数据密度和发电能力上的提升，并提及新型波束成形芯片实现了每调制解调器芯片吞吐量约64倍的增长。",
+        "source_record_ids": [
+          "ba5555615b6e6fb6"
+        ],
+        "source_urls": [
+          "https://starlink.com/updates/starlink-version-3-satellites"
+        ]
+      },
+      {
+        "caveat": "",
+        "point": "现有官方条目介绍了空间安全网络界面，该工具用于简化卫星交会筛查和星历共享。",
         "source_record_ids": [
           "044bafcf1089533d"
         ],
@@ -44,8 +72,8 @@
         ]
       },
       {
-        "caveat": "该条目自本轮采集以来未发生变化。",
-        "point": "现有官方条目概述了 Starlink 网络在全球扩张、客户增长、星座部署及性能提升方面的进展。",
+        "caveat": "",
+        "point": "现有官方条目发布了Starlink网络更新，涵盖速度、延迟、弹性和容量方面的最新进展。",
         "source_record_ids": [
           "d3b89bb9510b1b9a"
         ],
@@ -54,8 +82,8 @@
         ]
       },
       {
-        "caveat": "该条目自本轮采集以来未发生变化。",
-        "point": "现有官方条目说明了 Starlink 如何利用波束切换技术绕过障碍物以保持可靠连接。",
+        "caveat": "",
+        "point": "现有官方条目介绍了Starlink光束切换技术，利用实时障碍物地图自动切换卫星以保持可靠连接。",
         "source_record_ids": [
           "495a49c7d5c93cbc"
         ],
@@ -64,8 +92,8 @@
         ]
       },
       {
-        "caveat": "该条目自本轮采集以来未发生变化。",
-        "point": "现有官方条目介绍了 Stargaze，SpaceX 的空间态势感知系统，旨在增强低地球轨道卫星运行的安全性和可持续性。",
+        "caveat": "",
+        "point": "现有官方条目介绍了Stargaze系统，即SpaceX开发的新型空间态势感知（SSA）系统，用于增强低地球轨道的卫星运行安全与可持续性。",
         "source_record_ids": [
           "95bbf31b3a93d3e6"
         ],
@@ -75,7 +103,7 @@
       }
     ],
     "llm_summary_version": "llm_reference_aligned_v2",
-    "overall_summary": "本周未检测到新增或内容变化条目。现有官方条目包括：Starlink 太空安全网络界面、网络更新、波束切换以及 Stargaze 空间态势感知系统。"
+    "overall_summary": "本周系统首次检测到两项新的官方条目：一项计划中的Starlink发射任务和Starlink V3卫星的官方介绍；其他已有官方条目（空间安全界面、网络更新、光束切换、Stargaze）内容未发生变化。"
   },
-  "unique_source_urls": 7
+  "unique_source_urls": 9
 }
