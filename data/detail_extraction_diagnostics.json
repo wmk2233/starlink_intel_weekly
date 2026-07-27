@@ -1,23 +1,23 @@
 {
-  "generated_at": "2026-07-20T04:03:21+00:00",
+  "generated_at": "2026-07-27T04:01:08+00:00",
   "render_mode": "auto",
   "sources": {
     "spacex_official_launches": {
       "candidate_count": 1,
       "details": [
         {
-          "canonical_url": "https://www.spacex.com/launches/sl-17-39",
-          "checked_at": "2026-07-20T04:03:05+00:00",
+          "canonical_url": "https://www.spacex.com/launches/sl-17-52",
+          "checked_at": "2026-07-27T04:00:52+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
           "final_method": "rendered",
           "final_status": "success",
-          "record_id": "05610f007056730c",
+          "record_id": "5bbf6ea4ad2f7fd0",
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 66239,
+            "dom_length": 54251,
             "evidence_length": 174,
             "final_host": "www.spacex.com",
             "navigation_status": "success",
@@ -30,7 +30,7 @@
             "date_found": false,
             "evidence_length": 0,
             "final_host": "www.spacex.com",
-            "html_length": 3632,
+            "html_length": 3487,
             "http_status": 200,
             "parse_status": "javascript_shell",
             "parser_warning_types": [],
@@ -55,7 +55,7 @@
       "details": [
         {
           "canonical_url": "https://starlink.com/updates/starlink-version-3-satellites",
-          "checked_at": "2026-07-20T04:02:30+00:00",
+          "checked_at": "2026-07-27T04:00:15+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -65,7 +65,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 170903,
+            "dom_length": 170505,
             "evidence_length": 573,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -88,7 +88,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/stargaze",
-          "checked_at": "2026-07-20T04:02:30+00:00",
+          "checked_at": "2026-07-27T04:00:15+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -98,7 +98,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 169439,
+            "dom_length": 169126,
             "evidence_length": 86,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -121,7 +121,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/space-safety-web-interface",
-          "checked_at": "2026-07-20T04:02:30+00:00",
+          "checked_at": "2026-07-27T04:00:15+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -131,7 +131,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 168453,
+            "dom_length": 168070,
             "evidence_length": 942,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -154,7 +154,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/starlink-beam-switching",
-          "checked_at": "2026-07-20T04:02:30+00:00",
+          "checked_at": "2026-07-27T04:00:15+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -164,7 +164,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 166964,
+            "dom_length": 166584,
             "evidence_length": 1200,
             "final_host": "starlink.com",
             "navigation_status": "success",
@@ -187,7 +187,7 @@
         },
         {
           "canonical_url": "https://starlink.com/updates/network-update",
-          "checked_at": "2026-07-20T04:02:30+00:00",
+          "checked_at": "2026-07-27T04:00:15+00:00",
           "current_run_data_reused": false,
           "discovery_method": "rendered_dom",
           "error_type": null,
@@ -197,7 +197,7 @@
           "render": {
             "attempted": true,
             "date_found": false,
-            "dom_length": 173695,
+            "dom_length": 173348,
             "evidence_length": 1141,
             "final_host": "starlink.com",
             "navigation_status": "success",
