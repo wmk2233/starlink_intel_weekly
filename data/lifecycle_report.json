@@ -4,46 +4,46 @@
   "events_this_run": [
     {
       "attention_required": false,
-      "canonical_url": "https://www.spacex.com/launches/sl-17-39",
+      "canonical_url": "https://www.spacex.com/launches/sl-17-52",
       "change_evidence": {},
       "change_status": "unchanged",
       "changed_fields": [],
       "current_lifecycle_state": "temporarily_missing",
       "current_semantic_hash": "56b3c2f2aa1cb44a",
-      "event_id": "12261b58fdf3cd404e01",
+      "event_id": "b0c9fd904b2cec827759",
       "event_type": "temporarily_missing",
       "extraction_change_status": "unchanged",
       "index_observation_complete": true,
-      "occurred_at": "2026-07-27T04:01:08+00:00",
+      "occurred_at": "2026-08-03T03:53:25+00:00",
       "previous_lifecycle_state": "active",
       "previous_semantic_hash": "56b3c2f2aa1cb44a",
       "reason": "absent_from_complete_index_observation",
-      "record_id": "05610f007056730c",
-      "run_id": "30235904725",
+      "record_id": "5bbf6ea4ad2f7fd0",
+      "run_id": "30782851444",
       "source_id": "spacex_official_launches"
     },
     {
       "attention_required": false,
-      "canonical_url": "https://www.spacex.com/launches/sl-17-52",
+      "canonical_url": "https://www.spacex.com/launches/sl-17-53",
       "change_evidence": {},
       "change_status": "new",
       "changed_fields": [],
       "current_lifecycle_state": "active",
       "current_semantic_hash": "56b3c2f2aa1cb44a",
-      "event_id": "45a600b36ec542f04a35",
+      "event_id": "9eda7da58fbc79887a0a",
       "event_type": "item_discovered",
       "extraction_change_status": "unchanged",
-      "occurred_at": "2026-07-27T04:01:08+00:00",
+      "occurred_at": "2026-08-03T03:53:25+00:00",
       "previous_lifecycle_state": "unobserved",
       "previous_semantic_hash": null,
       "reason": "first_observed_source_id_and_canonical_url",
-      "record_id": "5bbf6ea4ad2f7fd0",
-      "run_id": "30235904725",
+      "record_id": "c8751f4ce5201339",
+      "run_id": "30782851444",
       "source_id": "spacex_official_launches"
     }
   ],
-  "generated_at": "2026-07-27T04:01:08+00:00",
-  "run_id": "30235904725",
+  "generated_at": "2026-08-03T03:53:25+00:00",
+  "run_id": "30782851444",
   "sources": {
     "spacex_official_launches": {
       "active": 1,
@@ -57,7 +57,7 @@
       "recovered": 0,
       "source_id": "spacex_official_launches",
       "source_name": "SpaceX Official Launches",
-      "temporarily_missing": 2
+      "temporarily_missing": 3
     },
     "starlink_official_updates": {
       "active": 5,
@@ -96,19 +96,19 @@
     "reappeared": 0,
     "recovered_after_failure": 0,
     "temporarily_missing": 1,
-    "unchanged": 6
+    "unchanged": 7
   },
   "version": 1,
   "versions_this_run": [
     {
-      "canonical_url": "https://www.spacex.com/launches/sl-17-52",
+      "canonical_url": "https://www.spacex.com/launches/sl-17-53",
       "changed_fields": [],
       "extraction_revision": 1,
-      "observed_at": "2026-07-27T04:01:08+00:00",
-      "record_id": "5bbf6ea4ad2f7fd0",
+      "observed_at": "2026-08-03T03:53:25+00:00",
+      "record_id": "c8751f4ce5201339",
       "semantic_version": 1,
       "source_id": "spacex_official_launches",
-      "version_id": "8e1b02c715efd8c89e2d",
+      "version_id": "30272b132349e1f983c6",
       "version_kind": "new_item"
     }
   ],
