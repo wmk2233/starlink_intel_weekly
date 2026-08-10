@@ -10,7 +10,7 @@
   ],
   "final_core_input_records": 6,
   "final_core_unique_urls": 6,
-  "generated_at": "2026-08-03T03:53:54+00:00",
+  "generated_at": "2026-08-10T02:34:08+00:00",
   "guardrails": {
     "monitoring_context_model_generated": false,
     "no_external_knowledge": true,
@@ -21,8 +21,8 @@
     "strict_source": true
   },
   "input_records": 6,
-  "input_records_after_dedup": 11,
-  "input_records_before_dedup": 13,
+  "input_records_after_dedup": 12,
+  "input_records_before_dedup": 14,
   "invalid_record_ids_removed": 0,
   "invalid_urls_removed": 0,
   "key_points_removed_without_sources": 0,
@@ -65,19 +65,19 @@
   "output_record_references_before_dedup": 6,
   "output_url_references_after_dedup": 6,
   "output_url_references_before_dedup": 6,
-  "raw_candidate_records": 13,
+  "raw_candidate_records": 14,
   "reason": "LLM output failed source-guardrail validation.",
-  "records_after_url_dedup": 11,
+  "records_after_url_dedup": 12,
   "reference_alignment_status": "passed",
   "reused_historical_records": 0,
   "source_based_notes_removed": 0,
   "summary_generated": false,
-  "unique_source_urls": 11,
+  "unique_source_urls": 12,
   "usage": {
-    "completion_tokens": 3035,
-    "latency_ms": 29074.87,
-    "prompt_tokens": 5664,
-    "total_tokens": 8699
+    "completion_tokens": 6896,
+    "latency_ms": 54428.88,
+    "prompt_tokens": 5662,
+    "total_tokens": 12558
   },
   "validation_status": "failed",
   "warnings": []

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-03T03:53:25+00:00",
+  "generated_at": "2026-08-10T02:33:14+00:00",
   "sources": {
     "spacex_official_launches": {
       "bootstrap_completed": true,
@@ -18,6 +18,20 @@
           "last_success_at": "2026-07-20T04:03:05+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "56b3c2f2aa1cb44a"
+        },
+        "55130902f9db129e": {
+          "canonical_url": "https://www.spacex.com/launches/sl-10-19",
+          "consecutive_failures": 0,
+          "content_hash": "d22c839fb9dd5ecd",
+          "extraction_hash": "8d7d0d5cbbbb2aa5",
+          "first_seen_at": "2026-08-10T02:32:58+00:00",
+          "last_attempt_at": "2026-08-10T02:32:58+00:00",
+          "last_error_type": null,
+          "last_parser_version": "spacex_launches_item_v2",
+          "last_seen_at": "2026-08-10T02:32:58+00:00",
+          "last_success_at": "2026-08-10T02:32:58+00:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "d22c839fb9dd5ecd"
         },
         "5bbf6ea4ad2f7fd0": {
           "canonical_url": "https://www.spacex.com/launches/sl-17-52",
@@ -62,13 +76,13 @@
           "semantic_content_hash": "56b3c2f2aa1cb44a"
         }
       },
-      "known_item_count": 4,
-      "last_attempt_at": "2026-08-03T03:53:25+00:00",
+      "known_item_count": 5,
+      "last_attempt_at": "2026-08-10T02:33:14+00:00",
       "last_candidate_count": 1,
       "last_error_type": null,
       "last_failure_at": "2026-07-15T06:21:46+00:00",
       "last_item_count": 1,
-      "last_success_at": "2026-08-03T03:53:25+00:00",
+      "last_success_at": "2026-08-10T02:33:14+00:00",
       "parser_version": "spacex_launches_item_v2"
     },
     "starlink_official_updates": {
@@ -81,12 +95,12 @@
           "content_hash": "782864df0d71359e",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-08-03T03:52:32+00:00",
+          "last_attempt_at": "2026-08-10T02:32:23+00:00",
           "last_error_type": null,
           "last_failure_at": "2026-07-15T17:27:33+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-08-03T03:52:32+00:00",
-          "last_success_at": "2026-08-03T03:52:32+00:00",
+          "last_seen_at": "2026-08-10T02:32:23+00:00",
+          "last_success_at": "2026-08-10T02:32:23+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "782864df0d71359e"
         },
@@ -96,11 +110,11 @@
           "content_hash": "bbda025dc135eb82",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-08-03T03:52:32+00:00",
+          "last_attempt_at": "2026-08-10T02:32:23+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-08-03T03:52:32+00:00",
-          "last_success_at": "2026-08-03T03:52:32+00:00",
+          "last_seen_at": "2026-08-10T02:32:23+00:00",
+          "last_success_at": "2026-08-10T02:32:23+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "bbda025dc135eb82"
         },
@@ -110,11 +124,11 @@
           "content_hash": "a4a8dfdee687fbe2",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-14T14:54:30+08:00",
-          "last_attempt_at": "2026-08-03T03:52:32+00:00",
+          "last_attempt_at": "2026-08-10T02:32:23+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-08-03T03:52:32+00:00",
-          "last_success_at": "2026-08-03T03:52:32+00:00",
+          "last_seen_at": "2026-08-10T02:32:23+00:00",
+          "last_success_at": "2026-08-10T02:32:23+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a4a8dfdee687fbe2"
         },
@@ -124,11 +138,11 @@
           "content_hash": "66117236912f2019",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-20T04:02:30+00:00",
-          "last_attempt_at": "2026-08-03T03:52:32+00:00",
+          "last_attempt_at": "2026-08-10T02:32:23+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-08-03T03:52:32+00:00",
-          "last_success_at": "2026-08-03T03:52:32+00:00",
+          "last_seen_at": "2026-08-10T02:32:23+00:00",
+          "last_success_at": "2026-08-10T02:32:23+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "66117236912f2019"
         },
@@ -138,22 +152,22 @@
           "content_hash": "a73aef78a8f128de",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:34:13+08:00",
-          "last_attempt_at": "2026-08-03T03:52:32+00:00",
+          "last_attempt_at": "2026-08-10T02:32:23+00:00",
           "last_error_type": null,
           "last_failure_at": "2026-07-15T15:30:05+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-08-03T03:52:32+00:00",
-          "last_success_at": "2026-08-03T03:52:32+00:00",
+          "last_seen_at": "2026-08-10T02:32:23+00:00",
+          "last_success_at": "2026-08-10T02:32:23+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a73aef78a8f128de"
         }
       },
       "known_item_count": 5,
-      "last_attempt_at": "2026-08-03T03:53:09+00:00",
+      "last_attempt_at": "2026-08-10T02:32:58+00:00",
       "last_candidate_count": 5,
       "last_error_type": null,
       "last_item_count": 5,
-      "last_success_at": "2026-08-03T03:53:09+00:00",
+      "last_success_at": "2026-08-10T02:32:58+00:00",
       "parser_version": "starlink_updates_item_v2"
     }
   },
