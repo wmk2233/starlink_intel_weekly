@@ -1,8 +1,8 @@
 {
   "allowed_reference_pairs": [
     {
-      "canonical_url": "https://www.spacex.com/launches/sl-17-52",
-      "record_id": "5bbf6ea4ad2f7fd0"
+      "canonical_url": "https://www.spacex.com/launches/sl-15-23",
+      "record_id": "1ce0691a44c65212"
     },
     {
       "canonical_url": "https://starlink.com/updates/starlink-version-3-satellites",
@@ -28,32 +28,32 @@
   "base_url_label": "deepseek_default",
   "final_core_input_records": 6,
   "final_core_unique_urls": 6,
-  "generated_at": "2026-07-27T04:01:30+00:00",
+  "generated_at": "2026-08-31T05:31:52+00:00",
   "input_records": 6,
-  "input_records_after_dedup": 10,
-  "input_records_before_dedup": 12,
+  "input_records_after_dedup": 15,
+  "input_records_before_dedup": 17,
   "llm_enabled": true,
   "llm_provider": "deepseek",
   "llm_status": "generated",
   "model": "deepseek-v4-flash",
-  "raw_candidate_records": 12,
-  "records_after_url_dedup": 10,
+  "raw_candidate_records": 17,
+  "records_after_url_dedup": 15,
   "reused_historical_records": 0,
   "summary": {
     "key_points": [
       {
-        "caveat": "发射时间未公布，任务状态为\"targeting\"。",
-        "point": "SpaceX官方任务页面显示，计划使用猎鹰9号火箭从范登堡太空军基地发射24颗Starlink卫星。",
+        "caveat": "官方条目未提供具体发射日期。",
+        "point": "当前监测到的 SpaceX 官方发射条目“Starlink Mission”显示，Falcon 9 计划从加州范登堡太空军基地 SLC-4E 发射 27 颗 Starlink 卫星至近地轨道，任务状态为 targeting（瞄准中）。",
         "source_record_ids": [
-          "5bbf6ea4ad2f7fd0"
+          "1ce0691a44c65212"
         ],
         "source_urls": [
-          "https://www.spacex.com/launches/sl-17-52"
+          "https://www.spacex.com/launches/sl-15-23"
         ]
       },
       {
         "caveat": "",
-        "point": "现有官方条目介绍Starlink V3卫星的下一代设计，具有更高的容量和数据密度。",
+        "point": "现有官方条目介绍 Starlink V3 为下一代卫星设计，容量、数据密度和发电能力显著提升；其相控阵由下一代 SpaceX 波束成形芯片驱动，单个调制解调器芯片处理的吞吐量提升约 64 倍。",
         "source_record_ids": [
           "ba5555615b6e6fb6"
         ],
@@ -63,7 +63,7 @@
       },
       {
         "caveat": "",
-        "point": "现有官方记录显示Space Safety Web Interface可用于简化卫星交会筛查和星历共享。",
+        "point": "当前监测到的 Starlink 官方条目介绍了用于卫星交会筛选和星历共享的网页界面；Starlink 向多个交会筛选平台公开星历，并通过 Space Traffic Coordination API 为参与运营商提供免费低延迟交会筛选。",
         "source_record_ids": [
           "044bafcf1089533d"
         ],
@@ -72,8 +72,8 @@
         ]
       },
       {
-        "caveat": "数据反映截至2025年7月的情况。",
-        "point": "现有官方网络更新提到Starlink已扩展至42个新国家，活跃客户超过600万，美国峰值中位下载速度约200 Mbps（2025年7月）。",
+        "caveat": "该条目中的统计数字均为官方条目给出的历史期间数据。",
+        "point": "现有官方条目记录显示，Starlink 过去一年扩展至 42 个新国家、地区或其他市场，全球活跃客户增长 270 万以上，客户总数超过 600 万；同期发射超过 100 次 Starlink 任务，新增 2300 多颗卫星。截至 2025 年 7 月，美国 200 多万活跃客户在高峰时段的中位下载速度接近 200 Mbps。",
         "source_record_ids": [
           "d3b89bb9510b1b9a"
         ],
@@ -83,7 +83,7 @@
       },
       {
         "caveat": "",
-        "point": "现有官方条目说明Starlink通过波束切换自动绕开障碍物，保障可靠高速互联网连接。",
+        "point": "现有官方条目说明，Starlink 终端会自动在可见卫星间实时切换，以应对树木、建筑物等遮挡造成的信号降级，并持续构建实时遮挡图以保持稳定连接。",
         "source_record_ids": [
           "495a49c7d5c93cbc"
         ],
@@ -93,7 +93,7 @@
       },
       {
         "caveat": "",
-        "point": "现有官方记录介绍Stargaze是SpaceX开发的新型空间态势感知（SSA）系统。",
+        "point": "现有官方条目介绍 SpaceX 开发了名为 Stargaze 的空间态势感知（SSA）系统，旨在提升低地球轨道卫星运行的安全性和可持续性；该系统利用超过 30,000 个光学传感器跟踪近地点 600 公里以下 50% 的物体，并已开始发布交会数据消息（CDM）。",
         "source_record_ids": [
           "95bbf31b3a93d3e6"
         ],
@@ -103,7 +103,7 @@
       }
     ],
     "llm_summary_version": "llm_reference_aligned_v2",
-    "overall_summary": "本周监测到一项新的Starlink任务条目（SL-17-52），其余历史条目未发生语义变化。"
+    "overall_summary": "本轮共监测到 6 个官方条目：其中 1 个为首次观测到的 SpaceX Starlink 发射条目，5 个为未发生语义变化的现有 Starlink 官方更新条目；本轮未检测到 changed 状态条目。"
   },
-  "unique_source_urls": 10
+  "unique_source_urls": 15
 }
