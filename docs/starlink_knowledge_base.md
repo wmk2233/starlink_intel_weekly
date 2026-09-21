@@ -33,8 +33,8 @@
 
 | 来源 | 最近检查时间 | 可达性 | 页面变化状态 | 最近变化时间 | 当前状态 |
 |---|---|---|---|---|---|
-| Starlink Official Updates | 2026-09-14T04:51:51+00:00 | reachable | unchanged | 2026-08-24T01:56:26+00:00 | 正常 |
-| SpaceX Official Launches | 2026-09-14T04:52:27+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
+| Starlink Official Updates | 2026-09-21T04:52:10+00:00 | reachable | unchanged | 2026-08-24T01:56:26+00:00 | 正常 |
+| SpaceX Official Launches | 2026-09-21T04:52:47+00:00 | reachable | unchanged | 2026-06-17T18:23:48+08:00 | 正常 |
 
 ## 来源解析质量诊断
 
@@ -155,8 +155,8 @@
 
 ## 最近一次自动化运行记录
 
-- 运行时间：2026-09-14 04:51:51 UTC+0000
-- ISO 周编号：2026-W38
+- 运行时间：2026-09-21 04:52:10 UTC+0000
+- ISO 周编号：2026-W39
 - 执行环境：Linux 6.17.0-1022-azure
 - Python 版本：3.11.16
 - 输出模式：dual
@@ -164,9 +164,9 @@
 - 报告生成时邮件状态：pending_at_render_time
 - 是否执行真实来源采集：是
 - 是否生成解析质量诊断：是
-- 总结版文档：weekly/2026-W38-summary.md
-- 明细版文档：weekly/2026-W38-details.md
-- 兼容索引文档：weekly/2026-W38.md
+- 总结版文档：weekly/2026-W39-summary.md
+- 明细版文档：weekly/2026-W39-details.md
+- 兼容索引文档：weekly/2026-W39.md
 - 周报总索引：weekly/index.md
 - 周报 manifest：data/weekly_manifest.json
 - 运行历史：data/run_history.jsonl
@@ -180,9 +180,9 @@
 - 未变化条目数：5
 - LLM Provider：deepseek
 - LLM 模型：deepseek-v4-flash
-- LLM 摘要状态：validation_failed
-- LLM 输入记录（去重前 / 后）：19 / 17
-- LLM 唯一来源 URL：17
-- LLM Total tokens：6304
-- LLM API 调用耗时：9086.41 ms
+- LLM 摘要状态：api_error
+- LLM 输入记录（去重前 / 后）：20 / 18
+- LLM 唯一来源 URL：18
+- LLM Total tokens：unknown
+- LLM API 调用耗时：1000.22 ms
 
