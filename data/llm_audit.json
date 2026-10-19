@@ -1,5 +1,5 @@
 {
-  "allowed_reference_pair_count": 7,
+  "allowed_reference_pair_count": 6,
   "api_called": true,
   "base_url_label": "deepseek_default",
   "dedup_strategy": "source_id+normalized_url_latest_record",
@@ -8,9 +8,9 @@
   "errors": [
     "AuthenticationError"
   ],
-  "final_core_input_records": 7,
-  "final_core_unique_urls": 7,
-  "generated_at": "2026-10-12T05:53:05+00:00",
+  "final_core_input_records": 6,
+  "final_core_unique_urls": 6,
+  "generated_at": "2026-10-19T04:36:40+00:00",
   "guardrails": {
     "monitoring_context_model_generated": false,
     "no_external_knowledge": true,
@@ -20,9 +20,9 @@
     "source_based_notes_model_generated": false,
     "strict_source": true
   },
-  "input_records": 7,
-  "input_records_after_dedup": 22,
-  "input_records_before_dedup": 24,
+  "input_records": 6,
+  "input_records_after_dedup": 23,
+  "input_records_before_dedup": 25,
   "invalid_record_ids_removed": 0,
   "invalid_urls_removed": 0,
   "key_points_removed_without_sources": 0,
@@ -51,31 +51,31 @@
       "baseline_items": 0,
       "changed_items": 0,
       "extracted_level": "item_level",
-      "interpretation": "当前规则检测到新增或内容变化条目，仍需结合来源链接人工复核。",
-      "new_items": 1,
+      "interpretation": "页面级 hash 未发生变化，当前规则也未检测到新增或内容变化条目。",
+      "new_items": 0,
       "page_change_status": "unchanged",
       "page_status": "reachable",
       "source_id": "starlink_official_updates",
       "source_name": "Starlink Official Updates",
       "source_quality": "medium",
-      "unchanged_items": 5
+      "unchanged_items": 6
     }
   ],
   "output_record_references_after_dedup": 0,
   "output_record_references_before_dedup": 0,
   "output_url_references_after_dedup": 0,
   "output_url_references_before_dedup": 0,
-  "raw_candidate_records": 24,
+  "raw_candidate_records": 25,
   "reason": "deepseek API call failed.",
-  "records_after_url_dedup": 22,
+  "records_after_url_dedup": 23,
   "reference_alignment_status": "not_run",
   "reused_historical_records": 0,
   "source_based_notes_removed": 0,
   "summary_generated": false,
-  "unique_source_urls": 22,
+  "unique_source_urls": 23,
   "usage": {
     "completion_tokens": null,
-    "latency_ms": 1154.42,
+    "latency_ms": 1028.28,
     "prompt_tokens": null,
     "total_tokens": null
   },

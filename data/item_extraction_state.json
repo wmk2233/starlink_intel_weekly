@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T05:53:04+00:00",
+  "generated_at": "2026-10-19T04:36:39+00:00",
   "sources": {
     "spacex_official_launches": {
       "bootstrap_completed": true,
@@ -117,6 +117,20 @@
           "last_success_method": "rendered",
           "semantic_content_hash": "56b3c2f2aa1cb44a"
         },
+        "5e5767673ab85989": {
+          "canonical_url": "https://www.spacex.com/launches/bandwagon5",
+          "consecutive_failures": 0,
+          "content_hash": "240e870c33039ae2",
+          "extraction_hash": "ab18632857170d1c",
+          "first_seen_at": "2026-10-19T04:36:23+00:00",
+          "last_attempt_at": "2026-10-19T04:36:23+00:00",
+          "last_error_type": null,
+          "last_parser_version": "spacex_launches_item_v2",
+          "last_seen_at": "2026-10-19T04:36:23+00:00",
+          "last_success_at": "2026-10-19T04:36:23+00:00",
+          "last_success_method": "rendered",
+          "semantic_content_hash": "240e870c33039ae2"
+        },
         "607f72a4338081b3": {
           "canonical_url": "https://www.spacex.com/launches/sl-17-50",
           "consecutive_failures": 0,
@@ -202,13 +216,13 @@
           "semantic_content_hash": "03ca252aebf3d8b5"
         }
       },
-      "known_item_count": 14,
-      "last_attempt_at": "2026-10-12T05:53:04+00:00",
+      "known_item_count": 15,
+      "last_attempt_at": "2026-10-19T04:36:39+00:00",
       "last_candidate_count": 1,
       "last_error_type": null,
       "last_failure_at": "2026-07-15T06:21:46+00:00",
       "last_item_count": 1,
-      "last_success_at": "2026-10-12T05:53:04+00:00",
+      "last_success_at": "2026-10-19T04:36:39+00:00",
       "parser_version": "spacex_launches_item_v2"
     },
     "starlink_official_updates": {
@@ -221,12 +235,12 @@
           "content_hash": "782864df0d71359e",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_failure_at": "2026-07-15T17:27:33+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "782864df0d71359e"
         },
@@ -236,11 +250,11 @@
           "content_hash": "bbda025dc135eb82",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:30:05+08:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "bbda025dc135eb82"
         },
@@ -250,11 +264,11 @@
           "content_hash": "2380ed998cde8546",
           "extraction_hash": "e91b74896145e101",
           "first_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "2380ed998cde8546"
         },
@@ -264,11 +278,11 @@
           "content_hash": "a4a8dfdee687fbe2",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-14T14:54:30+08:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a4a8dfdee687fbe2"
         },
@@ -278,11 +292,11 @@
           "content_hash": "66117236912f2019",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-20T04:02:30+00:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "66117236912f2019"
         },
@@ -292,22 +306,22 @@
           "content_hash": "a73aef78a8f128de",
           "extraction_hash": "9c982848db988192",
           "first_seen_at": "2026-07-15T15:34:13+08:00",
-          "last_attempt_at": "2026-10-12T05:52:06+00:00",
+          "last_attempt_at": "2026-10-19T04:35:42+00:00",
           "last_error_type": null,
           "last_failure_at": "2026-07-15T15:30:05+08:00",
           "last_parser_version": "starlink_updates_item_v2",
-          "last_seen_at": "2026-10-12T05:52:06+00:00",
-          "last_success_at": "2026-10-12T05:52:06+00:00",
+          "last_seen_at": "2026-10-19T04:35:42+00:00",
+          "last_success_at": "2026-10-19T04:35:42+00:00",
           "last_success_method": "rendered",
           "semantic_content_hash": "a73aef78a8f128de"
         }
       },
       "known_item_count": 6,
-      "last_attempt_at": "2026-10-12T05:52:48+00:00",
+      "last_attempt_at": "2026-10-19T04:36:23+00:00",
       "last_candidate_count": 6,
       "last_error_type": null,
       "last_item_count": 6,
-      "last_success_at": "2026-10-12T05:52:48+00:00",
+      "last_success_at": "2026-10-19T04:36:23+00:00",
       "parser_version": "starlink_updates_item_v2"
     }
   },
