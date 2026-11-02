@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-26T04:42:37+00:00",
+  "generated_at": "2026-11-02T05:58:13+00:00",
   "sources": {
     "spacex_official_launches": {
       "baseline_items": 0,
@@ -7,7 +7,7 @@
       "candidate_count": 1,
       "candidate_count_total": 1,
       "changed_items": 0,
-      "checked_at": "2026-10-26T04:42:22+00:00",
+      "checked_at": "2026-11-02T05:57:58+00:00",
       "date_completeness": 0.0,
       "detail_fetch_failed": 0,
       "detail_fetch_success": 1,
@@ -28,7 +28,7 @@
       "page_level_items": 0,
       "parser_version": "spacex_launches_item_v2",
       "relevance_counts": {
-        "direct": 1
+        "incidental": 1
       },
       "render_fallback_status": "success",
       "render_fallback_used": true,
@@ -51,7 +51,7 @@
       "candidate_count": 6,
       "candidate_count_total": 6,
       "changed_items": 0,
-      "checked_at": "2026-10-26T04:41:41+00:00",
+      "checked_at": "2026-11-02T05:57:16+00:00",
       "date_completeness": 0.17,
       "detail_fetch_failed": 0,
       "detail_fetch_success": 6,

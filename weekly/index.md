@@ -6,6 +6,7 @@
 
 | ISO 周编号 | 总结版 | 明细版 | 兼容索引 | 最近运行时间 | 来源数 | 新增 | 变化 | 未变化 | 主导解析质量 |
 |---|---|---|---|---|---:|---:|---:|---:|---|
+| 2026-W45 | [summary](./2026-W45-summary.md) | [details](./2026-W45-details.md) | [index](./2026-W45.md) | 2026-11-02T05:57:16+00:00 | 2 | 1 | 0 | 6 | medium |
 | 2026-W44 | [summary](./2026-W44-summary.md) | [details](./2026-W44-details.md) | [index](./2026-W44.md) | 2026-10-26T04:41:41+00:00 | 2 | 1 | 0 | 6 | medium |
 | 2026-W43 | [summary](./2026-W43-summary.md) | [details](./2026-W43-details.md) | [index](./2026-W43.md) | 2026-10-19T04:35:42+00:00 | 2 | 1 | 0 | 6 | medium |
 | 2026-W42 | [summary](./2026-W42-summary.md) | [details](./2026-W42-details.md) | [index](./2026-W42.md) | 2026-10-12T05:52:06+00:00 | 2 | 2 | 0 | 5 | medium |
